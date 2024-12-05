@@ -1,7 +1,8 @@
 import numpy as np
 from scipy.spatial import KDTree
+import math
 
-def generate_dots_with_weighted_sampling(density_field, bounds, num_dots, resolution=500):
+def generate_dots_with_weighted_sampling(density_field, bounds, num_dots, resolution=1000):
     """
     Generate dots distributed according to a density field, with improved apportioning.
 
@@ -48,7 +49,7 @@ def generate_dots_with_weighted_sampling(density_field, bounds, num_dots, resolu
         density = density_field(x, y)
         if density <= 0:
             continue
-        min_distance = max(1/density,0.15)
+        min_distance = max(0.5/density,0.25)
 
         if kdtree:
             distances, _ = kdtree.query([x, y], k=1)
@@ -64,10 +65,10 @@ def generate_dots_with_weighted_sampling(density_field, bounds, num_dots, resolu
 # Example usage
 def example_density_field(x, y):
     """A sample density field: higher density near the origin."""
-    return x+9 #max(0.05 * (x**2 + y**2), 0)
+    return max(1/abs(x),0)#max(1 - 1 * (math.sin(y) + math.sin(x)*0.5 + math.cos(x+y/3)), 0)
 
 bounds = ((-10, 10), (-10, 10))
-num_dots = 300
+num_dots = 1000
 
 dots = generate_dots_with_weighted_sampling(example_density_field, bounds, num_dots)
 
