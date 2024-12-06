@@ -65,7 +65,7 @@ def generate_dots_with_weighted_sampling(density_field, bounds, num_dots, resolu
 # Example usage
 def example_density_field(x, y):
     """A sample density field: higher density near the origin."""
-    return max(1/abs(x),0)#max(1 - 1 * (math.sin(y) + math.sin(x)*0.5 + math.cos(x+y/3)), 0)
+    return max(1/abs(x)+1,0)#max(1 - 1 * (math.sin(y) + math.sin(x)*0.5 + math.cos(x+y/3)), 0)
 
 bounds = ((-10, 10), (-10, 10))
 num_dots = 1000
