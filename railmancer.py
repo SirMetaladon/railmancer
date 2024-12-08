@@ -1,279 +1,542 @@
-import turtle
-import math
+import random, os
+import noisetest, curvature
 import numpy as np
-from scipy.optimize import minimize
 
 
-def get_perpendicular_vec2d(v):
-    """Returns a perpendicular vector to the given vector."""
-    return (-v[1], v[0])
+def query_height(ContourMap, real_x, real_y):
+
+    virtual_x = (real_x - ContourMap["shift_x"]) / (ContourMap["scale_x"] * 8)
+    virtual_y = (real_y - ContourMap["shift_y"]) / (ContourMap["scale_y"] * 8)
+
+    return noisetest.bilinear_interpolation(ContourMap["map"], virtual_x, virtual_y)
 
 
-def vector_length(v):
-    """Returns the length of the vector."""
-    return math.sqrt(v[0] ** 2 + v[1] ** 2)
+def get_ID():
+
+    global ID
+    ID += 1
+    return str(ID)
 
 
-def normalize_vec2d(v):
-    """Normalizes the given vector to a unit vector."""
-    length = vector_length(v)
-    if length == 0:
-        return (0, 0)
-    return (v[0] / length, v[1] / length)
+def displacement_build(X_Start, X_End, Y_Start, Y_End, ContourMap):
+
+    scale_x = (X_Start - X_End) / 8
+    scale_y = (Y_Start - Y_End) / 8
+    shift_x = X_Start
+    shift_y = Y_Start
+
+    posgrid = [
+        [(x * scale_x + shift_x, y * scale_y + shift_y) for y in range(9)]
+        for x in range(9)
+    ]
+
+    heights = [
+        [query_height(ContourMap, position[0], position[1]) for position in x_layer]
+        for x_layer in posgrid
+    ]
 
 
-def reverse(v):
+def solid(Brush: list, ContourMap):
 
-    return (-v[0], -v[1])
+    if Brush[0] > Brush[1]:
+        Brush.insert(0, Brush[1])
+        Brush.pop(2)
+
+    if Brush[2] < Brush[3]:
+        Brush.insert(2, Brush[3])
+        Brush.pop(4)
+
+    if Brush[4] < Brush[5]:
+        Brush.insert(4, Brush[5])
+        Brush.pop(6)
+
+    X_Start = str(Brush[0])
+    X_End = str(Brush[1])
+    Y_Start = str(Brush[2])
+    Y_End = str(Brush[3])
+    Z_Start = str(Brush[4])
+    Z_End = str(Brush[5])
+
+    Displacement = ""
+
+    if Brush[6] == "wall":
+        Top_Texture = "TOOLS/TOOLSNODRAW"
+        Bottom_Texture = "TOOLS/TOOLSNODRAW"
+        Negative_X_Texture = "tools/toolsskybox"
+        Positive_X_Texture = "tools/toolsskybox"
+        Positive_Y_Texture = "tools/toolsskybox"
+        Negative_Y_Texture = "tools/toolsskybox"
+
+    elif Brush[6] == "ceiling":
+        Top_Texture = "TOOLS/TOOLSNODRAW"
+        Bottom_Texture = "tools/toolsskybox"
+        Negative_X_Texture = "tools/toolsskybox"
+        Positive_X_Texture = "tools/toolsskybox"
+        Positive_Y_Texture = "tools/toolsskybox"
+        Negative_Y_Texture = "tools/toolsskybox"
+
+    elif Brush[6] == "floor":
+        Top_Texture = "TOOLS/TOOLSNODRAW"
+        Bottom_Texture = "TOOLS/TOOLSNODRAW"
+        Negative_X_Texture = "TOOLS/TOOLSNODRAW"
+        Positive_X_Texture = "TOOLS/TOOLSNODRAW"
+        Positive_Y_Texture = "TOOLS/TOOLSNODRAW"
+        Negative_Y_Texture = "TOOLS/TOOLSNODRAW"
+
+    elif Brush[6] == "displacement":
+        Displacement = displacement_build(X_Start, X_End, Y_Start, Y_End, ContourMap)
+
+    print(Brush, Displacement)
+
+    return f"""
+    solid
+    {{
+        "id" "{get_ID()}"
+        side
+         {{
+            "id" "1"
+            "plane" "({X_Start} {Y_Start} {Z_Start}) ({X_End} {Y_Start} {Z_Start}) ({X_End} {Y_End} {Z_Start})"
+            vertices_plus
+            {{
+                "v" "{X_Start} {Y_Start} {Z_Start}"
+                "v" "{X_End} {Y_Start} {Z_Start}"
+                "v" "{X_End} {Y_End} {Z_Start}"
+                "v" "{X_Start} {Y_End} {Z_Start}"
+            }}
+            "material" "{Top_Texture}"
+            "uaxis" "[1 0 0 -0] 0.25"
+            "vaxis" "[0 -1 0 128] 0.25"
+            "rotation" "0"
+            "lightmapscale" "16"
+            "smoothing_groups" "0"{Displacement}
+        }}
+        side
+        {{
+            "id" "2"
+            "plane" "({X_Start} {Y_End} {Z_End}) ({X_End} {Y_End} {Z_End}) ({X_End} {Y_Start} {Z_End})"
+            vertices_plus
+            {{
+                "v" "{X_Start} {Y_End} {Z_End}"
+                "v" "{X_End} {Y_End} {Z_End}"
+                "v" "{X_End} {Y_Start} {Z_End}"
+                "v" "{X_Start} {Y_Start} {Z_End}"
+            }}
+            "material" "{Bottom_Texture}"
+            "uaxis" "[-1 0 0 0] 0.25"
+            "vaxis" "[0 -1 0 -0] 0.25"
+            "rotation" "0"
+            "lightmapscale" "16"
+            "smoothing_groups" "0"
+        }}
+        side
+        {{
+            "id" "3"
+            "plane" "({X_Start} {Y_Start} {Z_Start}) ({X_Start} {Y_End} {Z_Start}) ({X_Start} {Y_End} {Z_End})"
+            vertices_plus
+            {{
+                "v" "{X_Start} {Y_Start} {Z_Start}"
+                "v" "{X_Start} {Y_End} {Z_Start}"
+                "v" "{X_Start} {Y_End} {Z_End}"
+                "v" "{X_Start} {Y_Start} {Z_End}"
+            }}
+            "material" "{Negative_X_Texture}"
+            "uaxis" "[0 -1 0 -0] 0.25"
+            "vaxis" "[0 0 -1 0] 0.25"
+            "rotation" "0"
+            "lightmapscale" "16"
+            "smoothing_groups" "0"
+        }}
+        side
+        {{
+            "id" "4"
+            "plane" "({X_End} {Y_Start} {Z_End}) ({X_End} {Y_End} {Z_End}) ({X_End} {Y_End} {Z_Start})"
+            vertices_plus
+            {{
+                "v" "{X_End} {Y_Start} {Z_End}"
+                "v" "{X_End} {Y_End} {Z_End}"
+                "v" "{X_End} {Y_End} {Z_Start}"
+                "v" "{X_End} {Y_Start} {Z_Start}"
+            }}
+            "material" "{Positive_X_Texture}"
+            "uaxis" "[0 1 0 0] 0.25"
+            "vaxis" "[0 0 -1 0] 0.25"
+            "rotation" "0"
+            "lightmapscale" "16"
+            "smoothing_groups" "0"
+        }}
+        side
+        {{
+            "id" "5"
+            "plane" "({X_End} {Y_Start} {Z_Start}) ({X_Start} {Y_Start} {Z_Start}) ({X_Start} {Y_Start} {Z_End})"
+            vertices_plus
+            {{
+                "v" "{X_End} {Y_Start} {Z_Start}"
+                "v" "{X_Start} {Y_Start} {Z_Start}"
+                "v" "{X_Start} {Y_Start} {Z_End}"
+                "v" "{X_End} {Y_Start} {Z_End}"
+            }}
+            "material" "{Positive_Y_Texture}"
+            "uaxis" "[-1 0 0 0] 0.25"
+            "vaxis" "[0 0 -1 0] 0.25"
+            "rotation" "0"
+            "lightmapscale" "16"
+            "smoothing_groups" "0"
+        }}
+        side
+        {{
+            "id" "6"
+            "plane" "({X_End} {Y_End} {Z_End}) ({X_Start} {Y_End} {Z_End}) ({X_Start} {Y_End} {Z_Start})"
+            vertices_plus
+            {{
+                "v" "{X_End} {Y_End} {Z_End}"
+                "v" "{X_Start} {Y_End} {Z_End}"
+                "v" "{X_Start} {Y_End} {Z_Start}"
+                "v" "{X_End} {Y_End} {Z_Start}"
+            }}
+            "material" "{Negative_Y_Texture}"
+            "uaxis" "[1 0 0 -0] 0.25"
+            "vaxis" "[0 0 -1 0] 0.25"
+            "rotation" "0"
+            "lightmapscale" "16"
+            "smoothing_groups" "0"
+        }}
+        editor
+        {{
+            "color" "150 150 160"
+            "visgroupshown" "1"
+            "visgroupautoshown" "1"
+        }}
+    }}"""
 
 
-def max_manhattan(v1, v2):
-
-    return max(abs(v1[0] - v2[0]), abs(v1[1] - v2[1]))
-
-
-def determine_canvas_constants(Extents: list = [0, 0, 0, 0]):
-
-    global canvas_scale, canvas_offset
-    canvas_scale = 0.22
-    canvas_offset = (-2040, -2048)
+def synthesize_entities(Entities, ContourMap):
+    return ""
 
 
-def canvas(Point):
-    return (
-        (Point[0] + canvas_offset[0]) * canvas_scale,
-        (Point[1] + canvas_offset[1]) * canvas_scale,
+def synthesize_brushes(Brushes, ContourMap):
+
+    Output = ""
+    for Brush in Brushes:
+        Output += solid(Brush, ContourMap)
+
+    Output += "}"
+
+    return Output
+
+
+def floor(block_x: int, block_y: int, block_z: int):
+    return [
+        block_x * 16 * 255,
+        (block_x + 1) * 16 * 255,
+        block_y * 16 * 255,
+        (block_y + 1) * 16 * 255,
+        block_z * 16,
+        (block_z - 1) * 16,
+        "floor",
+    ]
+
+
+def ceiling(block_x: int, block_y: int, block_z: int):
+    return [
+        block_x * 16 * 255,
+        (block_x + 1) * 16 * 255,
+        block_y * 16 * 255,
+        (block_y + 1) * 16 * 255,
+        (block_z + 114) * 16,
+        (block_z + 115) * 16,
+        "ceiling",
+    ]
+
+
+def displacements(block_x: int, block_y: int, block_z: int):
+    return [
+        [
+            block_x * 16 * 255,
+            (block_x + 0.5) * 16 * 255,
+            block_y * 16 * 255,
+            (block_y + 0.5) * 16 * 255,
+            (block_z) * 16,
+            (block_z + 1) * 16,
+            "displacement",
+        ],
+        [
+            (block_x + 0.5) * 16 * 255,
+            (block_x + 1) * 16 * 255,
+            block_y * 16 * 255,
+            (block_y + 0.5) * 16 * 255,
+            (block_z) * 16,
+            (block_z + 1) * 16,
+            "displacement",
+        ],
+        [
+            block_x * 16 * 255,
+            (block_x + 0.5) * 16 * 255,
+            (block_y + 0.5) * 16 * 255,
+            (block_y + 1) * 16 * 255,
+            (block_z) * 16,
+            (block_z + 1) * 16,
+            "displacement",
+        ],
+        [
+            (block_x + 0.5) * 16 * 255,
+            (block_x + 1) * 16 * 255,
+            (block_y + 0.5) * 16 * 255,
+            (block_y + 1) * 16 * 255,
+            (block_z) * 16,
+            (block_z + 1) * 16,
+            "displacement",
+        ],
+    ]
+
+
+def wall(block_x: int, block_y: int, block_z: int, dir: int):
+
+    dir = dir % 4
+
+    if dir == 0:
+        x_min = 254
+        x_max = 255
+        y_min = 0
+        y_max = 255
+    elif dir == 1:
+        x_min = 0
+        x_max = 255
+        y_min = 254
+        y_max = 255
+    elif dir == 2:
+        x_min = 0
+        x_max = 1
+        y_min = 0
+        y_max = 255
+    elif dir == 3:
+        x_min = 0
+        x_max = 255
+        y_min = 0
+        y_max = 1
+
+    return [
+        255 * 16 * block_x + x_min * 16,
+        255 * 16 * block_x + x_max * 16,
+        255 * 16 * block_y + y_min * 16,
+        255 * 16 * block_y + y_max * 16,
+        16 * block_z,
+        16 * block_z + 114 * 16,
+        "wall",
+    ]
+
+
+def block(block_x, block_y, block_z):
+    return [
+        floor(block_x, block_y, block_z),
+        wall(block_x, block_y, block_z, 0),
+        wall(block_x, block_y, block_z, 1),
+        wall(block_x, block_y, block_z, 2),
+        wall(block_x, block_y, block_z, 3),
+        ceiling(block_x, block_y, block_z),
+    ]
+
+
+def write_to_vmf(Brushes: list, Entities: list, ContourMap):
+
+    Start = """versioninfo
+    {
+        "editorversion" "400"
+        "editorbuild" "8868"
+        "mapversion" "4"
+        "formatversion" "100"
+        "prefab" "0"
+    }
+    visgroups
+    {
+    }
+    viewsettings
+    {
+        "bSnapToGrid" "1"
+        "bShowGrid" "1"
+        "bShowLogicalGrid" "0"
+        "nGridSpacing" "32"
+    }
+    palette_plus
+    {
+        "color0" "255 255 255"
+        "color1" "255 255 255"
+        "color2" "255 255 255"
+        "color3" "255 255 255"
+        "color4" "255 255 255"
+        "color5" "255 255 255"
+        "color6" "255 255 255"
+        "color7" "255 255 255"
+        "color8" "255 255 255"
+        "color9" "255 255 255"
+        "color10" "255 255 255"
+        "color11" "255 255 255"
+        "color12" "255 255 255"
+        "color13" "255 255 255"
+        "color14" "255 255 255"
+        "color15" "255 255 255"
+    }
+    colorcorrection_plus
+    {
+        "name0" ""
+        "weight0" "1"
+        "name1" ""
+        "weight1" "1"
+        "name2" ""
+        "weight2" "1"
+        "name3" ""
+        "weight3" "1"
+    }
+    light_plus
+    {
+        "samples_sun" "6"
+        "samples_ambient" "40"
+        "samples_vis" "256"
+        "texlight" ""
+        "incremental_delay" "0"
+        "bake_dist" "1024"
+        "radius_scale" "1"
+        "brightness_scale" "1"
+        "ao_scale" "0"
+        "bounced" "1"
+        "incremental" "1"
+        "supersample" "0"
+        "bleed_hack" "1"
+        "soften_cosine" "0"
+        "debug" "0"
+        "cubemap" "1"
+    }
+    postprocess_plus
+    {
+        "enable" "1"
+        "copied_from_controller" "1"
+        "bloom_scale" "1"
+        "bloom_exponent" "2.5"
+        "bloom_saturation" "1"
+        "auto_exposure_min" "0.5"
+        "auto_exposure_max" "2"
+        "tonemap_percent_target" "60"
+        "tonemap_percent_bright_pixels" "2"
+        "tonemap_min_avg_luminance" "3"
+        "tonemap_rate" "1"
+        "vignette_enable" "0"
+        "vignette_start" "1"
+        "vignette_end" "2"
+        "vignette_blur" "0"
+    }
+    bgimages_plus
+    {
+    }
+    world
+    {
+        "id" "1"
+        "mapversion" "4"
+        "classname" "worldspawn"
+        "detailmaterial" "detail/detailsprites"
+        "detailvbsp" "detail.vbsp"
+        "maxpropscreenwidth" "-1"
+        "skyname" "sky_badlands_01"
+        """
+
+    End = """
+    cameras
+    {
+        "activecamera" "-1"
+    }
+    cordons
+    {
+        "active" "0"
+    }"""
+
+    BrushString = synthesize_brushes(Brushes, ContourMap)
+    EntityString = synthesize_entities(Entities, ContourMap)
+
+    content = Start + BrushString + EntityString + End
+
+    directory = "C:/Users/Metaladon/Desktop/Model Data/VMFS/railmancer"
+    full_file_path = os.path.join(
+        directory, f"{"railmancer"}_{random.randint(1000,1999)}{".vmf"}"
     )
 
+    try:
+        os.makedirs(directory, exist_ok=True)
 
-def draw_perpendicular_line(point, direction, length=50):
-    """Draws a perpendicular line at a given point and direction using Turtle graphics.
-
-    Args:
-        point (tuple): The (x, y) coordinates of the starting point.
-        direction (tuple): The direction vector (dx, dy) along which the perpendicular is calculated.
-        length (float): The length of the perpendicular line to draw. Default is 50 units.
-    """
-    # Get a perpendicular vector to the direction
-    perp_vector = get_perpendicular_vec2d(direction)
-
-    # Normalize the perpendicular vector
-    perp_vector = normalize_vec2d(perp_vector)
-
-    # Scale the perpendicular vector to the desired length
-    perp_vector = (
-        perp_vector[0] * length / canvas_scale,
-        perp_vector[1] * length / canvas_scale,
-    )
-
-    # Calculate the endpoints of the perpendicular line
-    start_point = (
-        (point[0] - perp_vector[0] / 2),
-        (point[1] - perp_vector[1] / 2),
-    )
-    end_point = (
-        (point[0] + perp_vector[0] / 2),
-        (point[1] + perp_vector[1] / 2),
-    )
-
-    # Draw the perpendicular line
-    turtle.penup()
-    turtle.goto(canvas(start_point))
-    turtle.pendown()
-    turtle.goto(canvas(end_point))
-
-
-def nudge(point, direction):
-
-    return (
-        point[0] + direction[0],
-        point[1] + direction[1],
-    )
-
-
-def mark(point, length=8):
-    """Draws a green cross at the specified point."""
-
-    # Draw the perpendicular line
-    turtle.penup()
-    turtle.color("green")
-    turtle.goto(canvas(nudge(point, [length / canvas_scale, 0])))
-    turtle.pendown()
-    turtle.goto(canvas(nudge(point, [-length / canvas_scale, 0])))
-    turtle.penup()
-    turtle.goto(canvas(nudge(point, [0, length / canvas_scale])))
-    turtle.pendown()
-    turtle.goto(canvas(nudge(point, [0, -length / canvas_scale])))
-    turtle.penup()
-    turtle.color("white")
-
-
-def draw_bezier_curve(p1, p2, d1, d2):
-
-    p1 = np.array([p1[0], p1[1]])
-    p2 = np.array([p2[0], p2[1]])
-
-    InterPoints = bezier_curve_points(p1, p2, d1, d2)
-
-    control1 = InterPoints[1]
-    control2 = InterPoints[2]
-
-    mark(control1)
-    mark(control2)
-
-    turtle.penup()
-    turtle.goto(canvas(p1))
-    turtle.pendown()
-
-    # Approximate with a polyline
-    steps = 20
-    for i in range(steps + 1):
-        t = i / steps
-        # Cubic Bezier formula
-        x = (
-            (1 - t) ** 3 * p1[0]
-            + 3 * (1 - t) ** 2 * t * control1[0]
-            + 3 * (1 - t) * t**2 * control2[0]
-            + t**3 * p2[0]
-        )
-        y = (
-            (1 - t) ** 3 * p1[1]
-            + 3 * (1 - t) ** 2 * t * control1[1]
-            + 3 * (1 - t) * t**2 * control2[1]
-            + t**3 * p2[1]
-        )
-
-        turtle.goto(canvas((x, y)))
-
-
-def draw_line(p1, p2):
-    """Draws a straight line between two points using Turtle graphics."""
-    turtle.penup()
-    turtle.goto(canvas(p1))
-    turtle.pendown()
-    turtle.goto(canvas(p2))
-
-
-def bezier_curve(t, P0, P1, P2, P3):
-    return (
-        (1 - t) ** 3 * P0
-        + 3 * (1 - t) ** 2 * t * P1
-        + 3 * (1 - t) * t**2 * P2
-        + t**3 * P3
-    )
-
-
-def bezier_curve_points(p0, p3, d0, d3):
-    # Normalize direction vectors
-    d0 = d0 / np.linalg.norm(d0)
-    d3 = d3 / np.linalg.norm(d3)
-
-    # Check if the direction vectors are collinear
-    cross_directions = np.cross(d0, d3)
-    is_collinear_directions = np.isclose(cross_directions, 0)
-
-    # Check if the points are aligned along the direction vector
-    p3_p0 = p3 - p0
-    p3_p0_dir = p3_p0 / np.linalg.norm(p3_p0)  # Unit vector in the direction of P3 - P0
-    cross_points = np.cross(d0, p3_p0_dir)
-    is_aligned_points = np.isclose(cross_points, 0)
-
-    if is_collinear_directions and is_aligned_points:
-        p1 = (
-            p0 + d0 * np.linalg.norm(p3 - p0) / 3
-        )  # Control points at one-third and two-thirds
-        p2 = p3 - d3 * np.linalg.norm(p3 - p0) / 3
-        return np.array([p0, p1, p2, p3])
-
-    # Function to calculate the radius of curvature
-    def curvature_radius(p0, p1, p2, p3, t):
-        """Calculates the radius of curvature of a cubic Bezier curve at parameter t."""
-        # First derivative
-        d1 = 3 * (p1 - p0)
-        d2 = 3 * (p2 - p1)
-        d3 = 3 * (p3 - p2)
-
-        dP = (1 - t) ** 2 * d1 + 2 * (1 - t) * t * d2 + t**2 * d3
-
-        # Second derivative
-        ddP = 6 * ((1 - t) * (p2 - 2 * p1 + p0) + t * (p3 - 2 * p2 + p1))
-
-        # Radius of curvature formula
-        numerator = np.linalg.norm(dP) ** 3
-        denominator = np.abs(np.cross(dP, ddP))
-        if denominator == 0:  # To avoid division by zero
-            return np.inf
-        return numerator / denominator
-
-    # Objective function: Minimize the negative minimum radius of curvature (maximize radius)
-    def objective(params):
-        p1 = p0 + params[0] * d0
-        p2 = p3 + params[1] * d3
-        min_radius = np.inf
-
-        # Sample at multiple points along the curve to estimate the minimum radius
-        for t in np.linspace(0, 1, 20):
-            radius = curvature_radius(p0, p1, p2, p3, t)
-            if np.isnan(radius) or np.isinf(radius):
-                print(f"Invalid radius at t={t}: {radius}")
-            min_radius = min(min_radius, radius)
-
-        # Return negative to maximize radius
-        return -min_radius
-
-    # Initial guess for parameter multipliers
-    initial_guess = np.array([0.5, 0.5])  # Parameters for scaling d0 and d3
-
-    dist = math.dist(p0, p3)
-
-    # Bounds to prevent the control points from going too far
-    bounds = [(dist / 5, 30000), (dist / 5, 30000)]
-
-    # Perform optimization
-    result = minimize(objective, initial_guess, bounds=bounds, method="L-BFGS-B")
-
-    # Calculate control points based on optimized parameters
-    best_params = result.x
-    p1 = p0 + best_params[0] * d0
-    p2 = p3 + best_params[1] * d3
-
-    return np.array([p0, p1, p2, p3])
+        with open(full_file_path, "w", encoding="utf-8") as file:
+            file.write(content)
+        print(f"File saved successfully: {full_file_path}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 
 def main():
+    """rough pseudocode for converting between blocklists and module outputs
 
-    screen = turtle.Screen()
-    screen.colormode(255)
-    screen.bgcolor("black")
-    screen.setup(1300, 1000)
+    for every incoming block-grid coordinates:
 
-    turtle.speed(0)
-    turtle.penup()
-    # turtle.tracer(0, 0) #this controls the width of the line
-    turtle.pencolor("white")
-    turtle.hideturtle()
+    place a floor and ceiling at the correct height
+    populate a dict with the coordinates in x+" "y format with the Z value of that block
 
-    Line = [
-        [[2040, -16, 0], [0, 1]],
-        [[2040, 16, 0], [0, 1]],
-        [[4080 - 16, 2040, 0], [1, 0]],
-        [[4080 + 16, 2040, 0], [1, 0]],
+    scan the contents of the dict and request all 4 pairs of that block + the surrounding blocks
+
+    if that pair exists (meaning that both coordinates show up in the dict), make adapters that exist on that side only (depending on Z height differences)
+    else, make a wall on that block facing that direction
+    repeat for all blocks"""
+
+    # Noise Parameters
+    width = 30
+    height = 30
+    scale = 30.0
+    octaves_list = [1, 2, 16]
+    persistence = 0.2
+    lacunarity = 4
+    seed = 73  # random.randint(1, 100)
+
+    # Generate layers of Perlin noise
+    layers = [
+        noisetest.generate_perlin_noise(
+            width, height, scale, octaves, persistence, lacunarity, seed
+        )
+        for octaves in octaves_list
     ]
 
-    Extents = [0, 0, 0, 0]
-    determine_canvas_constants(Extents)
+    # Display the layers
+    noisetest.display_perlin_layers(layers)
 
-    for Node in Line:
-        draw_perpendicular_line(Node[0], Node[1], 20)
+    Line = [
+        [np.array([2040, -16, 0]), [0, 1]],
+        [np.array([2040, 16, 0]), [0, 1]],
+        [np.array([4080 - 16, 2040, 0]), [1, 0]],
+        [np.array([4080 + 16, 2040, 0]), [1, 0]],
+    ]
 
-    for NID in range(len(Line) - 1):
+    curvature.generate_line(Line)
 
-        Node1 = Line[NID]
-        Node2 = Line[NID + 1]
+    ID = 1000
+    Brushes = []
 
-        draw_bezier_curve(Node1[0], Node2[0], Node1[1], reverse(Node2[1]))
+    Brushes += block(0, 0, 0)
+    Brushes += displacements(0, 0, 12)
+    # Brushes += block(0, 1, 3)
+    # Brushes += block(1, 1, 6)
+    # Brushes += block(2, 1, 9)
 
-    turtle.done()
+    print(Brushes)
+
+    heightmap_scale_x = (4080 - 0) / 8
+    heightmap_scale_y = (4080 - 0) / 8
+    heightmap_shift_x = 0
+    heightmap_shift_y = 0
+
+    heightmap = layers[2]
+
+    ContourMap = {
+        "map": heightmap,
+        "x_scale": heightmap_scale_x,
+        "x_shift": heightmap_shift_x,
+        "y_scale": heightmap_scale_y,
+        "y_shift": heightmap_shift_y,
+    }
+
+    write_to_vmf(Brushes, [], ContourMap)
 
 
 if __name__ == "__main__":
