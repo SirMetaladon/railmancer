@@ -2,111 +2,111 @@ import random, os
 
 Start = """versioninfo
 {
-	"editorversion" "400"
-	"editorbuild" "8868"
-	"mapversion" "4"
-	"formatversion" "100"
-	"prefab" "0"
+    "editorversion" "400"
+    "editorbuild" "8868"
+    "mapversion" "4"
+    "formatversion" "100"
+    "prefab" "0"
 }
 visgroups
 {
 }
 viewsettings
 {
-	"bSnapToGrid" "1"
-	"bShowGrid" "1"
-	"bShowLogicalGrid" "0"
-	"nGridSpacing" "32"
+    "bSnapToGrid" "1"
+    "bShowGrid" "1"
+    "bShowLogicalGrid" "0"
+    "nGridSpacing" "32"
 }
 palette_plus
 {
-	"color0" "255 255 255"
-	"color1" "255 255 255"
-	"color2" "255 255 255"
-	"color3" "255 255 255"
-	"color4" "255 255 255"
-	"color5" "255 255 255"
-	"color6" "255 255 255"
-	"color7" "255 255 255"
-	"color8" "255 255 255"
-	"color9" "255 255 255"
-	"color10" "255 255 255"
-	"color11" "255 255 255"
-	"color12" "255 255 255"
-	"color13" "255 255 255"
-	"color14" "255 255 255"
-	"color15" "255 255 255"
+    "color0" "255 255 255"
+    "color1" "255 255 255"
+    "color2" "255 255 255"
+    "color3" "255 255 255"
+    "color4" "255 255 255"
+    "color5" "255 255 255"
+    "color6" "255 255 255"
+    "color7" "255 255 255"
+    "color8" "255 255 255"
+    "color9" "255 255 255"
+    "color10" "255 255 255"
+    "color11" "255 255 255"
+    "color12" "255 255 255"
+    "color13" "255 255 255"
+    "color14" "255 255 255"
+    "color15" "255 255 255"
 }
 colorcorrection_plus
 {
-	"name0" ""
-	"weight0" "1"
-	"name1" ""
-	"weight1" "1"
-	"name2" ""
-	"weight2" "1"
-	"name3" ""
-	"weight3" "1"
+    "name0" ""
+    "weight0" "1"
+    "name1" ""
+    "weight1" "1"
+    "name2" ""
+    "weight2" "1"
+    "name3" ""
+    "weight3" "1"
 }
 light_plus
 {
-	"samples_sun" "6"
-	"samples_ambient" "40"
-	"samples_vis" "256"
-	"texlight" ""
-	"incremental_delay" "0"
-	"bake_dist" "1024"
-	"radius_scale" "1"
-	"brightness_scale" "1"
-	"ao_scale" "0"
-	"bounced" "1"
-	"incremental" "1"
-	"supersample" "0"
-	"bleed_hack" "1"
-	"soften_cosine" "0"
-	"debug" "0"
-	"cubemap" "1"
+    "samples_sun" "6"
+    "samples_ambient" "40"
+    "samples_vis" "256"
+    "texlight" ""
+    "incremental_delay" "0"
+    "bake_dist" "1024"
+    "radius_scale" "1"
+    "brightness_scale" "1"
+    "ao_scale" "0"
+    "bounced" "1"
+    "incremental" "1"
+    "supersample" "0"
+    "bleed_hack" "1"
+    "soften_cosine" "0"
+    "debug" "0"
+    "cubemap" "1"
 }
 postprocess_plus
 {
-	"enable" "1"
-	"copied_from_controller" "1"
-	"bloom_scale" "1"
-	"bloom_exponent" "2.5"
-	"bloom_saturation" "1"
-	"auto_exposure_min" "0.5"
-	"auto_exposure_max" "2"
-	"tonemap_percent_target" "60"
-	"tonemap_percent_bright_pixels" "2"
-	"tonemap_min_avg_luminance" "3"
-	"tonemap_rate" "1"
-	"vignette_enable" "0"
-	"vignette_start" "1"
-	"vignette_end" "2"
-	"vignette_blur" "0"
+    "enable" "1"
+    "copied_from_controller" "1"
+    "bloom_scale" "1"
+    "bloom_exponent" "2.5"
+    "bloom_saturation" "1"
+    "auto_exposure_min" "0.5"
+    "auto_exposure_max" "2"
+    "tonemap_percent_target" "60"
+    "tonemap_percent_bright_pixels" "2"
+    "tonemap_min_avg_luminance" "3"
+    "tonemap_rate" "1"
+    "vignette_enable" "0"
+    "vignette_start" "1"
+    "vignette_end" "2"
+    "vignette_blur" "0"
 }
 bgimages_plus
 {
 }
 world
 {
-	"id" "1"
-	"mapversion" "4"
-	"classname" "worldspawn"
-	"detailmaterial" "detail/detailsprites"
-	"detailvbsp" "detail.vbsp"
-	"maxpropscreenwidth" "-1"
-	"skyname" "sky_badlands_01"
+    "id" "1"
+    "mapversion" "4"
+    "classname" "worldspawn"
+    "detailmaterial" "detail/detailsprites"
+    "detailvbsp" "detail.vbsp"
+    "maxpropscreenwidth" "-1"
+    "skyname" "sky_badlands_01"
     """
 
 End = """
 cameras
 {
-	"activecamera" "-1"
+    "activecamera" "-1"
 }
 cordons
 {
-	"active" "0"
+    "active" "0"
 }"""
 
 ID = 1000
@@ -119,6 +119,11 @@ def get_ID():
 
 
 def solid(Brush: list):
+
+    if len(Brush) > 7:
+        Displacement = Brush[7]
+    else:
+        Displacement = ""
 
     if Brush[0] > Brush[1]:
         Brush.insert(0, Brush[1])
@@ -166,124 +171,124 @@ def solid(Brush: list):
     print(Brush)
 
     return f"""
-	solid
-	{{
-		"id" "{get_ID()}"
-		side
-		 {{
-			"id" "1"
-			"plane" "({X_Start} {Y_Start} {Z_Start}) ({X_End} {Y_Start} {Z_Start}) ({X_End} {Y_End} {Z_Start})"
-			vertices_plus
-			{{
-				"v" "{X_Start} {Y_Start} {Z_Start}"
-				"v" "{X_End} {Y_Start} {Z_Start}"
-				"v" "{X_End} {Y_End} {Z_Start}"
-				"v" "{X_Start} {Y_End} {Z_Start}"
-			}}
-			"material" "{Top_Texture}"
-			"uaxis" "[1 0 0 -0] 0.25"
-			"vaxis" "[0 -1 0 128] 0.25"
-			"rotation" "0"
-			"lightmapscale" "16"
-			"smoothing_groups" "0"
-		}}
-		side
-		{{
-			"id" "2"
-			"plane" "({X_Start} {Y_End} {Z_End}) ({X_End} {Y_End} {Z_End}) ({X_End} {Y_Start} {Z_End})"
-			vertices_plus
-			{{
-				"v" "{X_Start} {Y_End} {Z_End}"
-				"v" "{X_End} {Y_End} {Z_End}"
-				"v" "{X_End} {Y_Start} {Z_End}"
-				"v" "{X_Start} {Y_Start} {Z_End}"
-			}}
-			"material" "{Bottom_Texture}"
-			"uaxis" "[-1 0 0 0] 0.25"
-			"vaxis" "[0 -1 0 -0] 0.25"
-			"rotation" "0"
-			"lightmapscale" "16"
-			"smoothing_groups" "0"
-		}}
-		side
-		{{
-			"id" "3"
-			"plane" "({X_Start} {Y_Start} {Z_Start}) ({X_Start} {Y_End} {Z_Start}) ({X_Start} {Y_End} {Z_End})"
-			vertices_plus
-			{{
-				"v" "{X_Start} {Y_Start} {Z_Start}"
-				"v" "{X_Start} {Y_End} {Z_Start}"
-				"v" "{X_Start} {Y_End} {Z_End}"
-				"v" "{X_Start} {Y_Start} {Z_End}"
-			}}
-			"material" "{Negative_X_Texture}"
-			"uaxis" "[0 -1 0 -0] 0.25"
-			"vaxis" "[0 0 -1 0] 0.25"
-			"rotation" "0"
-			"lightmapscale" "16"
-			"smoothing_groups" "0"
-		}}
-		side
-		{{
-			"id" "4"
-			"plane" "({X_End} {Y_Start} {Z_End}) ({X_End} {Y_End} {Z_End}) ({X_End} {Y_End} {Z_Start})"
-			vertices_plus
-			{{
-				"v" "{X_End} {Y_Start} {Z_End}"
-				"v" "{X_End} {Y_End} {Z_End}"
-				"v" "{X_End} {Y_End} {Z_Start}"
-				"v" "{X_End} {Y_Start} {Z_Start}"
-			}}
-			"material" "{Positive_X_Texture}"
-			"uaxis" "[0 1 0 0] 0.25"
-			"vaxis" "[0 0 -1 0] 0.25"
-			"rotation" "0"
-			"lightmapscale" "16"
-			"smoothing_groups" "0"
-		}}
-		side
-		{{
-			"id" "5"
-			"plane" "({X_End} {Y_Start} {Z_Start}) ({X_Start} {Y_Start} {Z_Start}) ({X_Start} {Y_Start} {Z_End})"
-			vertices_plus
-			{{
-				"v" "{X_End} {Y_Start} {Z_Start}"
-				"v" "{X_Start} {Y_Start} {Z_Start}"
-				"v" "{X_Start} {Y_Start} {Z_End}"
-				"v" "{X_End} {Y_Start} {Z_End}"
-			}}
-			"material" "{Positive_Y_Texture}"
-			"uaxis" "[-1 0 0 0] 0.25"
-			"vaxis" "[0 0 -1 0] 0.25"
-			"rotation" "0"
-			"lightmapscale" "16"
-			"smoothing_groups" "0"
-		}}
-		side
-		{{
-			"id" "6"
-			"plane" "({X_End} {Y_End} {Z_End}) ({X_Start} {Y_End} {Z_End}) ({X_Start} {Y_End} {Z_Start})"
-			vertices_plus
-			{{
-				"v" "{X_End} {Y_End} {Z_End}"
-				"v" "{X_Start} {Y_End} {Z_End}"
-				"v" "{X_Start} {Y_End} {Z_Start}"
-				"v" "{X_End} {Y_End} {Z_Start}"
-			}}
-			"material" "{Negative_Y_Texture}"
-			"uaxis" "[1 0 0 -0] 0.25"
-			"vaxis" "[0 0 -1 0] 0.25"
-			"rotation" "0"
-			"lightmapscale" "16"
-			"smoothing_groups" "0"
-		}}
-		editor
-		{{
-			"color" "150 150 160"
-			"visgroupshown" "1"
-			"visgroupautoshown" "1"
-		}}
-	}}"""
+    solid
+    {{
+        "id" "{get_ID()}"
+        side
+         {{
+            "id" "1"
+            "plane" "({X_Start} {Y_Start} {Z_Start}) ({X_End} {Y_Start} {Z_Start}) ({X_End} {Y_End} {Z_Start})"
+            vertices_plus
+            {{
+                "v" "{X_Start} {Y_Start} {Z_Start}"
+                "v" "{X_End} {Y_Start} {Z_Start}"
+                "v" "{X_End} {Y_End} {Z_Start}"
+                "v" "{X_Start} {Y_End} {Z_Start}"
+            }}
+            "material" "{Top_Texture}"
+            "uaxis" "[1 0 0 -0] 0.25"
+            "vaxis" "[0 -1 0 128] 0.25"
+            "rotation" "0"
+            "lightmapscale" "16"
+            "smoothing_groups" "0"{Displacement}
+        }}
+        side
+        {{
+            "id" "2"
+            "plane" "({X_Start} {Y_End} {Z_End}) ({X_End} {Y_End} {Z_End}) ({X_End} {Y_Start} {Z_End})"
+            vertices_plus
+            {{
+                "v" "{X_Start} {Y_End} {Z_End}"
+                "v" "{X_End} {Y_End} {Z_End}"
+                "v" "{X_End} {Y_Start} {Z_End}"
+                "v" "{X_Start} {Y_Start} {Z_End}"
+            }}
+            "material" "{Bottom_Texture}"
+            "uaxis" "[-1 0 0 0] 0.25"
+            "vaxis" "[0 -1 0 -0] 0.25"
+            "rotation" "0"
+            "lightmapscale" "16"
+            "smoothing_groups" "0"
+        }}
+        side
+        {{
+            "id" "3"
+            "plane" "({X_Start} {Y_Start} {Z_Start}) ({X_Start} {Y_End} {Z_Start}) ({X_Start} {Y_End} {Z_End})"
+            vertices_plus
+            {{
+                "v" "{X_Start} {Y_Start} {Z_Start}"
+                "v" "{X_Start} {Y_End} {Z_Start}"
+                "v" "{X_Start} {Y_End} {Z_End}"
+                "v" "{X_Start} {Y_Start} {Z_End}"
+            }}
+            "material" "{Negative_X_Texture}"
+            "uaxis" "[0 -1 0 -0] 0.25"
+            "vaxis" "[0 0 -1 0] 0.25"
+            "rotation" "0"
+            "lightmapscale" "16"
+            "smoothing_groups" "0"
+        }}
+        side
+        {{
+            "id" "4"
+            "plane" "({X_End} {Y_Start} {Z_End}) ({X_End} {Y_End} {Z_End}) ({X_End} {Y_End} {Z_Start})"
+            vertices_plus
+            {{
+                "v" "{X_End} {Y_Start} {Z_End}"
+                "v" "{X_End} {Y_End} {Z_End}"
+                "v" "{X_End} {Y_End} {Z_Start}"
+                "v" "{X_End} {Y_Start} {Z_Start}"
+            }}
+            "material" "{Positive_X_Texture}"
+            "uaxis" "[0 1 0 0] 0.25"
+            "vaxis" "[0 0 -1 0] 0.25"
+            "rotation" "0"
+            "lightmapscale" "16"
+            "smoothing_groups" "0"
+        }}
+        side
+        {{
+            "id" "5"
+            "plane" "({X_End} {Y_Start} {Z_Start}) ({X_Start} {Y_Start} {Z_Start}) ({X_Start} {Y_Start} {Z_End})"
+            vertices_plus
+            {{
+                "v" "{X_End} {Y_Start} {Z_Start}"
+                "v" "{X_Start} {Y_Start} {Z_Start}"
+                "v" "{X_Start} {Y_Start} {Z_End}"
+                "v" "{X_End} {Y_Start} {Z_End}"
+            }}
+            "material" "{Positive_Y_Texture}"
+            "uaxis" "[-1 0 0 0] 0.25"
+            "vaxis" "[0 0 -1 0] 0.25"
+            "rotation" "0"
+            "lightmapscale" "16"
+            "smoothing_groups" "0"
+        }}
+        side
+        {{
+            "id" "6"
+            "plane" "({X_End} {Y_End} {Z_End}) ({X_Start} {Y_End} {Z_End}) ({X_Start} {Y_End} {Z_Start})"
+            vertices_plus
+            {{
+                "v" "{X_End} {Y_End} {Z_End}"
+                "v" "{X_Start} {Y_End} {Z_End}"
+                "v" "{X_Start} {Y_End} {Z_Start}"
+                "v" "{X_End} {Y_End} {Z_Start}"
+            }}
+            "material" "{Negative_Y_Texture}"
+            "uaxis" "[1 0 0 -0] 0.25"
+            "vaxis" "[0 0 -1 0] 0.25"
+            "rotation" "0"
+            "lightmapscale" "16"
+            "smoothing_groups" "0"
+        }}
+        editor
+        {{
+            "color" "150 150 160"
+            "visgroupshown" "1"
+            "visgroupautoshown" "1"
+        }}
+    }}"""
 
 
 def synthesize_entities(Entities):

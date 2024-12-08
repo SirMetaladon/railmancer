@@ -32,6 +32,20 @@ def max_manhattan(v1, v2):
     return max(abs(v1[0] - v2[0]), abs(v1[1] - v2[1]))
 
 
+def determine_canvas_constants(Extents: list = [0, 0, 0, 0]):
+
+    global canvas_scale, canvas_offset
+    canvas_scale = 0.22
+    canvas_offset = (-2040, -2048)
+
+
+def canvas(Point):
+    return (
+        (Point[0] + canvas_offset[0]) * canvas_scale,
+        (Point[1] + canvas_offset[1]) * canvas_scale,
+    )
+
+
 def draw_perpendicular_line(point, direction, length=50):
     """Draws a perpendicular line at a given point and direction using Turtle graphics.
 
@@ -47,42 +61,57 @@ def draw_perpendicular_line(point, direction, length=50):
     perp_vector = normalize_vec2d(perp_vector)
 
     # Scale the perpendicular vector to the desired length
-    perp_vector = (perp_vector[0] * length, perp_vector[1] * length)
+    perp_vector = (
+        perp_vector[0] * length / canvas_scale,
+        perp_vector[1] * length / canvas_scale,
+    )
 
     # Calculate the endpoints of the perpendicular line
-    start_point = (point[0] - perp_vector[0] / 2, point[1] - perp_vector[1] / 2)
-    end_point = (point[0] + perp_vector[0] / 2, point[1] + perp_vector[1] / 2)
+    start_point = (
+        (point[0] - perp_vector[0] / 2),
+        (point[1] - perp_vector[1] / 2),
+    )
+    end_point = (
+        (point[0] + perp_vector[0] / 2),
+        (point[1] + perp_vector[1] / 2),
+    )
 
     # Draw the perpendicular line
     turtle.penup()
-    turtle.goto(start_point)
+    turtle.goto(canvas(start_point))
     turtle.pendown()
-    turtle.goto(end_point)
+    turtle.goto(canvas(end_point))
 
 
 def nudge(point, direction):
 
-    return (point[0] + direction[0], point[1] + direction[1])
+    return (
+        point[0] + direction[0],
+        point[1] + direction[1],
+    )
 
 
-def mark(point, length=10):
+def mark(point, length=8):
     """Draws a green cross at the specified point."""
 
     # Draw the perpendicular line
     turtle.penup()
     turtle.color("green")
-    turtle.goto(nudge(point, [length, 0]))
+    turtle.goto(canvas(nudge(point, [length / canvas_scale, 0])))
     turtle.pendown()
-    turtle.goto(nudge(point, [-length, 0]))
+    turtle.goto(canvas(nudge(point, [-length / canvas_scale, 0])))
     turtle.penup()
-    turtle.goto(nudge(point, [0, length]))
+    turtle.goto(canvas(nudge(point, [0, length / canvas_scale])))
     turtle.pendown()
-    turtle.goto(nudge(point, [0, -length]))
+    turtle.goto(canvas(nudge(point, [0, -length / canvas_scale])))
     turtle.penup()
     turtle.color("white")
 
 
 def draw_bezier_curve(p1, p2, d1, d2):
+
+    p1 = np.array([p1[0], p1[1]])
+    p2 = np.array([p2[0], p2[1]])
 
     InterPoints = bezier_curve_points(p1, p2, d1, d2)
 
@@ -93,7 +122,7 @@ def draw_bezier_curve(p1, p2, d1, d2):
     mark(control2)
 
     turtle.penup()
-    turtle.goto(p1)
+    turtle.goto(canvas(p1))
     turtle.pendown()
 
     # Approximate with a polyline
@@ -113,15 +142,16 @@ def draw_bezier_curve(p1, p2, d1, d2):
             + 3 * (1 - t) * t**2 * control2[1]
             + t**3 * p2[1]
         )
-        turtle.goto(x, y)
+
+        turtle.goto(canvas((x, y)))
 
 
 def draw_line(p1, p2):
     """Draws a straight line between two points using Turtle graphics."""
     turtle.penup()
-    turtle.goto(p1)
+    turtle.goto(canvas(p1))
     turtle.pendown()
-    turtle.goto(p2)
+    turtle.goto(canvas(p2))
 
 
 def bezier_curve(t, P0, P1, P2, P3):
@@ -137,6 +167,23 @@ def bezier_curve_points(p0, p3, d0, d3):
     # Normalize direction vectors
     d0 = d0 / np.linalg.norm(d0)
     d3 = d3 / np.linalg.norm(d3)
+
+    # Check if the direction vectors are collinear
+    cross_directions = np.cross(d0, d3)
+    is_collinear_directions = np.isclose(cross_directions, 0)
+
+    # Check if the points are aligned along the direction vector
+    p3_p0 = p3 - p0
+    p3_p0_dir = p3_p0 / np.linalg.norm(p3_p0)  # Unit vector in the direction of P3 - P0
+    cross_points = np.cross(d0, p3_p0_dir)
+    is_aligned_points = np.isclose(cross_points, 0)
+
+    if is_collinear_directions and is_aligned_points:
+        p1 = (
+            p0 + d0 * np.linalg.norm(p3 - p0) / 3
+        )  # Control points at one-third and two-thirds
+        p2 = p3 - d3 * np.linalg.norm(p3 - p0) / 3
+        return np.array([p0, p1, p2, p3])
 
     # Function to calculate the radius of curvature
     def curvature_radius(p0, p1, p2, p3, t):
@@ -167,6 +214,8 @@ def bezier_curve_points(p0, p3, d0, d3):
         # Sample at multiple points along the curve to estimate the minimum radius
         for t in np.linspace(0, 1, 20):
             radius = curvature_radius(p0, p1, p2, p3, t)
+            if np.isnan(radius) or np.isinf(radius):
+                print(f"Invalid radius at t={t}: {radius}")
             min_radius = min(min_radius, radius)
 
         # Return negative to maximize radius
@@ -178,7 +227,7 @@ def bezier_curve_points(p0, p3, d0, d3):
     dist = math.dist(p0, p3)
 
     # Bounds to prevent the control points from going too far
-    bounds = [(dist / 5, 3000), (dist / 5, 3000)]
+    bounds = [(dist / 5, 30000), (dist / 5, 30000)]
 
     # Perform optimization
     result = minimize(objective, initial_guess, bounds=bounds, method="L-BFGS-B")
@@ -205,13 +254,14 @@ def main():
     turtle.hideturtle()
 
     Line = [
-        [[200, 0], [0, 1]],
-        [[-50, 350], [-1, 1]],
-        [[-300, 450], [-1, 0]],
-        [[-350, -50], [0, -1]],
-        [[-200, -350], [1, 0]],
-        [[200, 0], [0, 1]],
+        [[2040, -16, 0], [0, 1]],
+        [[2040, 16, 0], [0, 1]],
+        [[4080 - 16, 2040, 0], [1, 0]],
+        [[4080 + 16, 2040, 0], [1, 0]],
     ]
+
+    Extents = [0, 0, 0, 0]
+    determine_canvas_constants(Extents)
 
     for Node in Line:
         draw_perpendicular_line(Node[0], Node[1], 20)
