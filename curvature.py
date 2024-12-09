@@ -275,6 +275,6 @@ def generate_line(Line):
             bezier_curve_points(Node1[0], Node2[0], Node1[1], reverse(Node2[1]))
         ]
 
-    display_path(Beziers, Line)
+    # display_path(Beziers, Line)
 
     return Beziers

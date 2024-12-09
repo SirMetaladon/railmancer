@@ -5,15 +5,25 @@ import random
 
 
 def bilinear_interpolation(Z, x, y):
-    # Grid point coordinates
-    x0, y0 = int(x), int(y)
+
+    if len(Z) == 1:
+        return Z[0][0]
+    elif len(Z) == 0:
+        return 0  # empty?
+
+    # convert x,y 0-1 to grid co-ords relative to the size of Z + bounding
+    x0 = int(max(min(1, x), 0) * (len(Z) - 2))
+    y0 = int(max(min(1, y), 0) * (len(Z[0]) - 2))
+    # let's think for a second
+    # gridsize = 30
+    # 30 * 1 (farthest extent)
+    # 30 + 1
+    # remove 1, which means it breaks in the case of 1, but that's not even a case where you can interpolate
+    # might add an edgecase check for it, why not
+
+    # apparently it needs 2? one for the overflow, one for the +1? idk
+
     x1, y1 = x0 + 1, y0 + 1
-
-    print(x0, y0, x1, y1)
-
-    # Ensure indices are within bounds
-    if x1 >= len(Z) or y1 >= len(Z[0]):
-        raise ValueError("Query point is outside the grid bounds")
 
     # Corner values
     Q00 = Z[x0][y0]

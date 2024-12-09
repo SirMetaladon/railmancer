@@ -3,14 +3,6 @@ import noisetest, curvature
 import numpy as np
 
 
-def query_height(ContourMap, real_x, real_y):
-
-    virtual_x = (real_x - ContourMap["shift_x"]) / (ContourMap["scale_x"] * 8)
-    virtual_y = (real_y - ContourMap["shift_y"]) / (ContourMap["scale_y"] * 8)
-
-    return noisetest.bilinear_interpolation(ContourMap["map"], virtual_x, virtual_y)
-
-
 def get_ID():
 
     global ID
@@ -18,7 +10,31 @@ def get_ID():
     return str(ID)
 
 
-def displacement_build(X_Start, X_End, Y_Start, Y_End, ContourMap):
+def query_height(ContourMap, real_x, real_y):
+
+    virtual_x = (real_x - ContourMap["x_shift"]) / (ContourMap["x_scale"])
+    virtual_y = (real_y - ContourMap["y_shift"]) / (ContourMap["y_scale"])
+
+    return noisetest.bilinear_interpolation(ContourMap["map"], virtual_x, virtual_y)
+
+
+def row_encode(heights: list):
+
+    String = ""
+    for x in range(9):
+        Row = ""
+        for entry in heights[x]:
+            Row += str(round(entry * 100, 3)) + " "
+
+        Row.strip()
+
+        String += '\n    				"row' + str(x) + '" "' + Row + '"'
+
+    print(String)
+    return String
+
+
+def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End, ContourMap):
 
     scale_x = (X_Start - X_End) / 8
     scale_y = (Y_Start - Y_End) / 8
@@ -35,8 +51,89 @@ def displacement_build(X_Start, X_End, Y_Start, Y_End, ContourMap):
         for x_layer in posgrid
     ]
 
+    rotated = heights  # [list(row) for row in zip(*heights[::-1])] #for some reason this is needed... sometimes
+
+    # print(X_Start, Y_Start, Z_Start)
+
+    return f"""			dispinfo
+			{{
+				"power" "3"
+				"startposition" "[{0} {0} {0}]"
+				"flags" "0"
+				"elevation" "0"
+				"subdiv" "0"
+				normals
+				{{
+					"row0" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row1" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row2" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row3" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row4" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row5" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row6" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row7" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row8" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+				}}
+				distances
+				{{{row_encode(rotated)}
+				}}
+				offsets
+				{{
+					"row0" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row1" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row2" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row3" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row4" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row5" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row6" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row7" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row8" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+				}}
+				offset_normals
+				{{
+					"row0" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row1" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row2" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row3" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row4" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row5" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row6" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row7" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row8" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+				}}
+				alphas
+				{{
+					"row0" "0 0 0 0 0 0 0 0 0"
+					"row1" "0 0 0 0 0 0 0 0 0"
+					"row2" "0 0 0 0 0 0 0 0 0"
+					"row3" "0 0 0 0 0 0 0 0 0"
+					"row4" "0 0 0 0 0 0 0 0 0"
+					"row5" "0 0 0 0 0 0 0 0 0"
+					"row6" "0 0 0 0 0 0 0 0 0"
+					"row7" "0 0 0 0 0 0 0 0 0"
+					"row8" "0 0 0 0 0 0 0 0 0"
+				}}
+				triangle_tags
+				{{
+					"row0" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row1" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row2" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row3" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row4" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row5" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row6" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row7" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+				}}
+				allowed_verts
+				{{
+					"10" "-1 -1 -1 -1 -1 -1 -1 -1 -1 -1"
+				}}
+			}}"""
+
 
 def solid(Brush: list, ContourMap):
+
+    global ID
 
     if Brush[0] > Brush[1]:
         Brush.insert(0, Brush[1])
@@ -49,13 +146,6 @@ def solid(Brush: list, ContourMap):
     if Brush[4] < Brush[5]:
         Brush.insert(4, Brush[5])
         Brush.pop(6)
-
-    X_Start = str(Brush[0])
-    X_End = str(Brush[1])
-    Y_Start = str(Brush[2])
-    Y_End = str(Brush[3])
-    Z_Start = str(Brush[4])
-    Z_End = str(Brush[5])
 
     Displacement = ""
 
@@ -84,9 +174,22 @@ def solid(Brush: list, ContourMap):
         Negative_Y_Texture = "TOOLS/TOOLSNODRAW"
 
     elif Brush[6] == "displacement":
-        Displacement = displacement_build(X_Start, X_End, Y_Start, Y_End, ContourMap)
+        Displacement = displacement_build(
+            Brush[0], Brush[1], Brush[2], Brush[3], Brush[4], Brush[5], ContourMap
+        )
+        Top_Texture = "dev/dev_measuregeneric01b"
+        Bottom_Texture = "TOOLS/TOOLSNODRAW"
+        Negative_X_Texture = "TOOLS/TOOLSNODRAW"
+        Positive_X_Texture = "TOOLS/TOOLSNODRAW"
+        Positive_Y_Texture = "TOOLS/TOOLSNODRAW"
+        Negative_Y_Texture = "TOOLS/TOOLSNODRAW"
 
-    print(Brush, Displacement)
+    X_Start = str(Brush[0])
+    X_End = str(Brush[1])
+    Y_Start = str(Brush[2])
+    Y_End = str(Brush[3])
+    Z_Start = str(Brush[4])
+    Z_End = str(Brush[5])
 
     return f"""
     solid
@@ -215,6 +318,8 @@ def synthesize_entities(Entities, ContourMap):
 
 def synthesize_brushes(Brushes, ContourMap):
 
+    global ID
+
     Output = ""
     for Brush in Brushes:
         Output += solid(Brush, ContourMap)
@@ -252,13 +357,15 @@ def displacements(block_x: int, block_y: int, block_z: int):
     return [
         [
             block_x * 16 * 255,
-            (block_x + 0.5) * 16 * 255,
+            (block_x + 1) * 16 * 255,
             block_y * 16 * 255,
-            (block_y + 0.5) * 16 * 255,
+            (block_y + 1) * 16 * 255,
             (block_z) * 16,
             (block_z + 1) * 16,
             "displacement",
-        ],
+        ]
+    ]
+    """
         [
             (block_x + 0.5) * 16 * 255,
             (block_x + 1) * 16 * 255,
@@ -286,7 +393,7 @@ def displacements(block_x: int, block_y: int, block_z: int):
             (block_z + 1) * 16,
             "displacement",
         ],
-    ]
+    ]"""
 
 
 def wall(block_x: int, block_y: int, block_z: int, dir: int):
@@ -337,6 +444,9 @@ def block(block_x, block_y, block_z):
 
 
 def write_to_vmf(Brushes: list, Entities: list, ContourMap):
+
+    global ID
+    ID = 1000
 
     Start = """versioninfo
     {
@@ -498,8 +608,10 @@ def main():
         for octaves in octaves_list
     ]
 
+    layers[2] = [[1, 0], [0, 0]]
+
     # Display the layers
-    noisetest.display_perlin_layers(layers)
+    # noisetest.display_perlin_layers(layers)
 
     Line = [
         [np.array([2040, -16, 0]), [0, 1]],
@@ -509,8 +621,6 @@ def main():
     ]
 
     curvature.generate_line(Line)
-
-    ID = 1000
     Brushes = []
 
     Brushes += block(0, 0, 0)
@@ -518,11 +628,10 @@ def main():
     # Brushes += block(0, 1, 3)
     # Brushes += block(1, 1, 6)
     # Brushes += block(2, 1, 9)
-
-    print(Brushes)
-
-    heightmap_scale_x = (4080 - 0) / 8
-    heightmap_scale_y = (4080 - 0) / 8
+    # end - start
+    heightmap_scale_x = 512  # 4080 * 2 - 0
+    heightmap_scale_y = 512  # 4080 * 2 - 0
+    # probably start, need to test it
     heightmap_shift_x = 0
     heightmap_shift_y = 0
 
