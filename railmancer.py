@@ -1,5 +1,5 @@
 import random, os
-import noisetest, curvature
+import noisetest, curvature, scatter
 import numpy as np
 
 
@@ -15,7 +15,31 @@ def query_height(ContourMap, real_x, real_y):
     virtual_x = (real_x - ContourMap["x_shift"]) / (ContourMap["x_scale"])
     virtual_y = (real_y - ContourMap["y_shift"]) / (ContourMap["y_scale"])
 
-    return noisetest.bilinear_interpolation(ContourMap["map"], virtual_x, virtual_y)
+    height = noisetest.bilinear_interpolation(ContourMap["map"], virtual_x, virtual_y)
+    # print(height, virtual_x, virtual_y)
+
+    return height
+
+
+def distribute(bounds, models, min_distance, num_dots, ContourMap):
+
+    def flat_field(x, y):
+        return 0.5
+
+    EntsOut = []
+    Points = scatter.point_generator(flat_field, bounds, num_dots, min_distance)
+    # scatter.density_field
+    for Point in Points:
+        EntsOut += [
+            {
+                "pos-x": Point[0],
+                "pos-y": Point[1],
+                "pos-z": query_height(ContourMap, Point[0], Point[1]) * 250,
+                "mdl": random.choice(models),
+                "ang-yaw": random.randrange(-180, 180),
+            }
+        ]
+    return EntsOut
 
 
 def row_encode(heights: list):
@@ -24,7 +48,7 @@ def row_encode(heights: list):
     for x in range(9):
         Row = ""
         for entry in heights[x]:
-            Row += str(round(entry * 100, 3)) + " "
+            Row += str(round(entry * 250, 3)) + " "
 
         Row.strip()
 
@@ -37,7 +61,7 @@ def row_encode(heights: list):
 def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End, ContourMap):
 
     scale_x = (X_Start - X_End) / 8
-    scale_y = (Y_Start - Y_End) / 8
+    scale_y = (Y_Start - Y_End) / 8  # multiplier due to the range function below
     shift_x = X_Start
     shift_y = Y_Start
 
@@ -51,7 +75,9 @@ def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End, ContourMa
         for x_layer in posgrid
     ]
 
-    rotated = heights  # [list(row) for row in zip(*heights[::-1])] #for some reason this is needed... sometimes
+    rotated = [
+        list(row) for row in zip(*heights[::-1])
+    ]  # for some reason this is needed... sometimes
 
     # print(X_Start, Y_Start, Z_Start)
 
@@ -215,7 +241,7 @@ def solid(Brush: list, ContourMap):
         }}
         side
         {{
-            "id" "2"
+            "id" "{get_ID()}"
             "plane" "({X_Start} {Y_End} {Z_End}) ({X_End} {Y_End} {Z_End}) ({X_End} {Y_Start} {Z_End})"
             vertices_plus
             {{
@@ -233,7 +259,7 @@ def solid(Brush: list, ContourMap):
         }}
         side
         {{
-            "id" "3"
+            "id" "{get_ID()}"
             "plane" "({X_Start} {Y_Start} {Z_Start}) ({X_Start} {Y_End} {Z_Start}) ({X_Start} {Y_End} {Z_End})"
             vertices_plus
             {{
@@ -251,7 +277,7 @@ def solid(Brush: list, ContourMap):
         }}
         side
         {{
-            "id" "4"
+            "id" "{get_ID()}"
             "plane" "({X_End} {Y_Start} {Z_End}) ({X_End} {Y_End} {Z_End}) ({X_End} {Y_End} {Z_Start})"
             vertices_plus
             {{
@@ -269,7 +295,7 @@ def solid(Brush: list, ContourMap):
         }}
         side
         {{
-            "id" "5"
+            "id" "{get_ID()}"
             "plane" "({X_End} {Y_Start} {Z_Start}) ({X_Start} {Y_Start} {Z_Start}) ({X_Start} {Y_Start} {Z_End})"
             vertices_plus
             {{
@@ -287,7 +313,7 @@ def solid(Brush: list, ContourMap):
         }}
         side
         {{
-            "id" "6"
+            "id" "{get_ID()}"
             "plane" "({X_End} {Y_End} {Z_End}) ({X_Start} {Y_End} {Z_End}) ({X_Start} {Y_End} {Z_Start})"
             vertices_plus
             {{
@@ -313,7 +339,33 @@ def solid(Brush: list, ContourMap):
 
 
 def synthesize_entities(Entities, ContourMap):
-    return ""
+
+    Output = ""
+    global ID
+
+    for Ent in Entities:
+
+        Output += f"""entity
+        {{
+            "id" "{get_ID()}"
+            "classname" "{Ent.get("type","prop_static")}"
+            "angles" "{Ent.get("ang-pitch",0)} {Ent.get("ang-yaw",0)} {Ent.get("ang-roll",0)}"
+            "fademindist" "-1"
+            "fadescale" "1"
+            "model" "{Ent.get("mdl","models/trakpak3_rsg/straights/s0512_0fw_0pg_+0512x00000x0000.mdl")}"
+            "skin" "0"
+            "solid" "6"
+            "origin" "{Ent["pos-x"]} {Ent["pos-y"]} {Ent["pos-z"]}"
+            editor
+            {{
+                "color" "255 255 0"
+                "visgroupshown" "1"
+                "visgroupautoshown" "1"
+                "logicalpos" "[0 0]"
+            }}
+        }}"""
+
+    return Output
 
 
 def synthesize_brushes(Brushes, ContourMap):
@@ -357,15 +409,13 @@ def displacements(block_x: int, block_y: int, block_z: int):
     return [
         [
             block_x * 16 * 255,
-            (block_x + 1) * 16 * 255,
+            (block_x + 0.5) * 16 * 255,
             block_y * 16 * 255,
-            (block_y + 1) * 16 * 255,
+            (block_y + 0.5) * 16 * 255,
             (block_z) * 16,
             (block_z + 1) * 16,
             "displacement",
-        ]
-    ]
-    """
+        ],
         [
             (block_x + 0.5) * 16 * 255,
             (block_x + 1) * 16 * 255,
@@ -393,7 +443,7 @@ def displacements(block_x: int, block_y: int, block_z: int):
             (block_z + 1) * 16,
             "displacement",
         ],
-    ]"""
+    ]
 
 
 def wall(block_x: int, block_y: int, block_z: int, dir: int):
@@ -608,10 +658,10 @@ def main():
         for octaves in octaves_list
     ]
 
-    layers[2] = [[1, 0], [0, 0]]
+    layers[2] = [[0, 0, 0], [2, 2, 2], [5, 0, 0]]
 
     # Display the layers
-    # noisetest.display_perlin_layers(layers)
+    noisetest.display_perlin_layers(layers)
 
     Line = [
         [np.array([2040, -16, 0]), [0, 1]],
@@ -622,15 +672,44 @@ def main():
 
     curvature.generate_line(Line)
     Brushes = []
+    Entities = []
 
     Brushes += block(0, 0, 0)
-    Brushes += displacements(0, 0, 12)
+    Brushes += displacements(0, 0, 0)
+    Brushes += displacements(1, 0, 0)
+    Brushes += displacements(0, 1, 0)
+    Brushes += displacements(-1, 0, 0)
+    Brushes += displacements(0, -1, 0)
     # Brushes += block(0, 1, 3)
     # Brushes += block(1, 1, 6)
     # Brushes += block(2, 1, 9)
     # end - start
-    heightmap_scale_x = 512  # 4080 * 2 - 0
-    heightmap_scale_y = 512  # 4080 * 2 - 0
+
+    """
+    Tests = [[0, 0], [0, 1], [1, 0], [1, 1]]
+
+    for Test in Tests:
+        print(noisetest.bilinear_interpolation(layers[2], Test[0], Test[1]))"""
+
+    Entities += [
+        {
+            "pos-x": 2040,
+            "pos-y": -32,
+            "pos-z": 192 + 16,
+            "mdl": "models/trakpak3_rsg/straights/s0064_0fw_0pg_+0064x00000x0000.mdl",
+            "ang-yaw": -90,
+        },
+        {
+            "pos-x": 2040,
+            "pos-y": 32,
+            "pos-z": 192 + 16,
+            "mdl": "models/trakpak3_rsg/arcs/r2048/a0fw_8rt_right_0pg_+2048x+2048x0000.mdl",
+            "ang-yaw": -90,
+        },
+    ]
+
+    heightmap_scale_x = 4080
+    heightmap_scale_y = 4080
     # probably start, need to test it
     heightmap_shift_x = 0
     heightmap_shift_y = 0
@@ -645,7 +724,21 @@ def main():
         "y_shift": heightmap_shift_y,
     }
 
-    write_to_vmf(Brushes, [], ContourMap)
+    EdgeBoundary = 150
+    Entities += distribute(
+        ((EdgeBoundary, 4080 - EdgeBoundary), (EdgeBoundary, 4080 - EdgeBoundary)),
+        [
+            "models/props_foliage/tree_pine_extrasmall.mdl",
+            "models/props_foliage/tree_pine_small.mdl",
+            # "models/props_foliage/tree_pine_large.mdl",
+            "models/props_foliage/tree_pine_huge.mdl",
+        ],
+        90,
+        200,
+        ContourMap,
+    )
+
+    write_to_vmf(Brushes, Entities, ContourMap)
 
 
 if __name__ == "__main__":

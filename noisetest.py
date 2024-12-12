@@ -6,14 +6,23 @@ import random
 
 def bilinear_interpolation(Z, x, y):
 
-    if len(Z) == 1:
-        return Z[0][0]
-    elif len(Z) == 0:
-        return 0  # empty?
+    Size = len(Z)
+    if Size <= 1:
+        return 0
+
+    x = max(min(0.999, x), 0) * (Size - 1)
+    y = max(min(0.999, y), 0) * (Size - 1)
+
+    # 1, 1 on a 3x3 grid
+    # 1 * 3-1 = 1
+    # let's get the outcome straight
+    # 1,1 should refer to the 2nd-to-last vertex (so the last vertex can interpolate)
+    # 0,0 should refer to the first vertex (0)
 
     # convert x,y 0-1 to grid co-ords relative to the size of Z + bounding
-    x0 = int(max(min(1, x), 0) * (len(Z) - 2))
-    y0 = int(max(min(1, y), 0) * (len(Z[0]) - 2))
+    x0 = int(x)
+    y0 = int(y)
+
     # let's think for a second
     # gridsize = 30
     # 30 * 1 (farthest extent)
@@ -32,8 +41,9 @@ def bilinear_interpolation(Z, x, y):
     Q11 = Z[x1][y1]
 
     # Interpolation weights
-    alpha_x = x - x0
-    alpha_y = y - y0
+    # situation with the very end; x0 is x-1, so alphax = 1 = most interp possible
+    alpha_x = (x) - x0
+    alpha_y = (y) - y0
 
     # Interpolate along x for y0 and y1
     R0 = Q00 + alpha_x * (Q10 - Q00)

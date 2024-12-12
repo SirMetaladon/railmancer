@@ -2,7 +2,14 @@ import numpy as np
 from scipy.spatial import KDTree
 import math
 
-def generate_dots_with_weighted_sampling(density_field, bounds, num_dots, resolution=1000):
+
+def point_generator(
+    density_field,
+    bounds,
+    num_dots,
+    minimum_spacing,
+    resolution=1000,
+):
     """
     Generate dots distributed according to a density field, with improved apportioning.
 
@@ -22,7 +29,7 @@ def generate_dots_with_weighted_sampling(density_field, bounds, num_dots, resolu
     x_vals = np.linspace(x_min, x_max, resolution)
     y_vals = np.linspace(y_min, y_max, resolution)
     xx, yy = np.meshgrid(x_vals, y_vals)
-    
+
     # Compute density values on the grid
     density_grid = np.vectorize(density_field)(xx, yy)
     density_grid = np.maximum(density_grid, 0)  # Ensure no negative densities
@@ -49,11 +56,10 @@ def generate_dots_with_weighted_sampling(density_field, bounds, num_dots, resolu
         density = density_field(x, y)
         if density <= 0:
             continue
-        min_distance = max(0.5/density,0.25)
 
         if kdtree:
             distances, _ = kdtree.query([x, y], k=1)
-            if distances < min_distance:
+            if distances < minimum_spacing:
                 continue
 
         # Accept the point
@@ -62,23 +68,30 @@ def generate_dots_with_weighted_sampling(density_field, bounds, num_dots, resolu
 
     return np.array(dots)
 
+
 # Example usage
-def example_density_field(x, y):
+def density_field(x, y):
     """A sample density field: higher density near the origin."""
-    return max(1/abs(x)+1,0)#max(1 - 1 * (math.sin(y) + math.sin(x)*0.5 + math.cos(x+y/3)), 0)
+    return max(
+        (1 / x) + (1 / y) + (1 / abs(4080 - (x))) + (1 / abs(4080 - (y))),
+        0,
+    )  # max(1 - 1 * (math.sin(y) + math.sin(x)*0.5 + math.cos(x+y/3)), 0)
 
-bounds = ((-10, 10), (-10, 10))
-num_dots = 1000
 
-dots = generate_dots_with_weighted_sampling(example_density_field, bounds, num_dots)
+"""
+bounds = ((30, 4050), (30, 4050))
+num_dots = 250
+
+dots = point_generator(density_field, bounds, num_dots)
+
 
 # Plot the result
 import matplotlib.pyplot as plt
 
 # Plot the result
 plt.figure(figsize=(8, 8))
-plt.scatter(dots[:, 0], dots[:, 1], s=2, c='blue', alpha=0.7)
+plt.scatter(dots[:, 0], dots[:, 1], s=2, c="blue", alpha=0.7)
 plt.title("Improved Dot Distribution Based on Density Field")
 plt.xlabel("x")
 plt.ylabel("y")
-plt.show()
+plt.show()"""
