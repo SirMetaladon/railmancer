@@ -3,6 +3,19 @@ import noisetest, curvature, scatter
 import numpy as np
 
 
+def add_entity(Pos, MDL, Ang):
+    global Entities
+
+    Entities += [
+        {
+            "pos-x": Pos[0],
+            "pos-y": Pos[1],
+            "pos-z": Pos[2],
+            "mdl": MDL,
+        }
+    ]
+
+
 def get_ID():
 
     global ID
@@ -60,10 +73,10 @@ def row_encode(heights: list):
 
 def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End, ContourMap):
 
-    scale_x = (X_Start - X_End) / 8
+    scale_x = (X_Start - X_End) / -8
     scale_y = (Y_Start - Y_End) / 8  # multiplier due to the range function below
     shift_x = X_Start
-    shift_y = Y_Start
+    shift_y = Y_End
 
     posgrid = [
         [(x * scale_x + shift_x, y * scale_y + shift_y) for y in range(9)]
@@ -75,9 +88,12 @@ def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End, ContourMa
         for x_layer in posgrid
     ]
 
-    rotated = [
-        list(row) for row in zip(*heights[::-1])
-    ]  # for some reason this is needed... sometimes
+    for x_layer in posgrid:
+        for pos in x_layer:
+            add_entity([pos[0], pos[1], 250], "models/props_2fort/frog.mdl", [0, 0, 0])
+
+    rotated = [list(row) for row in zip(*heights)][::-1]
+    # for some reason this is needed... sometimes
 
     # print(X_Start, Y_Start, Z_Start)
 
@@ -157,7 +173,7 @@ def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End, ContourMa
 			}}"""
 
 
-def solid(Brush: list, ContourMap):
+def solid(Brush: list):
 
     global ID
 
@@ -200,9 +216,7 @@ def solid(Brush: list, ContourMap):
         Negative_Y_Texture = "TOOLS/TOOLSNODRAW"
 
     elif Brush[6] == "displacement":
-        Displacement = displacement_build(
-            Brush[0], Brush[1], Brush[2], Brush[3], Brush[4], Brush[5], ContourMap
-        )
+        Displacement = Brush[7]
         Top_Texture = "dev/dev_measuregeneric01b"
         Bottom_Texture = "TOOLS/TOOLSNODRAW"
         Negative_X_Texture = "TOOLS/TOOLSNODRAW"
@@ -338,7 +352,7 @@ def solid(Brush: list, ContourMap):
     }}"""
 
 
-def synthesize_entities(Entities, ContourMap):
+def synthesize_entities(Entities):
 
     Output = ""
     global ID
@@ -368,13 +382,13 @@ def synthesize_entities(Entities, ContourMap):
     return Output
 
 
-def synthesize_brushes(Brushes, ContourMap):
+def synthesize_brushes(Brushes):
 
     global ID
 
     Output = ""
     for Brush in Brushes:
-        Output += solid(Brush, ContourMap)
+        Output += solid(Brush)
 
     Output += "}"
 
@@ -405,8 +419,9 @@ def ceiling(block_x: int, block_y: int, block_z: int):
     ]
 
 
-def displacements(block_x: int, block_y: int, block_z: int):
-    return [
+def displacements(block_x: int, block_y: int, block_z: int, ContourMap):
+
+    Disps = [
         [
             block_x * 16 * 255,
             (block_x + 0.5) * 16 * 255,
@@ -444,6 +459,15 @@ def displacements(block_x: int, block_y: int, block_z: int):
             "displacement",
         ],
     ]
+
+    for Entry in Disps:
+        Entry += [
+            displacement_build(
+                Entry[0], Entry[1], Entry[2], Entry[3], Entry[4], Entry[5], ContourMap
+            )
+        ]
+
+    return Disps
 
 
 def wall(block_x: int, block_y: int, block_z: int, dir: int):
@@ -493,7 +517,7 @@ def block(block_x, block_y, block_z):
     ]
 
 
-def write_to_vmf(Brushes: list, Entities: list, ContourMap):
+def write_to_vmf(Brushes: list, Entities: list):
 
     global ID
     ID = 1000
@@ -607,8 +631,8 @@ def write_to_vmf(Brushes: list, Entities: list, ContourMap):
         "active" "0"
     }"""
 
-    BrushString = synthesize_brushes(Brushes, ContourMap)
-    EntityString = synthesize_entities(Entities, ContourMap)
+    BrushString = synthesize_brushes(Brushes)
+    EntityString = synthesize_entities(Entities)
 
     content = Start + BrushString + EntityString + End
 
@@ -628,6 +652,8 @@ def write_to_vmf(Brushes: list, Entities: list, ContourMap):
 
 
 def main():
+
+    global Entities
     """rough pseudocode for converting between blocklists and module outputs
 
     for every incoming block-grid coordinates:
@@ -661,7 +687,7 @@ def main():
     layers[2] = [[0, 0, 0], [2, 2, 2], [5, 0, 0]]
 
     # Display the layers
-    noisetest.display_perlin_layers(layers)
+    # noisetest.display_perlin_layers(layers)
 
     Line = [
         [np.array([2040, -16, 0]), [0, 1]],
@@ -671,25 +697,28 @@ def main():
     ]
 
     curvature.generate_line(Line)
+
+    heightmap_scale_x = 4080
+    heightmap_scale_y = 4080
+    # probably start, need to test it
+    heightmap_shift_x = 0
+    heightmap_shift_y = 0
+
+    heightmap = layers[2]
+
+    ContourMap = {
+        "map": heightmap,
+        "x_scale": heightmap_scale_x,
+        "x_shift": heightmap_shift_x,
+        "y_scale": heightmap_scale_y,
+        "y_shift": heightmap_shift_y,
+    }
+
     Brushes = []
     Entities = []
 
     Brushes += block(0, 0, 0)
-    Brushes += displacements(0, 0, 0)
-    Brushes += displacements(1, 0, 0)
-    Brushes += displacements(0, 1, 0)
-    Brushes += displacements(-1, 0, 0)
-    Brushes += displacements(0, -1, 0)
-    # Brushes += block(0, 1, 3)
-    # Brushes += block(1, 1, 6)
-    # Brushes += block(2, 1, 9)
-    # end - start
-
-    """
-    Tests = [[0, 0], [0, 1], [1, 0], [1, 1]]
-
-    for Test in Tests:
-        print(noisetest.bilinear_interpolation(layers[2], Test[0], Test[1]))"""
+    Brushes += displacements(0, 0, 0, ContourMap)
 
     Entities += [
         {
@@ -708,22 +737,6 @@ def main():
         },
     ]
 
-    heightmap_scale_x = 4080
-    heightmap_scale_y = 4080
-    # probably start, need to test it
-    heightmap_shift_x = 0
-    heightmap_shift_y = 0
-
-    heightmap = layers[2]
-
-    ContourMap = {
-        "map": heightmap,
-        "x_scale": heightmap_scale_x,
-        "x_shift": heightmap_shift_x,
-        "y_scale": heightmap_scale_y,
-        "y_shift": heightmap_shift_y,
-    }
-
     EdgeBoundary = 150
     Entities += distribute(
         ((EdgeBoundary, 4080 - EdgeBoundary), (EdgeBoundary, 4080 - EdgeBoundary)),
@@ -738,7 +751,7 @@ def main():
         ContourMap,
     )
 
-    write_to_vmf(Brushes, Entities, ContourMap)
+    write_to_vmf(Brushes, Entities)
 
 
 if __name__ == "__main__":
