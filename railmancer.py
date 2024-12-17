@@ -1,4 +1,4 @@
-import random, os
+import random, os, math
 import noisetest, curvature, scatter
 import numpy as np
 
@@ -23,31 +23,80 @@ def get_ID():
     return str(ID)
 
 
-def query_height(ContourMap, real_x, real_y):
+def query_height(real_x, real_y):
 
     virtual_x = (real_x - ContourMap["x_shift"]) / (ContourMap["x_scale"])
     virtual_y = (real_y - ContourMap["y_shift"]) / (ContourMap["y_scale"])
 
     height = noisetest.bilinear_interpolation(ContourMap["map"], virtual_x, virtual_y)
-    # print(height, virtual_x, virtual_y)
 
     return height
 
 
-def distribute(bounds, models, min_distance, num_dots, ContourMap):
+def twodify(LineObject):
+
+    List = []
+    for Subvector in LineObject:
+
+        List += [np.array([Subvector[0], Subvector[1]])]
+
+    return List
+
+
+def distance_to_line(real_x, real_y):
+    # rough pseudocode:
+    # determine what segment we're on (query endpoints + 2/3rds and 1/3rd point for each + compare distances)
+    # for that segment, use newton-style narrowing until the distance change is less than 5 per jump or something
+
+    # BETTER PLAN:
+    # there's got to be some way where I can run a few layers on ALL lines (newtonian progression), then run a simple calculation to
+    # guess an asemptote on which one might eventually arrive. If one is far but racing in, it's much more likely than one that is
+    # close but barely making progress even while covering substantial portions of the line.
+    # What if we evaluated all lines, then too the top 20% of ones who made the most progress towards it, as a function of percentage away from it?
+
+    target_point = np.array([real_x, real_y])
+    Shortest = 999999
+
+    # dumb "check everything" solution
+    for Subsegment in Beziers:
+        ts = np.linspace(0, 1, 20)
+        # make this scale with the approximate size of the line segment?
+
+        for t in ts:
+            bezier_pt = np.array([curvature.bezier(t, twodify(Subsegment))])
+            distance = np.linalg.norm(bezier_pt - target_point)
+            Shortest = min(distance, Shortest)
+
+    """
+    # Find the t with the minimum distance
+    min_index = np.argmin(distances)
+    closest_t = ts[min_index]
+    print(closest_t, min_index, distances[0])"""
+    # print(closest_t)
+    # print(distances[closest_t])
+    return Shortest  # distances[closest_t]
+
+
+def distribute(bounds, models, min_distance, num_dots):
 
     def flat_field(x, y):
         return 0.5
 
     EntsOut = []
     Points = scatter.point_generator(flat_field, bounds, num_dots, min_distance)
-    # scatter.density_field
+    # scatter.density_field #need to convert this function into the modular field I thought of
     for Point in Points:
+
+        if distance_to_line(Point[0], Point[1]) <= 300:
+            # this needs a per-model lookup table
+            # current number is roughly 128 (track width from center) + tree exclusion radius
+            continue
+
         EntsOut += [
             {
                 "pos-x": Point[0],
                 "pos-y": Point[1],
-                "pos-z": query_height(ContourMap, Point[0], Point[1]) * 250,
+                "pos-z": query_height(Point[0], Point[1]),
                 "mdl": random.choice(models),
                 "ang-yaw": random.randrange(-180, 180),
             }
@@ -57,21 +106,33 @@ def distribute(bounds, models, min_distance, num_dots, ContourMap):
 
 def row_encode(heights: list):
 
+    rot = [list(row) for row in zip(*heights)][::-1]
+
     String = ""
     for x in range(9):
         Row = ""
-        for entry in heights[x]:
-            Row += str(round(entry * 250, 3)) + " "
+        for entry in rot[x]:
+            Row += str(round(entry, 3)) + " "
 
         Row.strip()
 
         String += '\n    				"row' + str(x) + '" "' + Row + '"'
 
-    print(String)
     return String
 
 
-def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End, ContourMap):
+def query_alpha(real_x, real_y):
+
+    dist = distance_to_line(real_x, real_y)
+
+    # use this for determining slope of bezier later
+    virtual_x = (real_x - ContourMap["x_shift"]) / (ContourMap["x_scale"])
+    virtual_y = (real_y - ContourMap["y_shift"]) / (ContourMap["y_scale"])
+
+    return min(max(0, (dist) / 3), 255)
+
+
+def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End):
 
     scale_x = (X_Start - X_End) / -8
     scale_y = (Y_Start - Y_End) / 8  # multiplier due to the range function below
@@ -84,15 +145,18 @@ def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End, ContourMa
     ]
 
     heights = [
-        [query_height(ContourMap, position[0], position[1]) for position in x_layer]
+        [query_height(position[0], position[1]) for position in x_layer]
         for x_layer in posgrid
     ]
 
-    for x_layer in posgrid:
-        for pos in x_layer:
-            add_entity([pos[0], pos[1], 250], "models/props_2fort/frog.mdl", [0, 0, 0])
+    alphas = [
+        [query_alpha(position[0], position[1]) for position in x_layer]
+        for x_layer in posgrid
+    ]
 
-    rotated = [list(row) for row in zip(*heights)][::-1]
+    """for x_layer in posgrid: #debugging frogs for displacement vertexes
+        for pos in x_layer:
+            add_entity([pos[0], pos[1], 250], "models/props_2fort/frog.mdl", [0, 0, 0])"""
     # for some reason this is needed... sometimes
 
     # print(X_Start, Y_Start, Z_Start)
@@ -117,7 +181,7 @@ def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End, ContourMa
 					"row8" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
 				}}
 				distances
-				{{{row_encode(rotated)}
+				{{{row_encode(heights)}
 				}}
 				offsets
 				{{
@@ -144,16 +208,7 @@ def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End, ContourMa
 					"row8" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
 				}}
 				alphas
-				{{
-					"row0" "0 0 0 0 0 0 0 0 0"
-					"row1" "0 0 0 0 0 0 0 0 0"
-					"row2" "0 0 0 0 0 0 0 0 0"
-					"row3" "0 0 0 0 0 0 0 0 0"
-					"row4" "0 0 0 0 0 0 0 0 0"
-					"row5" "0 0 0 0 0 0 0 0 0"
-					"row6" "0 0 0 0 0 0 0 0 0"
-					"row7" "0 0 0 0 0 0 0 0 0"
-					"row8" "0 0 0 0 0 0 0 0 0"
+				{{{row_encode(alphas)}
 				}}
 				triangle_tags
 				{{
@@ -217,7 +272,9 @@ def solid(Brush: list):
 
     elif Brush[6] == "displacement":
         Displacement = Brush[7]
-        Top_Texture = "dev/dev_measuregeneric01b"
+        # snowy: nature/blendgroundtosnow001
+        # grassy: cp_mountainlab/nature/groundtograss001
+        Top_Texture = "nature/blendgroundtosnow001"
         Bottom_Texture = "TOOLS/TOOLSNODRAW"
         Negative_X_Texture = "TOOLS/TOOLSNODRAW"
         Positive_X_Texture = "TOOLS/TOOLSNODRAW"
@@ -419,40 +476,85 @@ def ceiling(block_x: int, block_y: int, block_z: int):
     ]
 
 
-def displacements(block_x: int, block_y: int, block_z: int, ContourMap):
+def displacements(block_x: int, block_y: int, block_z: int):
 
     Disps = [
         [
             block_x * 16 * 255,
-            (block_x + 0.5) * 16 * 255,
+            (block_x + 1 / 3) * 16 * 255,
             block_y * 16 * 255,
-            (block_y + 0.5) * 16 * 255,
+            (block_y + 1 / 3) * 16 * 255,
             (block_z) * 16,
             (block_z + 1) * 16,
             "displacement",
         ],
         [
-            (block_x + 0.5) * 16 * 255,
+            (block_x + 1 / 3) * 16 * 255,
+            (block_x + 2 / 3) * 16 * 255,
+            (block_y + 0) * 16 * 255,
+            (block_y + 1 / 3) * 16 * 255,
+            (block_z) * 16,
+            (block_z + 1) * 16,
+            "displacement",
+        ],
+        [
+            (block_x + 2 / 3) * 16 * 255,
             (block_x + 1) * 16 * 255,
-            block_y * 16 * 255,
-            (block_y + 0.5) * 16 * 255,
+            (block_y + 0) * 16 * 255,
+            (block_y + 1 / 3) * 16 * 255,
             (block_z) * 16,
             (block_z + 1) * 16,
             "displacement",
         ],
         [
             block_x * 16 * 255,
-            (block_x + 0.5) * 16 * 255,
-            (block_y + 0.5) * 16 * 255,
+            (block_x + 1 / 3) * 16 * 255,
+            (block_y + 1 / 3) * 16 * 255,
+            (block_y + 2 / 3) * 16 * 255,
+            (block_z) * 16,
+            (block_z + 1) * 16,
+            "displacement",
+        ],
+        [
+            (block_x + 1 / 3) * 16 * 255,
+            (block_x + 2 / 3) * 16 * 255,
+            (block_y + 1 / 3) * 16 * 255,
+            (block_y + 2 / 3) * 16 * 255,
+            (block_z) * 16,
+            (block_z + 1) * 16,
+            "displacement",
+        ],
+        [
+            (block_x + 2 / 3) * 16 * 255,
+            (block_x + 1) * 16 * 255,
+            (block_y + 1 / 3) * 16 * 255,
+            (block_y + 2 / 3) * 16 * 255,
+            (block_z) * 16,
+            (block_z + 1) * 16,
+            "displacement",
+        ],
+        [
+            block_x * 16 * 255,
+            (block_x + 1 / 3) * 16 * 255,
+            (block_y + 2 / 3) * 16 * 255,
             (block_y + 1) * 16 * 255,
             (block_z) * 16,
             (block_z + 1) * 16,
             "displacement",
         ],
         [
-            (block_x + 0.5) * 16 * 255,
+            (block_x + 1 / 3) * 16 * 255,
+            (block_x + 2 / 3) * 16 * 255,
+            (block_y + 2 / 3) * 16 * 255,
+            (block_y + 1) * 16 * 255,
+            (block_z) * 16,
+            (block_z + 1) * 16,
+            "displacement",
+        ],
+        [
+            (block_x + 2 / 3) * 16 * 255,
             (block_x + 1) * 16 * 255,
-            (block_y + 0.5) * 16 * 255,
+            (block_y + 2 / 3) * 16 * 255,
             (block_y + 1) * 16 * 255,
             (block_z) * 16,
             (block_z + 1) * 16,
@@ -463,7 +565,7 @@ def displacements(block_x: int, block_y: int, block_z: int, ContourMap):
     for Entry in Disps:
         Entry += [
             displacement_build(
-                Entry[0], Entry[1], Entry[2], Entry[3], Entry[4], Entry[5], ContourMap
+                Entry[0], Entry[1], Entry[2], Entry[3], Entry[4], Entry[5]
             )
         ]
 
@@ -638,7 +740,7 @@ def write_to_vmf(Brushes: list, Entities: list):
 
     directory = "C:/Users/Metaladon/Desktop/Model Data/VMFS/railmancer"
     full_file_path = os.path.join(
-        directory, f"{"railmancer"}_{random.randint(1000,1999)}{".vmf"}"
+        directory, f"{"railmancer"}_{random.randint(2000,2999)}{".vmf"}"
     )
 
     try:
@@ -651,9 +753,76 @@ def write_to_vmf(Brushes: list, Entities: list):
         print(f"An error occurred: {e}")
 
 
+def carve_height(initial_height, intended_height, distance):
+
+    # how far out the curve starts - think flat area under the track before the cut/fill starts
+    offset = 300
+
+    # curve shape - goes from 1 (flat slope) to inf (really steep and agressive)
+    power = 1.3
+
+    # this controls the height of a 1-doubling for that power; think scale 10 on power 2 = the curve intersects at dist = 20, clamp = 40
+    scale = 30
+
+    # this value scales it down a bit so it's not so steep on a 45 degree angle
+    slump = 0.9
+
+    # this value is "how far away from intended are you allowed to go"
+    deviation = (math.pow(max(0, (distance - offset) / scale), power) * scale) * slump
+
+    return max(
+        min(initial_height, intended_height + deviation), intended_height - deviation
+    )
+
+
+def cut_and_fill_heightmap(heightmap, scale_x, shove_x, scale_y, shove_y):
+
+    Size = len(heightmap)
+
+    for virtual_x in range(Size):
+        for virtual_y in range(Size):
+
+            real_x = (virtual_x / Size) * scale_x + shove_x
+            real_y = (virtual_y / Size) * scale_y + shove_y
+
+            distance = distance_to_line(real_x, real_y)
+
+            result = carve_height(heightmap[virtual_x][virtual_y], 168, distance)
+
+            heightmap[virtual_x][virtual_y] = result
+
+    return heightmap
+
+
 def main():
 
-    global Entities
+    global Entities, ContourMap, Line, Beziers, Brushes
+
+    Brushes = []
+    Entities = []
+
+    # """# right curve
+    Line = [
+        [np.array([2040, -16, 0]), [0, 1]],
+        [np.array([2040, 16, 0]), [0, 1]],
+        [np.array([4080 - 16, 2040, 0]), [1, 0]],
+        [np.array([4080 + 16, 2040, 0]), [1, 0]],
+        [np.array([4080 + 16 + 2048, 2040 + 2048, 0]), [0, 1]],
+        [np.array([4080 + 16 + 2048 + 2048, 2040 + 2048 + 2048, 0]), [1, 0]],
+    ]  # """
+
+    """ #straight hill
+    Line = [
+        [np.array([2040, -32, 0]), [0, 1]],
+        [np.array([2040, 32, 0]), [0, 1]],
+        [np.array([2040, -32 + 4080, -48]), [0, 1]],
+        [np.array([2040, 32 + 4080, -48]), [0, 1]],
+    ]  # """
+
+    Beziers = curvature.generate_line(Line)
+
+    print(Beziers)
+
     """rough pseudocode for converting between blocklists and module outputs
 
     for every incoming block-grid coordinates:
@@ -668,13 +837,13 @@ def main():
     repeat for all blocks"""
 
     # Noise Parameters
-    width = 30
-    height = 30
+    width = 60
+    height = 60
     scale = 30.0
     octaves_list = [1, 2, 16]
     persistence = 0.2
     lacunarity = 4
-    seed = 73  # random.randint(1, 100)
+    seed = random.randint(1, 100)
 
     # Generate layers of Perlin noise
     layers = [
@@ -684,41 +853,42 @@ def main():
         for octaves in octaves_list
     ]
 
-    layers[2] = [[0, 0, 0], [2, 2, 2], [5, 0, 0]]
-
-    # Display the layers
-    # noisetest.display_perlin_layers(layers)
-
-    Line = [
-        [np.array([2040, -16, 0]), [0, 1]],
-        [np.array([2040, 16, 0]), [0, 1]],
-        [np.array([4080 - 16, 2040, 0]), [1, 0]],
-        [np.array([4080 + 16, 2040, 0]), [1, 0]],
-    ]
-
-    curvature.generate_line(Line)
-
-    heightmap_scale_x = 4080
-    heightmap_scale_y = 4080
-    # probably start, need to test it
+    heightmap_scale_x = 4080 * 2
+    heightmap_scale_y = 4080 * 2
     heightmap_shift_x = 0
     heightmap_shift_y = 0
 
-    heightmap = layers[2]
+    scaled_heightmap = noisetest.rescale_heightmap(layers[2], -500, 1500)
+
+    finalheightmap = cut_and_fill_heightmap(
+        scaled_heightmap,
+        heightmap_scale_x,
+        heightmap_shift_x,
+        heightmap_scale_y,
+        heightmap_shift_y,
+    )
+
+    layers[2] = finalheightmap
+
+    # noisetest.display_perlin_layers(layers)
 
     ContourMap = {
-        "map": heightmap,
+        "map": finalheightmap,
         "x_scale": heightmap_scale_x,
         "x_shift": heightmap_shift_x,
         "y_scale": heightmap_scale_y,
         "y_shift": heightmap_shift_y,
     }
 
-    Brushes = []
-    Entities = []
-
     Brushes += block(0, 0, 0)
-    Brushes += displacements(0, 0, 0, ContourMap)
+    Brushes += displacements(0, 0, 0)
+
+    Brushes += block(0, 1, 0)
+    Brushes += displacements(0, 1, 0)
+    Brushes += block(1, 0, 0)
+    Brushes += displacements(1, 0, 0)
+    Brushes += block(1, 1, 0)
+    Brushes += displacements(1, 1, 0)
 
     Entities += [
         {
@@ -735,20 +905,35 @@ def main():
             "mdl": "models/trakpak3_rsg/arcs/r2048/a0fw_8rt_right_0pg_+2048x+2048x0000.mdl",
             "ang-yaw": -90,
         },
+        {
+            "pos-x": 2040 + 2048,
+            "pos-y": 32 + 2048,
+            "pos-z": 192 + 16,
+            "mdl": "models/trakpak3_rsg/arcs/r2048/a0fw_8lt_left_0pg_+2048x-2048x0000.mdl",
+            "ang-yaw": -90 - 90,
+        },
+        {
+            "pos-x": 2040 + 2048 + 2048,
+            "pos-y": 32 + 2048 + 2048,
+            "pos-z": 192 + 16,
+            "mdl": "models/trakpak3_rsg/arcs/r2048/a0fw_8rt_right_0pg_+2048x+2048x0000.mdl",
+            "ang-yaw": -90 + 90 - 90,
+        },
     ]
 
-    EdgeBoundary = 150
+    EdgeBoundary = 150  # don't put trees in the walls
     Entities += distribute(
-        ((EdgeBoundary, 4080 - EdgeBoundary), (EdgeBoundary, 4080 - EdgeBoundary)),
+        (
+            (EdgeBoundary, heightmap_scale_x - EdgeBoundary),
+            (EdgeBoundary, heightmap_scale_y - EdgeBoundary),
+        ),
         [
-            "models/props_foliage/tree_pine_extrasmall.mdl",
-            "models/props_foliage/tree_pine_small.mdl",
-            # "models/props_foliage/tree_pine_large.mdl",
-            "models/props_foliage/tree_pine_huge.mdl",
+            "models/props_foliage/tree_pine_extrasmall_snow.mdl",
+            "models/props_foliage/tree_pine_small_snow.mdl",
+            "models/props_foliage/tree_pine_huge_snow.mdl",
         ],
-        90,
-        200,
-        ContourMap,
+        110,  # minimum distance
+        150 * 4,  # count
     )
 
     write_to_vmf(Brushes, Entities)

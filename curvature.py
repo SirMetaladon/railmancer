@@ -4,6 +4,23 @@ import numpy as np
 from scipy.optimize import minimize
 
 
+def bezier(t, Bez):
+    x = (
+        (1 - t) ** 3 * Bez[0][0]
+        + 3 * (1 - t) ** 2 * t * Bez[1][0]
+        + 3 * (1 - t) * t**2 * Bez[2][0]
+        + t**3 * Bez[3][0]
+    )
+    y = (
+        (1 - t) ** 3 * Bez[0][1]
+        + 3 * (1 - t) ** 2 * t * Bez[1][1]
+        + 3 * (1 - t) * t**2 * Bez[2][1]
+        + t**3 * Bez[3][1]
+    )
+
+    return x, y
+
+
 def get_perpendicular_vec2d(v):
     """Returns a perpendicular vector to the given vector."""
     return (-v[1], v[0])
@@ -125,18 +142,8 @@ def draw_bezier_curve(Bez: list):
     for i in range(steps + 1):
         t = i / steps
         # Cubic Bezier formula
-        x = (
-            (1 - t) ** 3 * Bez[0][0]
-            + 3 * (1 - t) ** 2 * t * Bez[1][0]
-            + 3 * (1 - t) * t**2 * Bez[2][0]
-            + t**3 * Bez[3][0]
-        )
-        y = (
-            (1 - t) ** 3 * Bez[0][1]
-            + 3 * (1 - t) ** 2 * t * Bez[1][1]
-            + 3 * (1 - t) * t**2 * Bez[2][1]
-            + t**3 * Bez[3][1]
-        )
+
+        x, y = bezier(t, Bez)
 
         turtle.goto(canvas((x, y)))
         # THING TO DO: MAKE THIS CHANGE COLOR WITH Z-VALUE
@@ -159,15 +166,15 @@ def bezier_curve(t, P0, P1, P2, P3):
     )
 
 
-def bezier_curve_points(p0, p3, d0, d3):
+def bezier_curve_points(start_position, end_position, start_direction, end_direction):
 
     # Convert to 2 dimensions, as the bezier pathing does not concern height (and it makes the math easier)
-    p0 = np.array([p0[0], p0[1]])
-    p3 = np.array([p3[0], p3[1]])
+    p0 = np.array([start_position[0], start_position[1]])
+    p3 = np.array([end_position[0], end_position[1]])
 
     # Normalize direction vectors
-    d0 = d0 / np.linalg.norm(d0)
-    d3 = d3 / np.linalg.norm(d3)
+    d0 = start_direction / np.linalg.norm(start_direction)
+    d3 = end_direction / np.linalg.norm(end_direction)
 
     # Check if the direction vectors are collinear
     cross_directions = np.cross(d0, d3)
@@ -183,7 +190,7 @@ def bezier_curve_points(p0, p3, d0, d3):
         # Control points the midpoint should work, right?
         p1 = p0 + d0 * np.linalg.norm(p3 - p0) / 2
         p2 = p1
-        return np.array([p0, p1, p2, p3])
+        return [start_position, p1, p2, end_position]
 
     # Function to calculate the radius of curvature
     def curvature_radius(p0, p1, p2, p3, t):
@@ -237,7 +244,7 @@ def bezier_curve_points(p0, p3, d0, d3):
     p1 = p0 + best_params[0] * d0
     p2 = p3 + best_params[1] * d3
 
-    return np.array([p0, p1, p2, p3])
+    return [start_position, p1, p2, end_position]
 
 
 def display_path(BezList: list, Line: list):

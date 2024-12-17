@@ -83,3 +83,21 @@ def display_perlin_layers(layers, cmap="viridis"):
         axs[i].axis("off")
     plt.tight_layout()
     plt.show()
+
+
+def rescale_heightmap(arr, new_min, new_max):
+
+    current_min = np.min(arr)
+    current_max = np.max(arr)
+
+    # Rescale to percentile range [0, 1]
+    arr_normalized = (arr - current_min) / (current_max - current_min)
+
+    current_min = np.min(arr_normalized)
+    current_max = np.max(arr_normalized)
+    print(current_min, current_max)
+
+    # Scale to the new range [new_min, new_max]
+    arr_rescaled = arr_normalized * (new_max - new_min) + new_min
+
+    return arr_rescaled
