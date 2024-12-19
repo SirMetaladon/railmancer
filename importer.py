@@ -1,4 +1,5 @@
-import os, math
+import os, math, random
+import numpy as np
 
 
 def determine_real_grade(raw_grade):
@@ -19,7 +20,9 @@ def determine_grade_level(real_grade):
 
     Sign = 1 if real_grade >= 0 else -1
 
-    if abs(real_grade) < 2:
+    if real_grade == 0:
+        return 0
+    elif abs(real_grade) < 2:
         return 1 * Sign
     elif abs(real_grade) < 2.6:
         return 2 * Sign
@@ -27,6 +30,7 @@ def determine_grade_level(real_grade):
         return 3 * Sign
 
 
+"""
 def get_direction(raw_direction):
 
     if raw_direction == "0fw":
@@ -44,23 +48,22 @@ def get_direction(raw_direction):
     elif raw_direction == "8rt":
         return (4, 0)
     elif raw_direction == "8lt":
-        return (-4, 0)
+        return (-4, 0)"""
 
 
 def convertToAngle(Direction):
 
-    Test = abs(Direction[0])
-    if Test is 0:
+    Test = Direction[0]
+    if Test == "0":
         return 0
-    elif Test is 1:
+    elif Test == "1":
         return 14
-    elif Test is 2:
+    elif Test == "2":
         return 26.6
-    elif Test is 4:
-        if Direction[1] is 0:
-            return 90
-        else:
-            return 45
+    elif Test == "4":
+        return 45
+    elif Test == "8":
+        return 90
 
 
 def determine_length(StartDirection, EndDirection, Radius):
@@ -73,61 +76,123 @@ def determine_length(StartDirection, EndDirection, Radius):
     return round(Radius * math.pi * Degrees / 180, 2)
 
 
-def process_file(folder, filepath):
-    # Replace with your specific processing code
-    print(f"Processing file: {filepath}")
+def process_file(folder, filepath, is_arcs):
 
-    Radius = int(folder[1:])
+    if is_arcs == True:
 
-    data = list(filepath.split("_"))
+        Radius = int(folder[1:])
 
-    StartDirection = get_direction(data[0][1:])
-    EndDirection = get_direction(data[1])
-    OverallDirection = data[2]
-    RealGrade = determine_real_grade(data[3])
-    GradeLevel = determine_grade_level(RealGrade)
+        data = list(filepath.split("_"))
 
-    Length = determine_length(StartDirection, EndDirection, Radius)
+        StartDirection = data[0][1:]
+        EndDirection = data[1]
+        RealGrade = determine_real_grade(data[3])
+        GradeLevel = determine_grade_level(RealGrade)
 
-    data2 = data[4].split("x")
-    ChangeX = int(data2[0])
-    ChangeY = int(data2[1])
-    ChangeZ = int(data2[2][:4])
+        Length = determine_length(StartDirection, EndDirection, Radius)
 
-    ApproxGrade = round((ChangeZ / Length) * 100, 2)
+        data2 = data[4].split("x")
+        ChangeX = int(data2[0])
+        ChangeY = int(data2[1])
+        ChangeZ = int(data2[2][:4])
 
-    print(
-        Length,
-        Radius,
-        StartDirection,
-        EndDirection,
-        OverallDirection,
-        GradeLevel,
-        ChangeX,
-        ChangeY,
-        ChangeZ,
-        ApproxGrade,
-        RealGrade,
-    )
+        ApproxGrade = round((ChangeZ / Length) * 100, 2)
+
+        return {
+            "Length": Length,
+            "Radius": Radius,
+            "StartDirection": StartDirection,
+            "EndDirection": EndDirection,
+            "GradeLevel": GradeLevel,
+            "Move": [ChangeX, ChangeY, ChangeZ],
+            "ApproxGrade": ApproxGrade,
+            "RealGrade": RealGrade,
+        }
+
+    elif folder == "straights":
+
+        data = list(filepath.split("_"))
+        StartDirection = data[1]
+        EndDirection = data[1]
+        RealGrade = determine_real_grade(data[2])
+        GradeLevel = determine_grade_level(RealGrade)
+
+        data2 = data[3].split("x")
+        ChangeX = int(data2[0])
+        ChangeY = int(data2[1])
+        ChangeZ = int(data2[2][:4])
+
+        Length = math.sqrt(
+            math.pow(ChangeX, 2) + math.pow(ChangeY, 2) + math.pow(ChangeZ, 2)
+        )
+
+        ApproxGrade = round((ChangeZ / Length) * 100, 2)
+
+        return {
+            "Length": Length,
+            "Radius": 0,
+            "StartDirection": StartDirection,
+            "EndDirection": EndDirection,
+            "GradeLevel": GradeLevel,
+            "Move": [ChangeX, ChangeY, ChangeZ],
+            "ApproxGrade": ApproxGrade,
+            "RealGrade": RealGrade,
+        }
 
 
-def find_files_with_extension(directory, extension):
-    # Iterate through all directories and subdirectories
+def build_track_library(directory, extension):
+
+    Track_Library = []
+
     for root, dirs, files in os.walk(directory):
         for file in files:
-            # Check if file ends with the desired extension
             if file.endswith(extension):
-                # Get the full file path
-                full_path = os.path.join(root, file)
-
-                # get the containing folder
                 containing_folder = os.path.basename(root)
-                process_file(containing_folder, file)
+                is_arcs = os.path.basename(os.path.dirname(root)) == "arcs"
+                Entry = process_file(containing_folder, file, is_arcs)
+                if Entry is not None:
+                    Track_Library += [Entry]
 
-                # process_file(containing_folder + os.path(file))
+    return Track_Library
 
 
-# Usage example
-directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg/arcs"  # Replace with your directory path
-extension = ".mdl"  # Replace with your desired extension
-find_files_with_extension(directory, extension)
+directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
+Track_Library = build_track_library(directory, ".mdl")
+
+Direction = "0fw"
+Position = np.array([0, 0, 0])
+
+for x in range(5):
+
+    while True:
+
+        Option = random.choice(Track_Library)
+
+        if (
+            Option["GradeLevel"] != 0
+            or Option["EndDirection"] == "8lt"
+            or Option["EndDirection"] == "8rt"
+            or Option["Length"] > 2000
+        ):
+            continue
+
+        if (
+            Option["StartDirection"] != Direction
+            and Option["EndDirection"] != Direction
+        ):
+            continue
+
+        Direction = (
+            Option["StartDirection"]
+            if Option["StartDirection"] != Direction
+            else Option["EndDirection"]
+        )
+
+        Position = np.add(Position, Option["Move"])
+
+        # finish line!
+        print(Option)
+        break
+
+
+print(Direction, Position)
