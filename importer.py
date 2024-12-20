@@ -1,5 +1,4 @@
-import os, math, random
-import numpy as np
+import os, math
 
 
 def determine_real_grade(raw_grade):
@@ -30,8 +29,7 @@ def determine_grade_level(real_grade):
         return 3 * Sign
 
 
-"""
-def get_direction(raw_direction):
+def get_heading(raw_direction):
 
     if raw_direction == "0fw":
         return (0, 4)
@@ -43,12 +41,14 @@ def get_direction(raw_direction):
         return (2, 4)
     elif raw_direction == "2lt":
         return (-2, 4)
-    elif raw_direction == "4rt" or raw_direction == "4lt":
+    elif raw_direction == "4rt":
         return (4, 4)
+    elif raw_direction == "4lt":
+        return (-4, 4)
     elif raw_direction == "8rt":
         return (4, 0)
     elif raw_direction == "8lt":
-        return (-4, 0)"""
+        return (-4, 0)
 
 
 def convertToAngle(Direction):
@@ -104,7 +104,7 @@ def process_file(folder, filepath, is_arcs):
             "StartDirection": StartDirection,
             "EndDirection": EndDirection,
             "GradeLevel": GradeLevel,
-            "Move": [ChangeX, ChangeY, ChangeZ],
+            "Move": [ChangeY, ChangeX, ChangeZ],
             "ApproxGrade": ApproxGrade,
             "RealGrade": RealGrade,
         }
@@ -134,7 +134,7 @@ def process_file(folder, filepath, is_arcs):
             "StartDirection": StartDirection,
             "EndDirection": EndDirection,
             "GradeLevel": GradeLevel,
-            "Move": [ChangeX, ChangeY, ChangeZ],
+            "Move": [ChangeY, ChangeX, ChangeZ],
             "ApproxGrade": ApproxGrade,
             "RealGrade": RealGrade,
         }
@@ -142,57 +142,21 @@ def process_file(folder, filepath, is_arcs):
 
 def build_track_library(directory, extension):
 
-    Track_Library = []
+    Track_Library = {}
 
     for root, dirs, files in os.walk(directory):
         for file in files:
             if file.endswith(extension):
+
                 containing_folder = os.path.basename(root)
                 is_arcs = os.path.basename(os.path.dirname(root)) == "arcs"
                 Entry = process_file(containing_folder, file, is_arcs)
+
+                filename = "models" + ((root + "/" + file).split("models")[1]).replace(
+                    "\\", "/"
+                )
+
                 if Entry is not None:
-                    Track_Library += [Entry]
+                    Track_Library[filename] = Entry
 
     return Track_Library
-
-
-directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
-Track_Library = build_track_library(directory, ".mdl")
-
-Direction = "0fw"
-Position = np.array([0, 0, 0])
-
-for x in range(5):
-
-    while True:
-
-        Option = random.choice(Track_Library)
-
-        if (
-            Option["GradeLevel"] != 0
-            or Option["EndDirection"] == "8lt"
-            or Option["EndDirection"] == "8rt"
-            or Option["Length"] > 2000
-        ):
-            continue
-
-        if (
-            Option["StartDirection"] != Direction
-            and Option["EndDirection"] != Direction
-        ):
-            continue
-
-        Direction = (
-            Option["StartDirection"]
-            if Option["StartDirection"] != Direction
-            else Option["EndDirection"]
-        )
-
-        Position = np.add(Position, Option["Move"])
-
-        # finish line!
-        print(Option)
-        break
-
-
-print(Direction, Position)

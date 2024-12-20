@@ -55,7 +55,7 @@ def max_manhattan(v1, v2):
 def determine_constants(Extents: list = [0, 0, 0, 0]):
 
     global canvas_scale, canvas_offset
-    canvas_scale = 0.22
+    canvas_scale = 0.11
     canvas_offset = (-2040, -2048)
 
 
@@ -222,7 +222,9 @@ def bezier_curve_points(start_position, end_position, start_direction, end_direc
         for t in np.linspace(0, 1, 20):
             radius = curvature_radius(p0, p1, p2, p3, t)
             if np.isnan(radius) or np.isinf(radius):
-                print(f"Invalid radius at t={t}: {radius}")
+                print(
+                    f"Invalid radius at t={t}: {radius}, {start_position}, {end_position}"
+                )
             min_radius = min(min_radius, radius)
 
         # Return negative to maximize radius
@@ -281,7 +283,5 @@ def generate_line(Line):
         Beziers += [
             bezier_curve_points(Node1[0], Node2[0], Node1[1], reverse(Node2[1]))
         ]
-
-    # display_path(Beziers, Line)
 
     return Beziers

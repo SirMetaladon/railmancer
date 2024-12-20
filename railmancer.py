@@ -1,6 +1,42 @@
 import random, os, math
-import noisetest, curvature, scatter
+import noisetest, curvature, scatter, importer
 import numpy as np
+
+
+def bounds(blocklist):
+
+    Extents = [0, 0, 0, 0]
+    # x min, x max, y min, y max
+
+    for block in blocklist:
+        Extents[0] = min(Extents[0], block[0])
+        Extents[1] = max(Extents[1], block[0])
+        Extents[2] = min(Extents[2], block[1])
+        Extents[3] = max(Extents[3], block[1])
+
+    return Extents
+
+
+def rot_z(Vector, Angle):
+    math = Angle * (np.pi / -180)  # radians + reverse direction
+
+    if len(Vector) == 3:
+        rotator = np.array(
+            [
+                [np.cos(math), -np.sin(math), 0],
+                [np.sin(math), np.cos(math), 0],
+                [0, 0, 1],
+            ]
+        )
+    elif len(Vector) == 2:
+        rotator = np.array(
+            [[np.cos(math), -np.sin(math)], [np.sin(math), np.cos(math)]]
+        )
+
+    else:
+        return Vector
+
+    return rotator @ Vector
 
 
 def add_entity(Pos, MDL, Ang):
@@ -14,6 +50,10 @@ def add_entity(Pos, MDL, Ang):
             "mdl": MDL,
         }
     ]
+
+
+def frog(x, y, z):
+    add_entity([x, y, z], "models/props_2fort/frog.mdl", [0, 0, 0])
 
 
 def get_ID():
@@ -31,6 +71,24 @@ def query_height(real_x, real_y):
     height = noisetest.bilinear_interpolation(ContourMap["map"], virtual_x, virtual_y)
 
     return height
+
+
+def height_sample(real_x, real_y, samples, radius):
+
+    SectorSize = 360 / samples
+    Heights = [query_height(real_x, real_y)]
+    Arm = [radius, 0]
+
+    for Slice in range(samples):
+
+        offset = rot_z(Arm, Slice * SectorSize)
+
+        Example = query_height(real_x + offset[0], real_y + offset[1])
+        Heights += [Example]
+
+        # frog(real_x + offset[0], real_y + offset[1], Example)
+
+    return Heights
 
 
 def twodify(LineObject):
@@ -70,10 +128,8 @@ def distance_to_line(real_x, real_y):
     """
     # Find the t with the minimum distance
     min_index = np.argmin(distances)
-    closest_t = ts[min_index]
-    print(closest_t, min_index, distances[0])"""
-    # print(closest_t)
-    # print(distances[closest_t])
+    closest_t = ts[min_index]"""
+
     return Shortest  # distances[closest_t]
 
 
@@ -87,17 +143,26 @@ def distribute(bounds, models, min_distance, num_dots):
     # scatter.density_field #need to convert this function into the modular field I thought of
     for Point in Points:
 
-        if distance_to_line(Point[0], Point[1]) <= 300:
+        Model = random.choice(models)
+
+        if distance_to_line(Point[0], Point[1]) <= ExclusionRadius[Model]:
             # this needs a per-model lookup table
             # current number is roughly 128 (track width from center) + tree exclusion radius
+            continue
+
+        StumpRadius = 55
+
+        HeightSamples = height_sample(Point[0], Point[1], 5, StumpRadius)
+
+        if ((max(HeightSamples) - min(HeightSamples)) / (StumpRadius * 2)) > TooSteep:
             continue
 
         EntsOut += [
             {
                 "pos-x": Point[0],
                 "pos-y": Point[1],
-                "pos-z": query_height(Point[0], Point[1]),
-                "mdl": random.choice(models),
+                "pos-z": min(HeightSamples),
+                "mdl": Model,
                 "ang-yaw": random.randrange(-180, 180),
             }
         ]
@@ -125,11 +190,13 @@ def query_alpha(real_x, real_y):
 
     dist = distance_to_line(real_x, real_y)
 
-    # use this for determining slope of bezier later
-    virtual_x = (real_x - ContourMap["x_shift"]) / (ContourMap["x_scale"])
-    virtual_y = (real_y - ContourMap["y_shift"]) / (ContourMap["y_scale"])
+    HeightSamples = height_sample(real_x, real_y, 10, 20)
 
-    return min(max(0, (dist) / 3), 255)
+    OverSteep = 1 - (((max(HeightSamples) - min(HeightSamples)) / (40)) - 1 / 2)
+
+    1 - (3 / 3 - 2 / 3)
+
+    return min(min(max(0, (dist) / 3), 255), 255 * OverSteep)
 
 
 def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End):
@@ -154,17 +221,17 @@ def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End):
         for x_layer in posgrid
     ]
 
-    """for x_layer in posgrid: #debugging frogs for displacement vertexes
+    """
+    for x_layer in posgrid:  # debugging frogs for displacement vertexes
         for pos in x_layer:
-            add_entity([pos[0], pos[1], 250], "models/props_2fort/frog.mdl", [0, 0, 0])"""
+            frog(pos[0], pos[1], 350)
+    #"""
     # for some reason this is needed... sometimes
-
-    # print(X_Start, Y_Start, Z_Start)
 
     return f"""			dispinfo
 			{{
 				"power" "3"
-				"startposition" "[{0} {0} {0}]"
+				"startposition" "[{min(X_Start,X_End)} {min(Y_Start,Y_End)} {0}]"
 				"flags" "0"
 				"elevation" "0"
 				"subdiv" "0"
@@ -756,16 +823,16 @@ def write_to_vmf(Brushes: list, Entities: list):
 def carve_height(initial_height, intended_height, distance):
 
     # how far out the curve starts - think flat area under the track before the cut/fill starts
-    offset = 300
+    offset = 240
 
     # curve shape - goes from 1 (flat slope) to inf (really steep and agressive)
-    power = 1.3
+    power = 1.5
 
     # this controls the height of a 1-doubling for that power; think scale 10 on power 2 = the curve intersects at dist = 20, clamp = 40
-    scale = 30
+    scale = 150
 
     # this value scales it down a bit so it's not so steep on a 45 degree angle
-    slump = 0.9
+    slump = 0.7
 
     # this value is "how far away from intended are you allowed to go"
     deviation = (math.pow(max(0, (distance - offset) / scale), power) * scale) * slump
@@ -777,13 +844,14 @@ def carve_height(initial_height, intended_height, distance):
 
 def cut_and_fill_heightmap(heightmap, scale_x, shove_x, scale_y, shove_y):
 
-    Size = len(heightmap)
+    for virtual_x in range(len(heightmap)):
+        for virtual_y in range(len(heightmap[0])):
 
-    for virtual_x in range(Size):
-        for virtual_y in range(Size):
+            real_x = ((virtual_x + 0.5) / len(heightmap)) * scale_x + shove_x
+            real_y = ((virtual_y + 0.5) / len(heightmap[0])) * scale_y + shove_y
 
-            real_x = (virtual_x / Size) * scale_x + shove_x
-            real_y = (virtual_y / Size) * scale_y + shove_y
+            # to test the gridscale of the heightmap
+            # frog(real_x, real_y, 250)
 
             distance = distance_to_line(real_x, real_y)
 
@@ -796,32 +864,127 @@ def cut_and_fill_heightmap(heightmap, scale_x, shove_x, scale_y, shove_y):
 
 def main():
 
-    global Entities, ContourMap, Line, Beziers, Brushes
+    global Entities, ContourMap, Line, Beziers, Brushes, TooSteep, ExclusionRadius
+
+    ExclusionRadius = {
+        "models/props_foliage/tree_pine_extrasmall_snow.mdl": 150,
+        "models/props_foliage/tree_pine_small_snow.mdl": 250,
+        "models/props_foliage/tree_pine_huge_snow.mdl": 350,
+    }
+
+    TooSteep = 2 / 3
+    # what counts as an area where the ground becomes bare and trees cannot be placed
+
+    Blocks = [
+        [0, 0, 0],
+        [1, 0, 0],
+        [-1, 0, 0],
+        [0, 1, 0],
+        [1, 1, 0],
+        [-1, 1, 0],
+        # [0, 2, 0],
+        # [1, 2, 0],
+        # [-1, 2, 0],
+        # [0, 3, 0],
+        # [1, 3, 0],
+        # [-1, 3, 0],
+    ]
+
+    Extents = bounds(Blocks)
+
+    print(Extents)
 
     Brushes = []
     Entities = []
 
-    # """# right curve
-    Line = [
-        [np.array([2040, -16, 0]), [0, 1]],
-        [np.array([2040, 16, 0]), [0, 1]],
-        [np.array([4080 - 16, 2040, 0]), [1, 0]],
-        [np.array([4080 + 16, 2040, 0]), [1, 0]],
-        [np.array([4080 + 16 + 2048, 2040 + 2048, 0]), [0, 1]],
-        [np.array([4080 + 16 + 2048 + 2048, 2040 + 2048 + 2048, 0]), [1, 0]],
-    ]  # """
+    # hardcoded start position which I will need to rework for really big modules
+    Line = [[np.array([2040, -16, 208]), [0, 1]]]
 
-    """ #straight hill
-    Line = [
-        [np.array([2040, -32, 0]), [0, 1]],
-        [np.array([2040, 32, 0]), [0, 1]],
-        [np.array([2040, -32 + 4080, -48]), [0, 1]],
-        [np.array([2040, 32 + 4080, -48]), [0, 1]],
-    ]  # """
+    directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
+    Track_Library = importer.build_track_library(directory, ".mdl")
+
+    Direction = "0fw"
+    Radius = 0  # starting radius
+    Position = np.array([2040, 32, 208])
+    GradeLevel = 0  # starting grade level
+    Heading = -90
+
+    def add_track(Position, NextPosition, Direction, MDL, Heading):
+
+        global Line, Entities
+
+        data = Track_Library[MDL]
+
+        Line += [[NextPosition, importer.get_heading(Direction)]]
+
+        if Direction != data["EndDirection"]:
+            ModelPos = NextPosition
+            RotFix = 180
+        else:
+            ModelPos = Position
+            RotFix = 0
+
+        Entities += [
+            {
+                "pos-x": ModelPos[0],
+                "pos-y": ModelPos[1],
+                "pos-z": ModelPos[2],
+                "mdl": MDL,
+                "ang-yaw": Heading + RotFix,
+            }
+        ]
+
+    add_track(
+        np.array([2040, -32, 208]),
+        np.array([2040, 32, 208]),
+        "0fw",
+        "models/trakpak3_rsg/straights/s0064_0fw_0pg_+0064x00000x0000.mdl",
+        -90,
+    )
+
+    for x in range(10):
+
+        while True:
+
+            Choice = random.choice(list(Track_Library.items()))
+            Option = Choice[1]
+
+            if (
+                Option["GradeLevel"] != 0
+                or Option["EndDirection"] == "8lt"
+                or Option["EndDirection"] == "8rt"
+                or Option["Length"] > 3000
+                or Option["Radius"] > 7000
+            ):
+                continue
+
+            if (
+                Option["StartDirection"] != Direction
+                and Option["EndDirection"] != Direction
+            ):
+                continue
+
+            # finish line!
+
+            Direction = (
+                Option["StartDirection"]
+                if Option["StartDirection"] != Direction
+                else Option["EndDirection"]
+            )
+
+            NextPosition = np.add(Position, rot_z(Option["Move"], 0))
+
+            add_track(Position, NextPosition, Direction, Choice[0], Heading)
+
+            Position = NextPosition
+
+            break
 
     Beziers = curvature.generate_line(Line)
 
-    print(Beziers)
+    print("Line generation complete.")
+
+    # curvature.display_path(Beziers, Line)
 
     """rough pseudocode for converting between blocklists and module outputs
 
@@ -836,10 +999,13 @@ def main():
     else, make a wall on that block facing that direction
     repeat for all blocks"""
 
+    Hill_Resolution = 1.5
+    Noise_Size = 50
+
     # Noise Parameters
-    width = 60
-    height = 60
-    scale = 30.0
+    width = Noise_Size
+    height = Noise_Size
+    scale = Noise_Size / Hill_Resolution
     octaves_list = [1, 2, 16]
     persistence = 0.2
     lacunarity = 4
@@ -853,10 +1019,12 @@ def main():
         for octaves in octaves_list
     ]
 
-    heightmap_scale_x = 4080 * 2
-    heightmap_scale_y = 4080 * 2
-    heightmap_shift_x = 0
-    heightmap_shift_y = 0
+    print("Perlin Noise complete.")
+
+    heightmap_scale_x = 4080 * (Extents[1] - Extents[0] + 1)
+    heightmap_scale_y = 4080 * (Extents[3] - Extents[2] + 1)
+    heightmap_shift_x = 4080 * Extents[0]
+    heightmap_shift_y = 4080 * Extents[2]
 
     scaled_heightmap = noisetest.rescale_heightmap(layers[2], -500, 1500)
 
@@ -880,52 +1048,21 @@ def main():
         "y_shift": heightmap_shift_y,
     }
 
-    Brushes += block(0, 0, 0)
-    Brushes += displacements(0, 0, 0)
+    print("Contours done.")
 
-    Brushes += block(0, 1, 0)
-    Brushes += displacements(0, 1, 0)
-    Brushes += block(1, 0, 0)
-    Brushes += displacements(1, 0, 0)
-    Brushes += block(1, 1, 0)
-    Brushes += displacements(1, 1, 0)
+    for fill in Blocks:
 
-    Entities += [
-        {
-            "pos-x": 2040,
-            "pos-y": -32,
-            "pos-z": 192 + 16,
-            "mdl": "models/trakpak3_rsg/straights/s0064_0fw_0pg_+0064x00000x0000.mdl",
-            "ang-yaw": -90,
-        },
-        {
-            "pos-x": 2040,
-            "pos-y": 32,
-            "pos-z": 192 + 16,
-            "mdl": "models/trakpak3_rsg/arcs/r2048/a0fw_8rt_right_0pg_+2048x+2048x0000.mdl",
-            "ang-yaw": -90,
-        },
-        {
-            "pos-x": 2040 + 2048,
-            "pos-y": 32 + 2048,
-            "pos-z": 192 + 16,
-            "mdl": "models/trakpak3_rsg/arcs/r2048/a0fw_8lt_left_0pg_+2048x-2048x0000.mdl",
-            "ang-yaw": -90 - 90,
-        },
-        {
-            "pos-x": 2040 + 2048 + 2048,
-            "pos-y": 32 + 2048 + 2048,
-            "pos-z": 192 + 16,
-            "mdl": "models/trakpak3_rsg/arcs/r2048/a0fw_8rt_right_0pg_+2048x+2048x0000.mdl",
-            "ang-yaw": -90 + 90 - 90,
-        },
-    ]
+        Brushes += block(fill[0], fill[1], fill[2])
+        Brushes += displacements(fill[0], fill[1], fill[2])
 
-    EdgeBoundary = 150  # don't put trees in the walls
+    print("Brushes and Displacements done.")
+
+    EdgeBoundary = 170  # don't put trees in the walls
+
     Entities += distribute(
         (
-            (EdgeBoundary, heightmap_scale_x - EdgeBoundary),
-            (EdgeBoundary, heightmap_scale_y - EdgeBoundary),
+            (Extents[0] * 4080, (Extents[1] + 1) * 4080),
+            (Extents[2] * 4080, (Extents[3] + 1) * 4080),
         ),
         [
             "models/props_foliage/tree_pine_extrasmall_snow.mdl",
@@ -933,8 +1070,10 @@ def main():
             "models/props_foliage/tree_pine_huge_snow.mdl",
         ],
         110,  # minimum distance
-        150 * 4,  # count
+        len(Blocks) * 125,  # count
     )
+
+    print("Scattering complete.")
 
     write_to_vmf(Brushes, Entities)
 

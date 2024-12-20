@@ -6,12 +6,11 @@ import random
 
 def bilinear_interpolation(Z, x, y):
 
-    Size = len(Z)
-    if Size <= 1:
+    if len(Z) <= 1:
         return 0
 
-    x = max(min(0.999, x), 0) * (Size - 1)
-    y = max(min(0.999, y), 0) * (Size - 1)
+    x = max(min(0.999, x), 0) * (len(Z) - 1)
+    y = max(min(0.999, y), 0) * (len(Z[0]) - 1)
 
     # 1, 1 on a 3x3 grid
     # 1 * 3-1 = 1
@@ -95,7 +94,6 @@ def rescale_heightmap(arr, new_min, new_max):
 
     current_min = np.min(arr_normalized)
     current_max = np.max(arr_normalized)
-    print(current_min, current_max)
 
     # Scale to the new range [new_min, new_max]
     arr_rescaled = arr_normalized * (new_max - new_min) + new_min
