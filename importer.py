@@ -32,23 +32,23 @@ def determine_grade_level(real_grade):
 def get_heading(raw_direction):
 
     if raw_direction == "0fw":
-        return (0, 4)
-    elif raw_direction == "1rt":
-        return (1, 4)
-    elif raw_direction == "1lt":
-        return (-1, 4)
-    elif raw_direction == "2rt":
-        return (2, 4)
-    elif raw_direction == "2lt":
-        return (-2, 4)
-    elif raw_direction == "4rt":
-        return (4, 4)
-    elif raw_direction == "4lt":
-        return (-4, 4)
-    elif raw_direction == "8rt":
-        return (4, 0)
-    elif raw_direction == "8lt":
         return (-4, 0)
+    elif raw_direction == "1rt":
+        return (-4, 1)
+    elif raw_direction == "1lt":
+        return (-4, -1)
+    elif raw_direction == "2rt":
+        return (-4, 2)
+    elif raw_direction == "2lt":
+        return (-4, -2)
+    elif raw_direction == "4rt":
+        return (-4, 4)
+    elif raw_direction == "4lt":
+        return (-4, -4)
+    elif raw_direction == "8rt":
+        return (0, 4)
+    elif raw_direction == "8lt":
+        return (0, -4)
 
 
 def convertToAngle(Direction):
@@ -104,7 +104,7 @@ def process_file(folder, filepath, is_arcs):
             "StartDirection": StartDirection,
             "EndDirection": EndDirection,
             "GradeLevel": GradeLevel,
-            "Move": [ChangeY, ChangeX, ChangeZ],
+            "Move": [-ChangeX, ChangeY, ChangeZ],
             "ApproxGrade": ApproxGrade,
             "RealGrade": RealGrade,
         }
@@ -134,7 +134,7 @@ def process_file(folder, filepath, is_arcs):
             "StartDirection": StartDirection,
             "EndDirection": EndDirection,
             "GradeLevel": GradeLevel,
-            "Move": [ChangeY, ChangeX, ChangeZ],
+            "Move": [-ChangeX, ChangeY, ChangeZ],
             "ApproxGrade": ApproxGrade,
             "RealGrade": RealGrade,
         }

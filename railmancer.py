@@ -1,5 +1,5 @@
-import random, os, math
-import noisetest, curvature, scatter, importer
+import random, math
+import noisetest, curvature, scatter, pathfinder, tools, vmfpy
 import numpy as np
 
 
@@ -17,52 +17,6 @@ def bounds(blocklist):
     return Extents
 
 
-def rot_z(Vector, Angle):
-    math = Angle * (np.pi / -180)  # radians + reverse direction
-
-    if len(Vector) == 3:
-        rotator = np.array(
-            [
-                [np.cos(math), -np.sin(math), 0],
-                [np.sin(math), np.cos(math), 0],
-                [0, 0, 1],
-            ]
-        )
-    elif len(Vector) == 2:
-        rotator = np.array(
-            [[np.cos(math), -np.sin(math)], [np.sin(math), np.cos(math)]]
-        )
-
-    else:
-        return Vector
-
-    return rotator @ Vector
-
-
-def add_entity(Pos, MDL, Ang):
-    global Entities
-
-    Entities += [
-        {
-            "pos-x": Pos[0],
-            "pos-y": Pos[1],
-            "pos-z": Pos[2],
-            "mdl": MDL,
-        }
-    ]
-
-
-def frog(x, y, z):
-    add_entity([x, y, z], "models/props_2fort/frog.mdl", [0, 0, 0])
-
-
-def get_ID():
-
-    global ID
-    ID += 1
-    return str(ID)
-
-
 def query_height(real_x, real_y):
 
     virtual_x = (real_x - ContourMap["x_shift"]) / (ContourMap["x_scale"])
@@ -75,18 +29,20 @@ def query_height(real_x, real_y):
 
 def height_sample(real_x, real_y, samples, radius):
 
+    global Entities
+
     SectorSize = 360 / samples
     Heights = [query_height(real_x, real_y)]
     Arm = [radius, 0]
 
     for Slice in range(samples):
 
-        offset = rot_z(Arm, Slice * SectorSize)
+        offset = tools.rot_z(Arm, Slice * SectorSize)
 
         Example = query_height(real_x + offset[0], real_y + offset[1])
         Heights += [Example]
 
-        # frog(real_x + offset[0], real_y + offset[1], Example)
+        # Entities += [vmfpy.frog(real_x + offset[0], real_y + offset[1], Example)]
 
     return Heights
 
@@ -154,7 +110,9 @@ def distribute(bounds, models, min_distance, num_dots):
 
         HeightSamples = height_sample(Point[0], Point[1], 5, StumpRadius)
 
-        if ((max(HeightSamples) - min(HeightSamples)) / (StumpRadius * 2)) > TooSteep:
+        if (
+            (max(HeightSamples) - min(HeightSamples)) / (StumpRadius * 2)
+        ) > Terrain_cfg["too_steep"]:
             continue
 
         EntsOut += [
@@ -190,13 +148,13 @@ def query_alpha(real_x, real_y):
 
     dist = distance_to_line(real_x, real_y)
 
-    HeightSamples = height_sample(real_x, real_y, 10, 20)
+    HeightSamples = height_sample(real_x, real_y, 6, 20)
 
     OverSteep = 1 - (((max(HeightSamples) - min(HeightSamples)) / (40)) - 1 / 2)
 
     1 - (3 / 3 - 2 / 3)
 
-    return min(min(max(0, (dist) / 3), 255), 255 * OverSteep)
+    return min(min(max(0, (dist) / 3), 255), min(255 * OverSteep, 255))
 
 
 def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End):
@@ -224,7 +182,7 @@ def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End):
     """
     for x_layer in posgrid:  # debugging frogs for displacement vertexes
         for pos in x_layer:
-            frog(pos[0], pos[1], 350)
+            Entities += [frog(pos[0], pos[1], 350)]
     #"""
     # for some reason this is needed... sometimes
 
@@ -295,547 +253,48 @@ def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End):
 			}}"""
 
 
-def solid(Brush: list):
+def linterp(a, b, x):
 
-    global ID
-
-    if Brush[0] > Brush[1]:
-        Brush.insert(0, Brush[1])
-        Brush.pop(2)
-
-    if Brush[2] < Brush[3]:
-        Brush.insert(2, Brush[3])
-        Brush.pop(4)
-
-    if Brush[4] < Brush[5]:
-        Brush.insert(4, Brush[5])
-        Brush.pop(6)
-
-    Displacement = ""
-
-    if Brush[6] == "wall":
-        Top_Texture = "TOOLS/TOOLSNODRAW"
-        Bottom_Texture = "TOOLS/TOOLSNODRAW"
-        Negative_X_Texture = "tools/toolsskybox"
-        Positive_X_Texture = "tools/toolsskybox"
-        Positive_Y_Texture = "tools/toolsskybox"
-        Negative_Y_Texture = "tools/toolsskybox"
-
-    elif Brush[6] == "ceiling":
-        Top_Texture = "TOOLS/TOOLSNODRAW"
-        Bottom_Texture = "tools/toolsskybox"
-        Negative_X_Texture = "tools/toolsskybox"
-        Positive_X_Texture = "tools/toolsskybox"
-        Positive_Y_Texture = "tools/toolsskybox"
-        Negative_Y_Texture = "tools/toolsskybox"
-
-    elif Brush[6] == "floor":
-        Top_Texture = "TOOLS/TOOLSNODRAW"
-        Bottom_Texture = "TOOLS/TOOLSNODRAW"
-        Negative_X_Texture = "TOOLS/TOOLSNODRAW"
-        Positive_X_Texture = "TOOLS/TOOLSNODRAW"
-        Positive_Y_Texture = "TOOLS/TOOLSNODRAW"
-        Negative_Y_Texture = "TOOLS/TOOLSNODRAW"
-
-    elif Brush[6] == "displacement":
-        Displacement = Brush[7]
-        # snowy: nature/blendgroundtosnow001
-        # grassy: cp_mountainlab/nature/groundtograss001
-        Top_Texture = "nature/blendgroundtosnow001"
-        Bottom_Texture = "TOOLS/TOOLSNODRAW"
-        Negative_X_Texture = "TOOLS/TOOLSNODRAW"
-        Positive_X_Texture = "TOOLS/TOOLSNODRAW"
-        Positive_Y_Texture = "TOOLS/TOOLSNODRAW"
-        Negative_Y_Texture = "TOOLS/TOOLSNODRAW"
-
-    X_Start = str(Brush[0])
-    X_End = str(Brush[1])
-    Y_Start = str(Brush[2])
-    Y_End = str(Brush[3])
-    Z_Start = str(Brush[4])
-    Z_End = str(Brush[5])
-
-    return f"""
-    solid
-    {{
-        "id" "{get_ID()}"
-        side
-         {{
-            "id" "1"
-            "plane" "({X_Start} {Y_Start} {Z_Start}) ({X_End} {Y_Start} {Z_Start}) ({X_End} {Y_End} {Z_Start})"
-            vertices_plus
-            {{
-                "v" "{X_Start} {Y_Start} {Z_Start}"
-                "v" "{X_End} {Y_Start} {Z_Start}"
-                "v" "{X_End} {Y_End} {Z_Start}"
-                "v" "{X_Start} {Y_End} {Z_Start}"
-            }}
-            "material" "{Top_Texture}"
-            "uaxis" "[1 0 0 -0] 0.25"
-            "vaxis" "[0 -1 0 128] 0.25"
-            "rotation" "0"
-            "lightmapscale" "16"
-            "smoothing_groups" "0"{Displacement}
-        }}
-        side
-        {{
-            "id" "{get_ID()}"
-            "plane" "({X_Start} {Y_End} {Z_End}) ({X_End} {Y_End} {Z_End}) ({X_End} {Y_Start} {Z_End})"
-            vertices_plus
-            {{
-                "v" "{X_Start} {Y_End} {Z_End}"
-                "v" "{X_End} {Y_End} {Z_End}"
-                "v" "{X_End} {Y_Start} {Z_End}"
-                "v" "{X_Start} {Y_Start} {Z_End}"
-            }}
-            "material" "{Bottom_Texture}"
-            "uaxis" "[-1 0 0 0] 0.25"
-            "vaxis" "[0 -1 0 -0] 0.25"
-            "rotation" "0"
-            "lightmapscale" "16"
-            "smoothing_groups" "0"
-        }}
-        side
-        {{
-            "id" "{get_ID()}"
-            "plane" "({X_Start} {Y_Start} {Z_Start}) ({X_Start} {Y_End} {Z_Start}) ({X_Start} {Y_End} {Z_End})"
-            vertices_plus
-            {{
-                "v" "{X_Start} {Y_Start} {Z_Start}"
-                "v" "{X_Start} {Y_End} {Z_Start}"
-                "v" "{X_Start} {Y_End} {Z_End}"
-                "v" "{X_Start} {Y_Start} {Z_End}"
-            }}
-            "material" "{Negative_X_Texture}"
-            "uaxis" "[0 -1 0 -0] 0.25"
-            "vaxis" "[0 0 -1 0] 0.25"
-            "rotation" "0"
-            "lightmapscale" "16"
-            "smoothing_groups" "0"
-        }}
-        side
-        {{
-            "id" "{get_ID()}"
-            "plane" "({X_End} {Y_Start} {Z_End}) ({X_End} {Y_End} {Z_End}) ({X_End} {Y_End} {Z_Start})"
-            vertices_plus
-            {{
-                "v" "{X_End} {Y_Start} {Z_End}"
-                "v" "{X_End} {Y_End} {Z_End}"
-                "v" "{X_End} {Y_End} {Z_Start}"
-                "v" "{X_End} {Y_Start} {Z_Start}"
-            }}
-            "material" "{Positive_X_Texture}"
-            "uaxis" "[0 1 0 0] 0.25"
-            "vaxis" "[0 0 -1 0] 0.25"
-            "rotation" "0"
-            "lightmapscale" "16"
-            "smoothing_groups" "0"
-        }}
-        side
-        {{
-            "id" "{get_ID()}"
-            "plane" "({X_End} {Y_Start} {Z_Start}) ({X_Start} {Y_Start} {Z_Start}) ({X_Start} {Y_Start} {Z_End})"
-            vertices_plus
-            {{
-                "v" "{X_End} {Y_Start} {Z_Start}"
-                "v" "{X_Start} {Y_Start} {Z_Start}"
-                "v" "{X_Start} {Y_Start} {Z_End}"
-                "v" "{X_End} {Y_Start} {Z_End}"
-            }}
-            "material" "{Positive_Y_Texture}"
-            "uaxis" "[-1 0 0 0] 0.25"
-            "vaxis" "[0 0 -1 0] 0.25"
-            "rotation" "0"
-            "lightmapscale" "16"
-            "smoothing_groups" "0"
-        }}
-        side
-        {{
-            "id" "{get_ID()}"
-            "plane" "({X_End} {Y_End} {Z_End}) ({X_Start} {Y_End} {Z_End}) ({X_Start} {Y_End} {Z_Start})"
-            vertices_plus
-            {{
-                "v" "{X_End} {Y_End} {Z_End}"
-                "v" "{X_Start} {Y_End} {Z_End}"
-                "v" "{X_Start} {Y_End} {Z_Start}"
-                "v" "{X_End} {Y_End} {Z_Start}"
-            }}
-            "material" "{Negative_Y_Texture}"
-            "uaxis" "[1 0 0 -0] 0.25"
-            "vaxis" "[0 0 -1 0] 0.25"
-            "rotation" "0"
-            "lightmapscale" "16"
-            "smoothing_groups" "0"
-        }}
-        editor
-        {{
-            "color" "150 150 160"
-            "visgroupshown" "1"
-            "visgroupautoshown" "1"
-        }}
-    }}"""
+    return a * (1 - x) + b * x
 
 
-def synthesize_entities(Entities):
+def rescale_terrain(initial_height, distance):
 
-    Output = ""
-    global ID
+    metric = (
+        min(
+            max(distance - Terrain_cfg["track_bias_base"], 0),
+            Terrain_cfg["track_bias_slope"],
+        )
+        / Terrain_cfg["track_bias_slope"]
+    )  # 2 modules away, plus a track width buffer
 
-    for Ent in Entities:
+    # initial_height is going to be somewhere in the range of 0 to 1400, roughly
+    # we need to make it go from 0 to 400 at 0 distance, and 400 to 1400 at 2 blocks away (8160 distance)
 
-        Output += f"""entity
-        {{
-            "id" "{get_ID()}"
-            "classname" "{Ent.get("type","prop_static")}"
-            "angles" "{Ent.get("ang-pitch",0)} {Ent.get("ang-yaw",0)} {Ent.get("ang-roll",0)}"
-            "fademindist" "-1"
-            "fadescale" "1"
-            "model" "{Ent.get("mdl","models/trakpak3_rsg/straights/s0512_0fw_0pg_+0512x00000x0000.mdl")}"
-            "skin" "0"
-            "solid" "6"
-            "origin" "{Ent["pos-x"]} {Ent["pos-y"]} {Ent["pos-z"]}"
-            editor
-            {{
-                "color" "255 255 0"
-                "visgroupshown" "1"
-                "visgroupautoshown" "1"
-                "logicalpos" "[0 0]"
-            }}
-        }}"""
+    top = linterp(Terrain_cfg["track_max"], Terrain_cfg["bias_max"], metric)
+    bottom = linterp(Terrain_cfg["track_min"], Terrain_cfg["bias_min"], metric)
 
-    return Output
+    depth = top - bottom
 
-
-def synthesize_brushes(Brushes):
-
-    global ID
-
-    Output = ""
-    for Brush in Brushes:
-        Output += solid(Brush)
-
-    Output += "}"
-
-    return Output
-
-
-def floor(block_x: int, block_y: int, block_z: int):
-    return [
-        block_x * 16 * 255,
-        (block_x + 1) * 16 * 255,
-        block_y * 16 * 255,
-        (block_y + 1) * 16 * 255,
-        block_z * 16,
-        (block_z - 1) * 16,
-        "floor",
-    ]
-
-
-def ceiling(block_x: int, block_y: int, block_z: int):
-    return [
-        block_x * 16 * 255,
-        (block_x + 1) * 16 * 255,
-        block_y * 16 * 255,
-        (block_y + 1) * 16 * 255,
-        (block_z + 114) * 16,
-        (block_z + 115) * 16,
-        "ceiling",
-    ]
-
-
-def displacements(block_x: int, block_y: int, block_z: int):
-
-    Disps = [
-        [
-            block_x * 16 * 255,
-            (block_x + 1 / 3) * 16 * 255,
-            block_y * 16 * 255,
-            (block_y + 1 / 3) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            (block_x + 1 / 3) * 16 * 255,
-            (block_x + 2 / 3) * 16 * 255,
-            (block_y + 0) * 16 * 255,
-            (block_y + 1 / 3) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            (block_x + 2 / 3) * 16 * 255,
-            (block_x + 1) * 16 * 255,
-            (block_y + 0) * 16 * 255,
-            (block_y + 1 / 3) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            block_x * 16 * 255,
-            (block_x + 1 / 3) * 16 * 255,
-            (block_y + 1 / 3) * 16 * 255,
-            (block_y + 2 / 3) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            (block_x + 1 / 3) * 16 * 255,
-            (block_x + 2 / 3) * 16 * 255,
-            (block_y + 1 / 3) * 16 * 255,
-            (block_y + 2 / 3) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            (block_x + 2 / 3) * 16 * 255,
-            (block_x + 1) * 16 * 255,
-            (block_y + 1 / 3) * 16 * 255,
-            (block_y + 2 / 3) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            block_x * 16 * 255,
-            (block_x + 1 / 3) * 16 * 255,
-            (block_y + 2 / 3) * 16 * 255,
-            (block_y + 1) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            (block_x + 1 / 3) * 16 * 255,
-            (block_x + 2 / 3) * 16 * 255,
-            (block_y + 2 / 3) * 16 * 255,
-            (block_y + 1) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            (block_x + 2 / 3) * 16 * 255,
-            (block_x + 1) * 16 * 255,
-            (block_y + 2 / 3) * 16 * 255,
-            (block_y + 1) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-    ]
-
-    for Entry in Disps:
-        Entry += [
-            displacement_build(
-                Entry[0], Entry[1], Entry[2], Entry[3], Entry[4], Entry[5]
-            )
-        ]
-
-    return Disps
-
-
-def wall(block_x: int, block_y: int, block_z: int, dir: int):
-
-    dir = dir % 4
-
-    if dir == 0:
-        x_min = 254
-        x_max = 255
-        y_min = 0
-        y_max = 255
-    elif dir == 1:
-        x_min = 0
-        x_max = 255
-        y_min = 254
-        y_max = 255
-    elif dir == 2:
-        x_min = 0
-        x_max = 1
-        y_min = 0
-        y_max = 255
-    elif dir == 3:
-        x_min = 0
-        x_max = 255
-        y_min = 0
-        y_max = 1
-
-    return [
-        255 * 16 * block_x + x_min * 16,
-        255 * 16 * block_x + x_max * 16,
-        255 * 16 * block_y + y_min * 16,
-        255 * 16 * block_y + y_max * 16,
-        16 * block_z,
-        16 * block_z + 114 * 16,
-        "wall",
-    ]
-
-
-def block(block_x, block_y, block_z):
-    return [
-        floor(block_x, block_y, block_z),
-        wall(block_x, block_y, block_z, 0),
-        wall(block_x, block_y, block_z, 1),
-        wall(block_x, block_y, block_z, 2),
-        wall(block_x, block_y, block_z, 3),
-        ceiling(block_x, block_y, block_z),
-    ]
-
-
-def write_to_vmf(Brushes: list, Entities: list):
-
-    global ID
-    ID = 1000
-
-    Start = """versioninfo
-    {
-        "editorversion" "400"
-        "editorbuild" "8868"
-        "mapversion" "4"
-        "formatversion" "100"
-        "prefab" "0"
-    }
-    visgroups
-    {
-    }
-    viewsettings
-    {
-        "bSnapToGrid" "1"
-        "bShowGrid" "1"
-        "bShowLogicalGrid" "0"
-        "nGridSpacing" "32"
-    }
-    palette_plus
-    {
-        "color0" "255 255 255"
-        "color1" "255 255 255"
-        "color2" "255 255 255"
-        "color3" "255 255 255"
-        "color4" "255 255 255"
-        "color5" "255 255 255"
-        "color6" "255 255 255"
-        "color7" "255 255 255"
-        "color8" "255 255 255"
-        "color9" "255 255 255"
-        "color10" "255 255 255"
-        "color11" "255 255 255"
-        "color12" "255 255 255"
-        "color13" "255 255 255"
-        "color14" "255 255 255"
-        "color15" "255 255 255"
-    }
-    colorcorrection_plus
-    {
-        "name0" ""
-        "weight0" "1"
-        "name1" ""
-        "weight1" "1"
-        "name2" ""
-        "weight2" "1"
-        "name3" ""
-        "weight3" "1"
-    }
-    light_plus
-    {
-        "samples_sun" "6"
-        "samples_ambient" "40"
-        "samples_vis" "256"
-        "texlight" ""
-        "incremental_delay" "0"
-        "bake_dist" "1024"
-        "radius_scale" "1"
-        "brightness_scale" "1"
-        "ao_scale" "0"
-        "bounced" "1"
-        "incremental" "1"
-        "supersample" "0"
-        "bleed_hack" "1"
-        "soften_cosine" "0"
-        "debug" "0"
-        "cubemap" "1"
-    }
-    postprocess_plus
-    {
-        "enable" "1"
-        "copied_from_controller" "1"
-        "bloom_scale" "1"
-        "bloom_exponent" "2.5"
-        "bloom_saturation" "1"
-        "auto_exposure_min" "0.5"
-        "auto_exposure_max" "2"
-        "tonemap_percent_target" "60"
-        "tonemap_percent_bright_pixels" "2"
-        "tonemap_min_avg_luminance" "3"
-        "tonemap_rate" "1"
-        "vignette_enable" "0"
-        "vignette_start" "1"
-        "vignette_end" "2"
-        "vignette_blur" "0"
-    }
-    bgimages_plus
-    {
-    }
-    world
-    {
-        "id" "1"
-        "mapversion" "4"
-        "classname" "worldspawn"
-        "detailmaterial" "detail/detailsprites"
-        "detailvbsp" "detail.vbsp"
-        "maxpropscreenwidth" "-1"
-        "skyname" "sky_badlands_01"
-        """
-
-    End = """
-    cameras
-    {
-        "activecamera" "-1"
-    }
-    cordons
-    {
-        "active" "0"
-    }"""
-
-    BrushString = synthesize_brushes(Brushes)
-    EntityString = synthesize_entities(Entities)
-
-    content = Start + BrushString + EntityString + End
-
-    directory = "C:/Users/Metaladon/Desktop/Model Data/VMFS/railmancer"
-    full_file_path = os.path.join(
-        directory, f"{"railmancer"}_{random.randint(2000,2999)}{".vmf"}"
+    normalized = initial_height / (
+        Terrain_cfg["overall_max"] - Terrain_cfg["overall_min"]
     )
 
-    try:
-        os.makedirs(directory, exist_ok=True)
-
-        with open(full_file_path, "w", encoding="utf-8") as file:
-            file.write(content)
-        print(f"File saved successfully: {full_file_path}")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+    return (normalized * depth) + bottom
 
 
 def carve_height(initial_height, intended_height, distance):
 
-    # how far out the curve starts - think flat area under the track before the cut/fill starts
-    offset = 240
-
-    # curve shape - goes from 1 (flat slope) to inf (really steep and agressive)
-    power = 1.5
-
-    # this controls the height of a 1-doubling for that power; think scale 10 on power 2 = the curve intersects at dist = 20, clamp = 40
-    scale = 150
-
-    # this value scales it down a bit so it's not so steep on a 45 degree angle
-    slump = 0.7
-
     # this value is "how far away from intended are you allowed to go"
-    deviation = (math.pow(max(0, (distance - offset) / scale), power) * scale) * slump
+    deviation = (
+        math.pow(
+            max(
+                0, (distance - Terrain_cfg["cut_basewidth"]) / Terrain_cfg["cut_scale"]
+            ),
+            Terrain_cfg["cut_power"],
+        )
+        * Terrain_cfg["cut_scale"]
+    ) * Terrain_cfg["cut_slump"]
 
     return max(
         min(initial_height, intended_height + deviation), intended_height - deviation
@@ -851,11 +310,13 @@ def cut_and_fill_heightmap(heightmap, scale_x, shove_x, scale_y, shove_y):
             real_y = ((virtual_y + 0.5) / len(heightmap[0])) * scale_y + shove_y
 
             # to test the gridscale of the heightmap
-            # frog(real_x, real_y, 250)
+            # Entities += [frog(real_x, real_y, 250)]
 
             distance = distance_to_line(real_x, real_y)
 
-            result = carve_height(heightmap[virtual_x][virtual_y], 168, distance)
+            scaled = rescale_terrain(heightmap[virtual_x][virtual_y], distance)
+
+            result = carve_height(scaled, 168, distance)
 
             heightmap[virtual_x][virtual_y] = result
 
@@ -864,16 +325,34 @@ def cut_and_fill_heightmap(heightmap, scale_x, shove_x, scale_y, shove_y):
 
 def main():
 
-    global Entities, ContourMap, Line, Beziers, Brushes, TooSteep, ExclusionRadius
+    tools.click("total")
+    tools.click("submodule")
 
-    ExclusionRadius = {
-        "models/props_foliage/tree_pine_extrasmall_snow.mdl": 150,
-        "models/props_foliage/tree_pine_small_snow.mdl": 250,
-        "models/props_foliage/tree_pine_huge_snow.mdl": 350,
+    global Entities, ContourMap, Line, Beziers, Brushes, ExclusionRadius, Terrain_cfg
+
+    Terrain_cfg = {
+        "overall_max": 1400,
+        "overall_min": -16,
+        "track_bias_slope": 1500,
+        "track_bias_base": 500,
+        "cut_power": 1.5,  # curve shape - goes from 1 (flat slope) to inf (really steep and agressive)
+        "cut_scale": 150,  # this controls the height of a 1-doubling for that power; think scale 10 on power 2 = the curve intersects at dist = 20, clamp = 40
+        "cut_basewidth": 240,  # how far out the curve starts - think flat area under the track before the cut/fill starts
+        "cut_slump": 0.7,  # this value scales it down a bit so it's not so steep on a 45 degree angle
+        "bias_max": 1400,
+        "bias_min": 0,
+        "track_max": 600,
+        "track_min": 0,
+        "too_steep": 4 / 5,
     }
 
-    TooSteep = 2 / 3
-    # what counts as an area where the ground becomes bare and trees cannot be placed
+    FancyDisplay = False
+
+    ExclusionRadius = {
+        "models/props_foliage/tree_pine_extrasmall_snow.mdl": 300,
+        "models/props_foliage/tree_pine_small_snow.mdl": 280,
+        "models/props_foliage/tree_pine_huge_snow.mdl": 350,
+    }
 
     Blocks = [
         [0, 0, 0],
@@ -892,99 +371,19 @@ def main():
 
     Extents = bounds(Blocks)
 
-    print(Extents)
-
     Brushes = []
-    Entities = []
 
-    # hardcoded start position which I will need to rework for really big modules
-    Line = [[np.array([2040, -16, 208]), [0, 1]]]
-
-    directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
-    Track_Library = importer.build_track_library(directory, ".mdl")
-
-    Direction = "0fw"
-    Radius = 0  # starting radius
-    Position = np.array([2040, 32, 208])
-    GradeLevel = 0  # starting grade level
-    Heading = -90
-
-    def add_track(Position, NextPosition, Direction, MDL, Heading):
-
-        global Line, Entities
-
-        data = Track_Library[MDL]
-
-        Line += [[NextPosition, importer.get_heading(Direction)]]
-
-        if Direction != data["EndDirection"]:
-            ModelPos = NextPosition
-            RotFix = 180
-        else:
-            ModelPos = Position
-            RotFix = 0
-
-        Entities += [
-            {
-                "pos-x": ModelPos[0],
-                "pos-y": ModelPos[1],
-                "pos-z": ModelPos[2],
-                "mdl": MDL,
-                "ang-yaw": Heading + RotFix,
-            }
-        ]
-
-    add_track(
-        np.array([2040, -32, 208]),
-        np.array([2040, 32, 208]),
-        "0fw",
-        "models/trakpak3_rsg/straights/s0064_0fw_0pg_+0064x00000x0000.mdl",
-        -90,
+    Line, Entities = pathfinder.solve(
+        [2040, -32, 208], -90, [2040 - 2048, 32 + (2048 * 2), 208], -90
     )
-
-    for x in range(10):
-
-        while True:
-
-            Choice = random.choice(list(Track_Library.items()))
-            Option = Choice[1]
-
-            if (
-                Option["GradeLevel"] != 0
-                or Option["EndDirection"] == "8lt"
-                or Option["EndDirection"] == "8rt"
-                or Option["Length"] > 3000
-                or Option["Radius"] > 7000
-            ):
-                continue
-
-            if (
-                Option["StartDirection"] != Direction
-                and Option["EndDirection"] != Direction
-            ):
-                continue
-
-            # finish line!
-
-            Direction = (
-                Option["StartDirection"]
-                if Option["StartDirection"] != Direction
-                else Option["EndDirection"]
-            )
-
-            NextPosition = np.add(Position, rot_z(Option["Move"], 0))
-
-            add_track(Position, NextPosition, Direction, Choice[0], Heading)
-
-            Position = NextPosition
-
-            break
 
     Beziers = curvature.generate_line(Line)
 
-    print("Line generation complete.")
+    elapsed = tools.display_time(tools.click("submodule"))
+    print("Line generation complete in " + elapsed)
 
-    # curvature.display_path(Beziers, Line)
+    if FancyDisplay:
+        curvature.display_path(Beziers, Line)
 
     """rough pseudocode for converting between blocklists and module outputs
 
@@ -999,12 +398,12 @@ def main():
     else, make a wall on that block facing that direction
     repeat for all blocks"""
 
-    Hill_Resolution = 1.5
-    Noise_Size = 50
+    Hill_Resolution = 0.7
+    Noise_Size = 25
 
     # Noise Parameters
-    width = Noise_Size
-    height = Noise_Size
+    width = Noise_Size * (Extents[1] - Extents[0] + 1)
+    height = Noise_Size * (Extents[3] - Extents[2] + 1)
     scale = Noise_Size / Hill_Resolution
     octaves_list = [1, 2, 16]
     persistence = 0.2
@@ -1019,14 +418,16 @@ def main():
         for octaves in octaves_list
     ]
 
-    print("Perlin Noise complete.")
+    elapsed = tools.display_time(tools.click("submodule"))
+    print("Perlin Noise complete in " + elapsed)
 
     heightmap_scale_x = 4080 * (Extents[1] - Extents[0] + 1)
     heightmap_scale_y = 4080 * (Extents[3] - Extents[2] + 1)
     heightmap_shift_x = 4080 * Extents[0]
     heightmap_shift_y = 4080 * Extents[2]
 
-    scaled_heightmap = noisetest.rescale_heightmap(layers[2], -500, 1500)
+    # height of the shortest tree is 400, 1808 internal height off displacement
+    scaled_heightmap = noisetest.rescale_heightmap(layers[2], 0, 1808 - 400)
 
     finalheightmap = cut_and_fill_heightmap(
         scaled_heightmap,
@@ -1038,6 +439,7 @@ def main():
 
     layers[2] = finalheightmap
 
+    # if FancyDisplay:
     # noisetest.display_perlin_layers(layers)
 
     ContourMap = {
@@ -1048,14 +450,23 @@ def main():
         "y_shift": heightmap_shift_y,
     }
 
-    print("Contours done.")
+    elapsed = tools.display_time(tools.click("submodule"))
+    print("Contours done in " + elapsed)
 
     for fill in Blocks:
 
-        Brushes += block(fill[0], fill[1], fill[2])
-        Brushes += displacements(fill[0], fill[1], fill[2])
+        Brushes += vmfpy.block(fill[0], fill[1], fill[2])
+        Disps = vmfpy.displacements(fill[0], fill[1], fill[2])
+        for Entry in Disps:
+            Entry += [
+                displacement_build(
+                    Entry[0], Entry[1], Entry[2], Entry[3], Entry[4], Entry[5]
+                )
+            ]
+        Brushes += Disps
 
-    print("Brushes and Displacements done.")
+    elapsed = tools.display_time(tools.click("submodule"))
+    print("Brushes and Displacements done in " + elapsed)
 
     EdgeBoundary = 170  # don't put trees in the walls
 
@@ -1069,13 +480,17 @@ def main():
             "models/props_foliage/tree_pine_small_snow.mdl",
             "models/props_foliage/tree_pine_huge_snow.mdl",
         ],
-        110,  # minimum distance
+        110,
         len(Blocks) * 125,  # count
     )
 
-    print("Scattering complete.")
+    elapsed = tools.display_time(tools.click("submodule"))
+    print("Scattering complete in " + elapsed)
 
-    write_to_vmf(Brushes, Entities)
+    vmfpy.write_to_vmf(Brushes, Entities)
+
+    elapsed = tools.display_time(tools.click("total"))
+    print("Railmancer Finished in " + elapsed)
 
 
 if __name__ == "__main__":

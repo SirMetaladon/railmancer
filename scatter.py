@@ -1,6 +1,5 @@
 import numpy as np
 from scipy.spatial import KDTree
-import math
 
 
 def point_generator(
