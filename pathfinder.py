@@ -2,6 +2,11 @@ import importer, tools, random, bisect, time
 import numpy as np
 
 
+def matrix_hash(Position, Direction, Heading):
+
+    return f"{round(Position[0])}|{round(Position[1])}|{round(Position[2])}|{Direction}|{round(Heading)}"
+
+
 def write_track(Position, NextPosition, Direction, MDL, Heading):
 
     global Line, Entities
@@ -52,7 +57,7 @@ def append_track(Model, Position, Direction, Heading):
             Reorient = 1
 
     # this will use the new heading rotation if it's a 45, and the old one if it's a 90, as it should be
-    NewPosition = np.add(Position, tools.rot_z(Data["Move"], NewHeading))
+    NewPosition = np.round(np.add(Position, tools.rot_z(Data["Move"], NewHeading)))
 
     # this mechanism does so for 90 degree angles
     if NewDirection == "8rt":
@@ -60,7 +65,7 @@ def append_track(Model, Position, Direction, Heading):
     elif NewDirection == "8lt":
         NewHeading = Heading + 90
 
-    return np.copy(NewPosition), NewDirection, NewHeading, Reorient
+    return NewPosition, NewDirection, NewHeading, Reorient
 
 
 def lineout(MDLList):
@@ -123,18 +128,19 @@ def valid_next_tracks(Direction):
 
 def recursive_track_explorer(PosIn, DirIn, HeadIn, SoFarIn):
 
+    global PreExploredMatrix
+
     ToEvaluate = [(PosIn, DirIn, HeadIn, SoFarIn, 0)]
     Ticker = 0
 
-    while len(ToEvaluate) and Ticker < 5000:
+    while len(ToEvaluate) and Ticker < 50000:
 
         Current = ToEvaluate.pop(0)
         Direction = Current[1]
 
-        Choices = valid_next_tracks(Direction)
+        Ticker += 1
 
-        print(Current)
-        time.sleep(1)
+        Choices = valid_next_tracks(Direction)
 
         for Track in Choices:
 
@@ -170,21 +176,92 @@ def recursive_track_explorer(PosIn, DirIn, HeadIn, SoFarIn):
                 return lineout(NewFar)
 
             else:
+
+                if (
+                    PreExploredMatrix.get(
+                        matrix_hash(Position, Direction, Heading), False
+                    )
+                    or Heading != EndPt[1]  # for now
+                ):
+                    continue  # already explored here
                 # if it meets the requirements
-
                 """
-                HeadingDeflection = EndPt[1]-Direction
+                #rotating in a NEGATIVE direction is CLOCKWISE
+                scenario: start heading is -90, end heading is 0 (pointing left, -x direction)
+                position of start is x = 2040, y = -32, z = 208
+                position of end is x = 0, y = 3072, z = 208
 
-                PositionDeflection = tools.rot_z(EndPt[0]-Position,HeadingDeflection)
+                position deflection is (0-2040,3072- (-32),208-208)
+                (-2040,3104,0)
+                from the perspective of the endpoint, the correct deflections are 2040 x, 3104 y
+                #ok we need to clarify that NEGATIVE NUMBERS MEAN YOU HAVE GONE TOO FAR, for X at least
+                #is the sign of Y relevant? Yes, because the angles are sensitive to it.
 
-                if HeadingDeflection == 0:
-                    #else, you can slip 2 2048 1rt turns in and correct it
-                    if "horizontal deflection" > 0 and "less than" < 192:
-                        continue"""
+                if the end heading was 180, the coordinates would be -2040 x, -3104 y"""
 
-                Score = np.linalg.norm(EndPt[0] - Position)
+                Head_Deflect = (EndPt[1] - Heading) % 90
+                Pos_Deflect = np.round(tools.rot_z(EndPt[0] - Position, EndPt[1]))
+
+                Invalid = 0
+
+                Realignments = {
+                    0: {
+                        "0fw": [[704 * 2, 192, "abs"]],
+                        "1rt": [[704, 96, "right"]],
+                        "1lt": [[704, -96, "left"]],
+                        "2rt": [[1056, 256, "right"]],
+                        "2lt": [[1056, -256, "left"]],
+                        "4rt": [[1568, 640, "right"]],
+                        "4lt": [[1568, -640, "left"]],
+                    }
+                }
+                # if you're straight on, no curves are required! Tally ho.
+                # otherwise:
+                if Head_Deflect != 0 or Direction != "0fw" or Pos_Deflect[1] != 0:
+
+                    # guilty until proven innocent
+                    Invalid = 1
+                    for Option in Realignments[Head_Deflect][Direction]:
+
+                        if Pos_Deflect[0] >= Option[0]:
+
+                            if Option[2] == "abs":
+
+                                if abs(Pos_Deflect[1]) >= Option[1]:
+                                    Invalid = 0
+                                    break
+
+                            elif Option[2] == "left":
+
+                                if Pos_Deflect[1] >= Option[1]:
+                                    Invalid = 0
+                                    break
+
+                            elif Option[2] == "right":
+
+                                if Pos_Deflect[1] <= Option[1]:
+                                    Invalid = 0
+                                    break
+
+                if (
+                    Pos_Deflect[0] < 0
+                    and Head_Deflect == 0
+                    or Direction == "0fw"
+                    or Pos_Deflect[1] == 0
+                ):
+                    # if you're straight on AND you've passed the actual end
+                    continue
+
+                if Invalid:
+                    # print(Pos_Deflect, Direction, Heading, len(ToEvaluate), Track[0])
+                    continue
+
+                # I want this to be a cumulative score later for routes where the goal is to maintain the fastest speed to target; curvature affected
+                Score = round(np.linalg.norm(EndPt[0] - Position))
 
                 # print(Position, Direction, Heading, NewFar, Score)
+
+                PreExploredMatrix[matrix_hash(Position, Direction, Heading)] = True
 
                 bisect.insort(
                     ToEvaluate,
@@ -193,12 +270,13 @@ def recursive_track_explorer(PosIn, DirIn, HeadIn, SoFarIn):
                 )
 
     print(f"Pathfinder gave up after {Ticker} iterations!")
-    return lineout(ToEvaluate[0][3])
+
+    return lineout(ToEvaluate[0][3] if len(ToEvaluate) > 0 else [])
 
 
 def solve(start_pos, start_heading, end_pos, end_heading):
 
-    global Line, Entities, Track_Library, StartPt, EndPt
+    global Line, Entities, Track_Library, StartPt, EndPt, PreExploredMatrix
     Line = [[np.array(start_pos), tools.rot_z([-1, 0], start_heading)]]
     Entities = []
 
@@ -210,6 +288,8 @@ def solve(start_pos, start_heading, end_pos, end_heading):
     Position = np.add(
         np.array(start_pos), np.array(tools.rot_z([-64, 0, 0], start_heading))
     )
+
+    PreExploredMatrix = dict()
 
     print(Position)
     GradeLevel = 0  # starting grade level

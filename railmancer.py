@@ -316,7 +316,7 @@ def cut_and_fill_heightmap(heightmap, scale_x, shove_x, scale_y, shove_y):
 
             scaled = rescale_terrain(heightmap[virtual_x][virtual_y], distance)
 
-            result = carve_height(scaled, 168, distance)
+            result = carve_height(scaled, 164, distance)
 
             heightmap[virtual_x][virtual_y] = result
 
@@ -374,7 +374,7 @@ def main():
     Brushes = []
 
     Line, Entities = pathfinder.solve(
-        [2040, -32, 208], -90, [2040 - 2048, 32 + (2048 * 2), 208], -90
+        [2040, -32, 208], -90, [2040 + 4080, (4080 * 2) - 32, 208], -90
     )
 
     Beziers = curvature.generate_line(Line)
