@@ -61,3 +61,12 @@ def is_same(v1, v2):
             return "index size?"
 
     return "yes"
+
+
+def extract(Dict, ToInvestigate, LookingFor, Default):
+
+    Output = []
+    for Entry in ToInvestigate:
+        Output += [Dict[Entry].get(LookingFor, Default)]
+
+    return Output

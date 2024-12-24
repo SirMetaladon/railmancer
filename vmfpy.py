@@ -510,7 +510,7 @@ def write_to_vmf(Brushes: list, Entities: list):
         "detailmaterial" "detail/detailsprites"
         "detailvbsp" "detail.vbsp"
         "maxpropscreenwidth" "-1"
-        "skyname" "sky_badlands_01"
+        "skyname" "sky_stormfront_01"
         """
 
     End = """

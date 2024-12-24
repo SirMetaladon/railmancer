@@ -89,7 +89,7 @@ def distance_to_line(real_x, real_y):
     return Shortest  # distances[closest_t]
 
 
-def distribute(bounds, models, min_distance, num_dots):
+def distribute(bounds, min_distance, num_dots):
 
     def flat_field(x, y):
         return 0.5
@@ -99,20 +99,36 @@ def distribute(bounds, models, min_distance, num_dots):
     # scatter.density_field #need to convert this function into the modular field I thought of
     for Point in Points:
 
-        Model = random.choice(models)
+        ModelData = Biomes["alpine_snow"]["models"]
+        Choices = list(ModelData.keys())
+        Weights = tools.extract(ModelData, Choices, "weight", 0)
 
-        if distance_to_line(Point[0], Point[1]) <= ExclusionRadius[Model]:
-            # this needs a per-model lookup table
-            # current number is roughly 128 (track width from center) + tree exclusion radius
-            continue
-
-        StumpRadius = 55
-
-        HeightSamples = height_sample(Point[0], Point[1], 5, StumpRadius)
+        Model = random.choices(Choices, Weights)[0]
 
         if (
-            (max(HeightSamples) - min(HeightSamples)) / (StumpRadius * 2)
-        ) > Terrain_cfg["too_steep"]:
+            distance_to_line(Point[0], Point[1])
+            <= Biomes["alpine_snow"]["models"][Model]["exclusion_radius"]
+        ):
+            continue
+
+        StumpSize = Biomes["alpine_snow"]["models"][Model]["base_radius"]
+
+        # if StumpSize == 0:
+
+        HeightSamples = height_sample(Point[0], Point[1], 5, StumpSize)
+
+        ModelSteepnessAllowed = Biomes["alpine_snow"]["models"][Model].get(
+            "steepness", 999
+        )
+        LowestSteepnessAllowed = Biomes["alpine_snow"]["models"][Model].get(
+            "min_steep", -999
+        )
+
+        CurrentSteepness = (max(HeightSamples) - min(HeightSamples)) / (StumpSize * 2)
+
+        if CurrentSteepness > ModelSteepnessAllowed:
+            continue
+        if CurrentSteepness < LowestSteepnessAllowed:
             continue
 
         EntsOut += [
@@ -122,6 +138,8 @@ def distribute(bounds, models, min_distance, num_dots):
                 "pos-z": min(HeightSamples),
                 "mdl": Model,
                 "ang-yaw": random.randrange(-180, 180),
+                "ang-pitch": random.randrange(-4, 4),
+                "ang-roll": random.randrange(-4, 4),
             }
         ]
     return EntsOut
@@ -150,9 +168,10 @@ def query_alpha(real_x, real_y):
 
     HeightSamples = height_sample(real_x, real_y, 6, 20)
 
-    OverSteep = 1 - (((max(HeightSamples) - min(HeightSamples)) / (40)) - 1 / 2)
-
-    1 - (3 / 3 - 2 / 3)
+    OverSteep = 1 - (
+        ((max(HeightSamples) - min(HeightSamples)) / (40))
+        - Biomes["alpine_snow"]["terrain"]["too_steep_alpha"]
+    )
 
     return min(min(max(0, (dist) / 3), 255), min(255 * OverSteep, 255))
 
@@ -262,22 +281,31 @@ def rescale_terrain(initial_height, distance):
 
     metric = (
         min(
-            max(distance - Terrain_cfg["track_bias_base"], 0),
-            Terrain_cfg["track_bias_slope"],
+            max(distance - Biomes["alpine_snow"]["terrain"]["track_bias_base"], 0),
+            Biomes["alpine_snow"]["terrain"]["track_bias_slope"],
         )
-        / Terrain_cfg["track_bias_slope"]
+        / Biomes["alpine_snow"]["terrain"]["track_bias_slope"]
     )  # 2 modules away, plus a track width buffer
 
     # initial_height is going to be somewhere in the range of 0 to 1400, roughly
     # we need to make it go from 0 to 400 at 0 distance, and 400 to 1400 at 2 blocks away (8160 distance)
 
-    top = linterp(Terrain_cfg["track_max"], Terrain_cfg["bias_max"], metric)
-    bottom = linterp(Terrain_cfg["track_min"], Terrain_cfg["bias_min"], metric)
+    top = linterp(
+        Biomes["alpine_snow"]["terrain"]["track_max"],
+        Biomes["alpine_snow"]["terrain"]["bias_max"],
+        metric,
+    )
+    bottom = linterp(
+        Biomes["alpine_snow"]["terrain"]["track_min"],
+        Biomes["alpine_snow"]["terrain"]["bias_min"],
+        metric,
+    )
 
     depth = top - bottom
 
     normalized = initial_height / (
-        Terrain_cfg["overall_max"] - Terrain_cfg["overall_min"]
+        Biomes["alpine_snow"]["terrain"]["overall_max"]
+        - Biomes["alpine_snow"]["terrain"]["overall_min"]
     )
 
     return (normalized * depth) + bottom
@@ -289,12 +317,14 @@ def carve_height(initial_height, intended_height, distance):
     deviation = (
         math.pow(
             max(
-                0, (distance - Terrain_cfg["cut_basewidth"]) / Terrain_cfg["cut_scale"]
+                0,
+                (distance - Biomes["alpine_snow"]["terrain"]["cut_basewidth"])
+                / Biomes["alpine_snow"]["terrain"]["cut_scale"],
             ),
-            Terrain_cfg["cut_power"],
+            Biomes["alpine_snow"]["terrain"]["cut_power"],
         )
-        * Terrain_cfg["cut_scale"]
-    ) * Terrain_cfg["cut_slump"]
+        * Biomes["alpine_snow"]["terrain"]["cut_scale"]
+    ) * Biomes["alpine_snow"]["terrain"]["cut_slump"]
 
     return max(
         min(initial_height, intended_height + deviation), intended_height - deviation
@@ -328,30 +358,93 @@ def main():
     tools.click("total")
     tools.click("submodule")
 
-    global Entities, ContourMap, Line, Beziers, Brushes, ExclusionRadius, Terrain_cfg
-
-    Terrain_cfg = {
-        "overall_max": 1400,
-        "overall_min": -16,
-        "track_bias_slope": 1500,
-        "track_bias_base": 500,
-        "cut_power": 1.5,  # curve shape - goes from 1 (flat slope) to inf (really steep and agressive)
-        "cut_scale": 150,  # this controls the height of a 1-doubling for that power; think scale 10 on power 2 = the curve intersects at dist = 20, clamp = 40
-        "cut_basewidth": 240,  # how far out the curve starts - think flat area under the track before the cut/fill starts
-        "cut_slump": 0.7,  # this value scales it down a bit so it's not so steep on a 45 degree angle
-        "bias_max": 1400,
-        "bias_min": 0,
-        "track_max": 600,
-        "track_min": 0,
-        "too_steep": 4 / 5,
-    }
+    global Entities, ContourMap, Line, Beziers, Brushes, Biomes
 
     FancyDisplay = False
 
-    ExclusionRadius = {
-        "models/props_foliage/tree_pine_extrasmall_snow.mdl": 300,
-        "models/props_foliage/tree_pine_small_snow.mdl": 280,
-        "models/props_foliage/tree_pine_huge_snow.mdl": 350,
+    [
+        "models/props_foliage/tree_pine_extrasmall_snow.mdl",
+        15,
+        "models/props_foliage/tree_pine_small_snow.mdl",
+        25,
+        "models/props_foliage/tree_pine_huge_snow.mdl",
+        35,
+        "models/props_forest/rock006c.mdl",
+        20,
+    ],
+
+    Biomes = {
+        "alpine_snow": {
+            "models": {
+                "models/props_foliage/tree_pine_extrasmall_snow.mdl": {
+                    "weight": 15,
+                    "exclusion_radius": 250,
+                    "base_radius": 55,
+                    "steepness": 4 / 5,
+                },
+                "models/props_foliage/tree_pine_small_snow.mdl": {
+                    "weight": 25,
+                    "exclusion_radius": 300,
+                    "base_radius": 55,
+                    "steepness": 4 / 5,
+                },
+                "models/props_foliage/tree_pine_huge_snow.mdl": {
+                    "weight": 35,
+                    "exclusion_radius": 350,
+                    "base_radius": 55,
+                    "steepness": 4 / 5,
+                },
+                # "models/props_forest/rock006c.mdl": {
+                #    "weight": 20,
+                #    "exclusion_radius": 150,
+                #    "base_radius": 25,
+                #    "steepness": 4 / 5,
+                # },
+                "models/props_forest/rock001.mdl": {
+                    "weight": 10,
+                    "exclusion_radius": 350,
+                    "base_radius": 150,
+                    "steepness": 3,
+                    "min_steep": 2 / 5,
+                },
+                "models/props_forest/rock002.mdl": {
+                    "weight": 10,
+                    "exclusion_radius": 350,
+                    "base_radius": 120,
+                    "steepness": 3,
+                    "min_steep": 2 / 5,
+                },
+                "models/props_forest/rock003.mdl": {
+                    "weight": 10,
+                    "exclusion_radius": 350,
+                    "base_radius": 140,
+                    "steepness": 3,
+                    "min_steep": 2 / 5,
+                },
+                "models/props_forest/rock004.mdl": {
+                    "weight": 10,
+                    "exclusion_radius": 350,
+                    "base_radius": 120,
+                    "steepness": 3,
+                    "min_steep": 2 / 5,
+                },
+            },
+            "terrain": {
+                "overall_max": 1400,
+                "overall_min": -16,
+                "track_bias_slope": 1500,
+                "track_bias_base": 500,
+                "cut_power": 1.5,  # curve shape - goes from 1 (flat slope) to inf (really steep and agressive)
+                "cut_scale": 150,  # this controls the height of a 1-doubling for that power; think scale 10 on power 2 = the curve intersects at dist = 20, clamp = 40
+                "cut_basewidth": 240,  # how far out the curve starts - think flat area under the track before the cut/fill starts
+                "cut_slump": 0.7,  # this value scales it down a bit so it's not so steep on a 45 degree angle
+                "bias_max": 1400,
+                "bias_min": 0,
+                "track_max": 600,
+                "track_min": 0,
+                "too_steep_alpha": 1 / 2,
+            },
+        }
     }
 
     Blocks = [
@@ -475,13 +568,8 @@ def main():
             (Extents[0] * 4080, (Extents[1] + 1) * 4080),
             (Extents[2] * 4080, (Extents[3] + 1) * 4080),
         ),
-        [
-            "models/props_foliage/tree_pine_extrasmall_snow.mdl",
-            "models/props_foliage/tree_pine_small_snow.mdl",
-            "models/props_foliage/tree_pine_huge_snow.mdl",
-        ],
         110,
-        len(Blocks) * 125,  # count
+        len(Blocks) * 175,  # count
     )
 
     elapsed = tools.display_time(tools.click("submodule"))

@@ -133,7 +133,7 @@ def recursive_track_explorer(PosIn, DirIn, HeadIn, SoFarIn):
     ToEvaluate = [(PosIn, DirIn, HeadIn, SoFarIn, 0)]
     Ticker = 0
 
-    while len(ToEvaluate) and Ticker < 50000:
+    while len(ToEvaluate) and Ticker < 500:
 
         Current = ToEvaluate.pop(0)
         Direction = Current[1]
@@ -305,4 +305,14 @@ def solve(start_pos, start_heading, end_pos, end_heading):
         start_heading,
     )
 
-    return recursive_track_explorer(Position, Direction, start_heading, [])
+    Out, Out2 = recursive_track_explorer(Position, Direction, start_heading, [])
+
+    write_track(
+        np.array(end_pos),
+        np.add(np.array(end_pos), np.array([0, 64, 0])),
+        Direction,
+        "models/trakpak3_rsg/straights/s0064_0fw_0pg_+0064x00000x0000.mdl",
+        end_heading,
+    )
+
+    return Out, Out2
