@@ -1,5 +1,11 @@
 import numpy as np
 from scipy.spatial import KDTree
+import math
+
+
+def sector_encode(X, Y):
+
+    return str(X) + "x" + str(Y)
 
 
 def point_generator(
@@ -7,8 +13,37 @@ def point_generator(
     bounds,
     num_dots,
     minimum_spacing,
+    Blocks,
     resolution=1000,
 ):
+
+    global Sectors
+    Sectors = {}
+
+    for Entry in Blocks:
+        # [1, 0, 0]
+        Sectors[sector_encode(Entry[0], Entry[1])] = [Entry[2]]
+
+    # puts in 4 booleans to tell you if nearby sectors are filled too
+    # think of it as "is there a wall in this direction"
+    for Sector in Sectors:
+
+        XCoord = int(Sector.split("x")[0])
+        YCoord = int(Sector.split("x")[1])
+
+        Sectors[Sector] += [
+            len(Sectors.get(sector_encode(XCoord + 1, YCoord), [])) == 0
+        ]
+        Sectors[Sector] += [
+            len(Sectors.get(sector_encode(XCoord, YCoord - 1), [])) == 0
+        ]
+        Sectors[Sector] += [
+            len(Sectors.get(sector_encode(XCoord - 1, YCoord), [])) == 0
+        ]
+        Sectors[Sector] += [
+            len(Sectors.get(sector_encode(XCoord, YCoord + 1), [])) == 0
+        ]
+
     """
     Generate dots distributed according to a density field, with improved apportioning.
 
@@ -70,11 +105,32 @@ def point_generator(
 
 # Example usage
 def density_field(x, y):
-    """A sample density field: higher density near the origin."""
-    return max(
-        (1 / x) + (1 / y) + (1 / abs(4080 - (x))) + (1 / abs(4080 - (y))),
-        0,
-    )  # max(1 - 1 * (math.sin(y) + math.sin(x)*0.5 + math.cos(x+y/3)), 0)
+
+    BaseX = math.floor(x / 4080)
+    BaseY = math.floor(y / 4080)
+    Sector = Sectors.get(str(BaseX) + "x" + str(BaseY), [])
+
+    if not len(Sector):
+        return 0
+
+    else:
+
+        Value = 1
+
+        # True = there is a wall in the +x direction, so if the co-ords are 0,0, the wall should start at 3060 and go up to 3x the normal height by the time we have reached 4080
+        if Sector[1]:
+            Value += max(3 * ((x - (BaseX * 4080) - 3060) / 1020), 0)
+        # -y direction
+        if Sector[2]:
+            Value += max(3 * ((-y + (BaseY * 4080) + 1020) / 1020), 0)
+        # -x direction
+        if Sector[3]:
+            Value += max(3 * ((-x + (BaseX * 4080) + 1020) / 1020), 0)
+        # +y direction
+        if Sector[4]:
+            Value += max(3 * ((y - (BaseY * 4080) - 3060) / 1020), 0)
+
+    return max(Value, 0)
 
 
 """

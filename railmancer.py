@@ -95,8 +95,11 @@ def distribute(bounds, min_distance, num_dots):
         return 0.5
 
     EntsOut = []
-    Points = scatter.point_generator(flat_field, bounds, num_dots, min_distance)
-    # scatter.density_field #need to convert this function into the modular field I thought of
+    Points = scatter.point_generator(
+        scatter.density_field, bounds, int(num_dots * 1.5), min_distance, Blocks
+    )
+
+    Fail = 0
     for Point in Points:
 
         ModelData = Biomes["alpine_snow"]["models"]
@@ -109,6 +112,7 @@ def distribute(bounds, min_distance, num_dots):
             distance_to_line(Point[0], Point[1])
             <= Biomes["alpine_snow"]["models"][Model]["exclusion_radius"]
         ):
+            Fail += 1
             continue
 
         StumpSize = Biomes["alpine_snow"]["models"][Model]["base_radius"]
@@ -127,8 +131,10 @@ def distribute(bounds, min_distance, num_dots):
         CurrentSteepness = (max(HeightSamples) - min(HeightSamples)) / (StumpSize * 2)
 
         if CurrentSteepness > ModelSteepnessAllowed:
+            Fail += 1
             continue
         if CurrentSteepness < LowestSteepnessAllowed:
+            Fail += 1
             continue
 
         EntsOut += [
@@ -142,6 +148,8 @@ def distribute(bounds, min_distance, num_dots):
                 "ang-roll": random.randrange(-4, 4),
             }
         ]
+
+    print(num_dots, Fail, num_dots / Fail)
     return EntsOut
 
 
@@ -303,12 +311,7 @@ def rescale_terrain(initial_height, distance):
 
     depth = top - bottom
 
-    normalized = initial_height / (
-        Biomes["alpine_snow"]["terrain"]["overall_max"]
-        - Biomes["alpine_snow"]["terrain"]["overall_min"]
-    )
-
-    return (normalized * depth) + bottom
+    return (initial_height * depth) + bottom
 
 
 def carve_height(initial_height, intended_height, distance):
@@ -358,20 +361,9 @@ def main():
     tools.click("total")
     tools.click("submodule")
 
-    global Entities, ContourMap, Line, Beziers, Brushes, Biomes
+    global Entities, ContourMap, Line, Beziers, Brushes, Biomes, Blocks
 
     FancyDisplay = False
-
-    [
-        "models/props_foliage/tree_pine_extrasmall_snow.mdl",
-        15,
-        "models/props_foliage/tree_pine_small_snow.mdl",
-        25,
-        "models/props_foliage/tree_pine_huge_snow.mdl",
-        35,
-        "models/props_forest/rock006c.mdl",
-        20,
-    ],
 
     Biomes = {
         "alpine_snow": {
@@ -391,7 +383,7 @@ def main():
                 "models/props_foliage/tree_pine_huge_snow.mdl": {
                     "weight": 35,
                     "exclusion_radius": 350,
-                    "base_radius": 55,
+                    "base_radius": 75,
                     "steepness": 4 / 5,
                 },
                 # "models/props_forest/rock006c.mdl": {
@@ -403,7 +395,7 @@ def main():
                 "models/props_forest/rock001.mdl": {
                     "weight": 10,
                     "exclusion_radius": 350,
-                    "base_radius": 150,
+                    "base_radius": 170,
                     "steepness": 3,
                     "min_steep": 2 / 5,
                 },
@@ -430,6 +422,22 @@ def main():
                 },
             },
             "terrain": {
+                "track_bias_slope": 3500,
+                "track_bias_base": 0,
+                "cut_power": 1.5,  # curve shape - goes from 1 (flat slope) to inf (really steep and agressive)
+                "cut_scale": 150,  # this controls the height of a 1-doubling for that power; think scale 10 on power 2 = the curve intersects at dist = 20, clamp = 40
+                "cut_basewidth": 250,  # how far out the curve starts - think flat area under the track before the cut/fill starts
+                "cut_slump": 0.7,  # this value scales it down a bit so it's not so steep on a 45 degree angle
+                "bias_max": 3400,
+                "bias_min": -1000,
+                "track_max": 600,
+                "track_min": -300,
+                "too_steep_alpha": 1 / 3,
+            },
+        }
+    }
+
+    """"terrain": {
                 "overall_max": 1400,
                 "overall_min": -16,
                 "track_bias_slope": 1500,
@@ -443,19 +451,17 @@ def main():
                 "track_max": 600,
                 "track_min": 0,
                 "too_steep_alpha": 1 / 2,
-            },
-        }
-    }
+            },"""
 
     Blocks = [
         [0, 0, 0],
         [1, 0, 0],
-        [-1, 0, 0],
+        # [-1, 0, 0],
         [0, 1, 0],
         [1, 1, 0],
-        [-1, 1, 0],
-        # [0, 2, 0],
-        # [1, 2, 0],
+        # [-1, 1, 0],
+        [0, 2, 0],
+        [1, 2, 0],
         # [-1, 2, 0],
         # [0, 3, 0],
         # [1, 3, 0],
@@ -467,7 +473,7 @@ def main():
     Brushes = []
 
     Line, Entities = pathfinder.solve(
-        [2040, -32, 208], -90, [2040 + 4080, (4080 * 2) - 32, 208], -90
+        [2040, -32, 208], -90, [2040 + 4080, (4080 * 3) - 32, 208], -90
     )
 
     Beziers = curvature.generate_line(Line)
@@ -519,8 +525,7 @@ def main():
     heightmap_shift_x = 4080 * Extents[0]
     heightmap_shift_y = 4080 * Extents[2]
 
-    # height of the shortest tree is 400, 1808 internal height off displacement
-    scaled_heightmap = noisetest.rescale_heightmap(layers[2], 0, 1808 - 400)
+    scaled_heightmap = noisetest.rescale_heightmap(layers[2], 0, 1)
 
     finalheightmap = cut_and_fill_heightmap(
         scaled_heightmap,
@@ -561,15 +566,13 @@ def main():
     elapsed = tools.display_time(tools.click("submodule"))
     print("Brushes and Displacements done in " + elapsed)
 
-    EdgeBoundary = 170  # don't put trees in the walls
-
     Entities += distribute(
         (
             (Extents[0] * 4080, (Extents[1] + 1) * 4080),
             (Extents[2] * 4080, (Extents[3] + 1) * 4080),
         ),
         110,
-        len(Blocks) * 175,  # count
+        len(Blocks) * 125,  # count
     )
 
     elapsed = tools.display_time(tools.click("submodule"))
