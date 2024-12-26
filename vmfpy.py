@@ -233,6 +233,30 @@ def synthesize_entities(Entities):
             }}
         }}"""
 
+    Output += f"""entity
+{{
+	"id" "{get_ID()}"
+	"classname" "light_environment"
+	"_ambient" "116 113 149 300"
+	"_ambientHDR" "-1 -1 -1 1"
+	"_AmbientScaleHDR" "1"
+	"_light" "255 226 196 500"
+	"_lightHDR" "-1 -1 -1 1"
+	"_lightscaleHDR" "1"
+	"angles" "0 60 0"
+	"pitch" "-40"
+	"SunSpreadAngle" "0"
+	"origin" "0 0 300"
+	editor
+	{{
+		"color" "220 30 220"
+		"visgroupid" "77"
+		"visgroupshown" "1"
+		"visgroupautoshown" "1"
+		"logicalpos" "[1500 1500]"
+	}}
+}}"""
+
     return Output
 
 

@@ -73,7 +73,9 @@ def distance_to_line(real_x, real_y):
 
     # dumb "check everything" solution
     for Subsegment in Beziers:
-        ts = np.linspace(0, 1, 20)
+        ts = np.linspace(
+            0, 1, int(np.linalg.norm(Subsegment[0] - Subsegment[3]) / 50) + 1
+        )
         # make this scale with the approximate size of the line segment?
 
         for t in ts:
@@ -91,65 +93,62 @@ def distance_to_line(real_x, real_y):
 
 def distribute(bounds, min_distance, num_dots):
 
-    def flat_field(x, y):
-        return 0.5
+    TotalPoints = num_dots * len(Blocks)
 
     EntsOut = []
     Points = scatter.point_generator(
-        scatter.density_field, bounds, int(num_dots * 1.5), min_distance, Blocks
+        scatter.density_field, bounds, int(TotalPoints * 2), min_distance, Blocks
     )
 
-    Fail = 0
     for Point in Points:
 
-        ModelData = Biomes["alpine_snow"]["models"]
-        Choices = list(ModelData.keys())
-        Weights = tools.extract(ModelData, Choices, "weight", 0)
+        if TotalPoints:
+            TotalPoints -= 1
 
-        Model = random.choices(Choices, Weights)[0]
+            ModelData = Biomes["alpine_snow"]["models"]
+            Choices = list(ModelData.keys())
+            Weights = tools.extract(ModelData, Choices, "weight", 0)
 
-        if (
-            distance_to_line(Point[0], Point[1])
-            <= Biomes["alpine_snow"]["models"][Model]["exclusion_radius"]
-        ):
-            Fail += 1
-            continue
+            Model = random.choices(Choices, Weights)[0]
 
-        StumpSize = Biomes["alpine_snow"]["models"][Model]["base_radius"]
+            if (
+                distance_to_line(Point[0], Point[1])
+                <= Biomes["alpine_snow"]["models"][Model]["exclusion_radius"]
+            ):
+                continue
 
-        # if StumpSize == 0:
+            StumpSize = Biomes["alpine_snow"]["models"][Model]["base_radius"]
 
-        HeightSamples = height_sample(Point[0], Point[1], 5, StumpSize)
+            HeightSamples = height_sample(Point[0], Point[1], 5, StumpSize)
 
-        ModelSteepnessAllowed = Biomes["alpine_snow"]["models"][Model].get(
-            "steepness", 999
-        )
-        LowestSteepnessAllowed = Biomes["alpine_snow"]["models"][Model].get(
-            "min_steep", -999
-        )
+            ModelSteepnessAllowed = Biomes["alpine_snow"]["models"][Model].get(
+                "steepness", 999
+            )
+            LowestSteepnessAllowed = Biomes["alpine_snow"]["models"][Model].get(
+                "min_steep", -999
+            )
 
-        CurrentSteepness = (max(HeightSamples) - min(HeightSamples)) / (StumpSize * 2)
+            CurrentSteepness = (max(HeightSamples) - min(HeightSamples)) / (
+                StumpSize * 2
+            )
 
-        if CurrentSteepness > ModelSteepnessAllowed:
-            Fail += 1
-            continue
-        if CurrentSteepness < LowestSteepnessAllowed:
-            Fail += 1
-            continue
+            if CurrentSteepness > ModelSteepnessAllowed:
+                continue
+            if CurrentSteepness < LowestSteepnessAllowed:
+                continue
 
-        EntsOut += [
-            {
-                "pos-x": Point[0],
-                "pos-y": Point[1],
-                "pos-z": min(HeightSamples),
-                "mdl": Model,
-                "ang-yaw": random.randrange(-180, 180),
-                "ang-pitch": random.randrange(-4, 4),
-                "ang-roll": random.randrange(-4, 4),
-            }
-        ]
+            EntsOut += [
+                {
+                    "pos-x": Point[0],
+                    "pos-y": Point[1],
+                    "pos-z": min(HeightSamples),
+                    "mdl": Model,
+                    "ang-yaw": random.randrange(-180, 180),
+                    "ang-pitch": random.randrange(-4, 4),
+                    "ang-roll": random.randrange(-4, 4),
+                }
+            ]
 
-    print(num_dots, Fail, num_dots / Fail)
     return EntsOut
 
 
@@ -393,28 +392,28 @@ def main():
                 #    "steepness": 4 / 5,
                 # },
                 "models/props_forest/rock001.mdl": {
-                    "weight": 10,
+                    "weight": 5,
                     "exclusion_radius": 350,
                     "base_radius": 170,
                     "steepness": 3,
                     "min_steep": 2 / 5,
                 },
                 "models/props_forest/rock002.mdl": {
-                    "weight": 10,
+                    "weight": 5,
                     "exclusion_radius": 350,
                     "base_radius": 120,
                     "steepness": 3,
                     "min_steep": 2 / 5,
                 },
                 "models/props_forest/rock003.mdl": {
-                    "weight": 10,
+                    "weight": 5,
                     "exclusion_radius": 350,
                     "base_radius": 140,
                     "steepness": 3,
                     "min_steep": 2 / 5,
                 },
                 "models/props_forest/rock004.mdl": {
-                    "weight": 10,
+                    "weight": 5,
                     "exclusion_radius": 350,
                     "base_radius": 120,
                     "steepness": 3,
@@ -422,49 +421,33 @@ def main():
                 },
             },
             "terrain": {
-                "track_bias_slope": 3500,
-                "track_bias_base": 0,
+                "track_bias_slope": 2000,
+                "track_bias_base": 400,
                 "cut_power": 1.5,  # curve shape - goes from 1 (flat slope) to inf (really steep and agressive)
                 "cut_scale": 150,  # this controls the height of a 1-doubling for that power; think scale 10 on power 2 = the curve intersects at dist = 20, clamp = 40
                 "cut_basewidth": 250,  # how far out the curve starts - think flat area under the track before the cut/fill starts
                 "cut_slump": 0.7,  # this value scales it down a bit so it's not so steep on a 45 degree angle
-                "bias_max": 3400,
-                "bias_min": -1000,
-                "track_max": 600,
-                "track_min": -300,
-                "too_steep_alpha": 1 / 3,
+                "bias_max": 1400,
+                "bias_min": 300,
+                "track_max": 500,
+                "track_min": 0,
+                "too_steep_alpha": 2 / 3,
             },
         }
     }
 
-    """"terrain": {
-                "overall_max": 1400,
-                "overall_min": -16,
-                "track_bias_slope": 1500,
-                "track_bias_base": 500,
-                "cut_power": 1.5,  # curve shape - goes from 1 (flat slope) to inf (really steep and agressive)
-                "cut_scale": 150,  # this controls the height of a 1-doubling for that power; think scale 10 on power 2 = the curve intersects at dist = 20, clamp = 40
-                "cut_basewidth": 240,  # how far out the curve starts - think flat area under the track before the cut/fill starts
-                "cut_slump": 0.7,  # this value scales it down a bit so it's not so steep on a 45 degree angle
-                "bias_max": 1400,
-                "bias_min": 0,
-                "track_max": 600,
-                "track_min": 0,
-                "too_steep_alpha": 1 / 2,
-            },"""
-
     Blocks = [
         [0, 0, 0],
-        [1, 0, 0],
+        # [1, 0, 0],
         # [-1, 0, 0],
         [0, 1, 0],
         [1, 1, 0],
         # [-1, 1, 0],
-        [0, 2, 0],
+        # [0, 2, 0],
         [1, 2, 0],
         # [-1, 2, 0],
         # [0, 3, 0],
-        # [1, 3, 0],
+        [1, 3, 0],
         # [-1, 3, 0],
     ]
 
@@ -473,7 +456,7 @@ def main():
     Brushes = []
 
     Line, Entities = pathfinder.solve(
-        [2040, -32, 208], -90, [2040 + 4080, (4080 * 3) - 32, 208], -90
+        [2040, -32, 208], -90, [2040 + 4080, (4080 * 4) - 32, 208], -90
     )
 
     Beziers = curvature.generate_line(Line)
@@ -572,7 +555,7 @@ def main():
             (Extents[2] * 4080, (Extents[3] + 1) * 4080),
         ),
         110,
-        len(Blocks) * 125,  # count
+        125,  # count
     )
 
     elapsed = tools.display_time(tools.click("submodule"))
@@ -585,4 +568,5 @@ def main():
 
 
 if __name__ == "__main__":
+    print("RAILMANCER ACTIVATED")
     main()

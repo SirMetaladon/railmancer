@@ -56,11 +56,11 @@ def is_same(v1, v2):
     for entry in range(len(v1)):
         try:
             if round(v1[entry]) != round(v2[entry]):
-                return f"unequal {entry} {v1[entry]} {v2[entry]}"
+                return False
         except:
-            return "index size?"
+            return False
 
-    return "yes"
+    return True
 
 
 def extract(Dict, ToInvestigate, LookingFor, Default):
