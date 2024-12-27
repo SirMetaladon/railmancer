@@ -76,7 +76,6 @@ def distance_to_line(real_x, real_y):
         ts = np.linspace(
             0, 1, int(np.linalg.norm(Subsegment[0] - Subsegment[3]) / 50) + 1
         )
-        # make this scale with the approximate size of the line segment?
 
         for t in ts:
             bezier_pt = np.array([curvature.bezier(t, twodify(Subsegment))])
@@ -452,12 +451,13 @@ def main():
     ]
 
     Extents = bounds(Blocks)
-
+    Path = []
     Brushes = []
 
-    Line, Entities = pathfinder.solve(
-        [2040, -32, 208], -90, [2040 + 4080, (4080 * 4) - 32, 208], -90
-    )
+    Path += [[[2040, -32, 208], -90]]
+    Path += [[[2040 - 4080, (4080 * 3) - 32, 208], -90]]
+
+    Line, Entities = pathfinder.solve(Path)
 
     Beziers = curvature.generate_line(Line)
 

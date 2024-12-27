@@ -68,13 +68,13 @@ def append_track(Model, Position, Direction, Heading):
     return NewPosition, NewDirection, NewHeading, Reorient
 
 
-def lineout(MDLList):
+def write_pathfinder_data(MDLList, StartPos, StartHeading):
 
     global Line, Entities
 
-    Position = StartPt[0]
+    Position = StartPos
     Direction = "0fw"
-    Heading = StartPt[1]
+    Heading = StartHeading
 
     for Model in MDLList:
 
@@ -92,8 +92,6 @@ def lineout(MDLList):
         Position = NewPosition
         Heading = NewHeading
         Direction = NewDirection
-
-    return Line, Entities
 
 
 def valid_next_tracks(Direction, MinimumRadiusLevel):
@@ -145,14 +143,14 @@ def valid_next_tracks(Direction, MinimumRadiusLevel):
 
 def new_position_valid(Position, Direction, Heading):
 
-    Print = 0
+    Print = False
 
     if (
         PreExploredMatrix.get(matrix_hash(Position, Direction, Heading), False)
         or Heading != -90
     ):
         if Print:
-            (f"I've been here, or {Heading}")
+            print(f"I've been here, or {Heading}")
         return False  # already explored here
 
     # if it meets the requirements
@@ -175,14 +173,18 @@ def new_position_valid(Position, Direction, Heading):
     X_Deflect = Pos_Deflect[0]
     Y_Deflect = Pos_Deflect[1]
 
-    if Print:
-        (f"Position {Position} and Deflection {Pos_Deflect}")
+    # if Print:
+    # print(f"Position {Position} and Deflection {Pos_Deflect}")
 
     # need some code here to determine what curvature level we're at right now and how to factor that in - don't think we're safe if the radius is higher
 
     Realignments = {
         0: {
-            "0fw": [[704 * 2, 96 * 2, "abs", 1 / 4]],
+            "0fw": [
+                [704 * 2, 96 * 2, "abs", 1 / 4],
+                [1056 * 2, 256 * 2, "abs", 1 / 2],
+                [1568 * 2, 640 * 2, "abs", 1],
+            ],
             "1rt": [[704, 96, "right", 1 / 4]],
             "1lt": [[704, 96, "left", 1 / 4]],
             "2rt": [[1056, 256, "right", 1 / 2]],
@@ -196,14 +198,14 @@ def new_position_valid(Position, Direction, Heading):
         # if you're straight on AND you've passed the actual end
 
         if Print:
-            (f"Straight on?")
+            print(f"Straight on?")
         if X_Deflect < 0:
             if Print:
-                (f"Straight passby, apparently.")
+                print(f"Straight passby, apparently.")
             return False
         else:
             if Print:
-                (f"Good to go straight.")
+                print(f"Good to go straight.")
             return True
 
     else:  # if not straight on
@@ -211,46 +213,47 @@ def new_position_valid(Position, Direction, Heading):
         # guilty until proven innocent
         for Option in Realignments[Head_Deflect][Direction]:
 
-            if Print:
-                (f"Option chosen: {Option}")
+            # if Print:
+            # print(f"Option chosen: {Option}")
 
             X_Remains = X_Deflect - Option[0]
 
             if X_Remains < 0:
                 if Print:
-                    (f"too far ig")
+                    print(f"too far ig")
                 continue
 
             if Option[2] == "abs":
 
                 Y_Remains = abs(Y_Deflect) - Option[1]
                 if Print:
-                    (f"ABS: {Y_Remains}")
+                    print(f"ABS: {Y_Remains}")
 
             elif Option[2] == "left":
 
                 Y_Remains = Y_Deflect - Option[1]
                 if Print:
-                    (f"Left: {Y_Remains}")
+                    print(f"Left: {Y_Remains}")
 
             elif Option[2] == "right":
                 Y_Remains = -Y_Deflect - Option[1]
                 if Print:
-                    (f"Right: {Y_Remains}")
+                    print(f"Right: {Y_Remains}")
 
             if X_Remains == 0 and Y_Remains == 0:
                 if Print:
-                    (f"Exacto!")
+                    print(f"Exacto!")
                 return True
             elif X_Remains == 0:
                 if Print:
-                    (f"infinite slope")
+                    print(f"infinite slope")
                 continue
 
-            if (Y_Remains / X_Remains) <= Option[3] and Y_Remains > 0:
+            if (Y_Remains / X_Remains) < Option[3] and Y_Remains > 0:
 
                 if Print:
-                    (
+                    print(
+                        "correct",
                         Y_Deflect,
                         X_Deflect,
                         Option,
@@ -263,7 +266,7 @@ def new_position_valid(Position, Direction, Heading):
             else:
 
                 if Print:
-                    (
+                    print(
                         "fail",
                         Y_Deflect,
                         X_Deflect,
@@ -275,7 +278,7 @@ def new_position_valid(Position, Direction, Heading):
 
     # if you didn't fnd a valid option
     if Print:
-        (f"No valid options.")
+        print(f"No valid options.")
     return False
 
 
@@ -286,15 +289,27 @@ def recursive_track_explorer(PosIn, DirIn, HeadIn, SoFarIn):
     PreExploredMatrix = dict()
     SavedDirections = dict()
 
-    ToEvaluate = [(PosIn, DirIn, HeadIn, SoFarIn, -8192)]
+    ToEvaluate = [(PosIn, DirIn, HeadIn, SoFarIn, 100000)]
     Ticker = 0
 
-    while len(ToEvaluate) & Ticker < 100000:
+    while len(ToEvaluate) & Ticker < 1000000:
 
         Current = ToEvaluate.pop(0)
+        # print(Current)
         Direction = Current[1]
 
         Ticker += 1
+
+        if (
+            # heading check
+            Current[2] == EndPt[1]
+            # position check
+            and tools.is_same(Current[0], EndPt[0])
+            # guarenteed end direction for now
+            and Direction == "0fw"
+        ):
+            print("WINNAR", Current[3])
+            return Current[3]
 
         Choices = valid_next_tracks(Direction, 1)
 
@@ -310,90 +325,82 @@ def recursive_track_explorer(PosIn, DirIn, HeadIn, SoFarIn):
                 Model, Position, Direction, Heading
             )
 
-            # here you get to decide if you want to keep it, but for now we keep all - no heuristics yet
-
             if NewDirection[:1] == "8":
                 NewDirection = "0fw"
 
-            Position = NewPosition
-            Heading = NewHeading
-            Direction = NewDirection
-
-            NewFar = SoFar + [Track[0]]
-
-            if (
-                Heading == EndPt[1]
-                and tools.is_same(Position, EndPt[0])
-                and Direction == "0fw"  # guarenteed end direction for now
-            ):
-                print("WINNAR", NewFar)
-                return lineout(NewFar)
-
-            elif new_position_valid(Position, Direction, Heading):
-
-                # I want this to be a cumulative score later for routes where the goal is to maintain the fastest speed to target; curvature affected
-                # Score = round(
-                # np.linalg.norm(EndPt[0] - Position) * random.uniform(0.8, 1.2)
-                # )
+            if new_position_valid(NewPosition, NewDirection, NewHeading):
 
                 LastRadius = Track_Library[Track[0]]["Radius"]
+                if LastRadius == 0:
+                    LastRadius = 10000
 
-                Score = max(Current[4], -LastRadius) if LastRadius != 0 else Current[4]
+                LengthBias = np.linalg.norm(Position - NewPosition) * 0.01
 
-                # print(Position, Direction, Heading, NewFar, Score)
+                Score = min(Current[4], LastRadius) + (
+                    LengthBias
+                    if LastRadius == 10000
+                    # a minor bias against curved pieces
+                    else LengthBias * 0.8
+                )
 
-                PreExploredMatrix[matrix_hash(Position, Direction, Heading)] = True
+                PreExploredMatrix[
+                    matrix_hash(NewPosition, NewDirection, NewHeading)
+                ] = True
 
                 bisect.insort(
                     ToEvaluate,
-                    (Position, Direction, Heading, NewFar, Score),
-                    key=lambda x: x[4],
+                    (NewPosition, NewDirection, NewHeading, SoFar + [Track[0]], Score),
+                    key=lambda x: -x[4],
                 )
 
-        if len(ToEvaluate) == 1:
-            return lineout(ToEvaluate[0][3])
+        if len(ToEvaluate) == 0:
+            print("orly")
+            return Current[3]
 
     print(f"Pathfinder gave up after {Ticker} iterations!")
 
-    return lineout(ToEvaluate[0][3] if len(ToEvaluate) > 0 else [])
+    return ToEvaluate[0][3] if len(ToEvaluate) > 0 else []
 
 
-def solve(start_pos, start_heading, end_pos, end_heading):
+def solve(path):
 
     global Line, Entities, Track_Library, StartPt, EndPt
-    Line = [[np.array(start_pos), tools.rot_z([-1, 0], start_heading)]]
+    Line = [[np.array(path[0][0]), tools.rot_z([-1, 0], path[0][1])]]
     Entities = []
-
     directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
     Track_Library = importer.build_track_library(directory, ".mdl")
 
-    Direction = "0fw"  # this will always be true... for now
-    Radius = 0  # starting radius
-    Position = np.add(
-        np.array(start_pos), np.array(tools.rot_z([-64, 0, 0], start_heading))
+    write_track(
+        np.array(path[0][0]),
+        np.add(np.array(path[0][0]), np.array(tools.rot_z([-64, 0, 0], path[0][1]))),
+        "0fw",
+        "models/trakpak3_rsg/straights/s0064_0fw_0pg_+0064x00000x0000.mdl",
+        path[0][1],
     )
 
-    GradeLevel = 0  # starting grade level
+    path[0][0] = np.add(
+        np.array(path[0][0]), np.array(tools.rot_z([-64, 0, 0], path[0][1]))
+    )
 
-    StartPt = [Position, start_heading]
-    EndPt = [end_pos, end_heading]
+    for Subsolve in range(len(path) - 1):
+
+        Direction = "0fw"  # this will always be true... for now
+
+        StartPt = path[Subsolve]
+        EndPt = path[Subsolve + 1]
+
+        write_pathfinder_data(
+            recursive_track_explorer(StartPt[0], Direction, StartPt[1], []),
+            StartPt[0],
+            StartPt[1],
+        )
 
     write_track(
-        np.array(start_pos),
-        Position,
+        np.array(path[-1][0]),
+        np.add(np.array(path[-1][0]), np.array(tools.rot_z([-64, 0, 0], path[-1][1]))),
         Direction,
         "models/trakpak3_rsg/straights/s0064_0fw_0pg_+0064x00000x0000.mdl",
-        start_heading,
+        path[-1][1],
     )
 
-    Out, Out2 = recursive_track_explorer(Position, Direction, start_heading, [])
-
-    write_track(
-        np.array(end_pos),
-        np.add(np.array(end_pos), np.array([0, 64, 0])),
-        Direction,
-        "models/trakpak3_rsg/straights/s0064_0fw_0pg_+0064x00000x0000.mdl",
-        end_heading,
-    )
-
-    return Out, Out2
+    return Line, Entities
