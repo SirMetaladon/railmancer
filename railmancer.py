@@ -29,8 +29,6 @@ def query_height(real_x, real_y):
 
 def height_sample(real_x, real_y, samples, radius):
 
-    global Entities
-
     SectorSize = 360 / samples
     Heights = [query_height(real_x, real_y)]
     Arm = [radius, 0]
@@ -41,8 +39,6 @@ def height_sample(real_x, real_y, samples, radius):
 
         Example = query_height(real_x + offset[0], real_y + offset[1])
         Heights += [Example]
-
-        # Entities += [vmfpy.frog(real_x + offset[0], real_y + offset[1], Example)]
 
     return Heights
 
@@ -96,7 +92,7 @@ def distribute(bounds, min_distance, num_dots):
 
     EntsOut = []
     Points = scatter.point_generator(
-        scatter.density_field, bounds, int(TotalPoints * 2), min_distance, Blocks
+        scatter.density_field, bounds, int(TotalPoints * 2), min_distance, Sectors
     )
 
     for Point in Points:
@@ -203,13 +199,6 @@ def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End):
         [query_alpha(position[0], position[1]) for position in x_layer]
         for x_layer in posgrid
     ]
-
-    """
-    for x_layer in posgrid:  # debugging frogs for displacement vertexes
-        for pos in x_layer:
-            Entities += [frog(pos[0], pos[1], 350)]
-    #"""
-    # for some reason this is needed... sometimes
 
     return f"""			dispinfo
 			{{
@@ -340,9 +329,6 @@ def cut_and_fill_heightmap(heightmap, scale_x, shove_x, scale_y, shove_y):
             real_x = ((virtual_x + 0.5) / len(heightmap)) * scale_x + shove_x
             real_y = ((virtual_y + 0.5) / len(heightmap[0])) * scale_y + shove_y
 
-            # to test the gridscale of the heightmap
-            # Entities += [frog(real_x, real_y, 250)]
-
             distance = distance_to_line(real_x, real_y)
 
             scaled = rescale_terrain(heightmap[virtual_x][virtual_y], distance)
@@ -359,7 +345,7 @@ def main():
     tools.click("total")
     tools.click("submodule")
 
-    global Entities, ContourMap, Line, Beziers, Brushes, Biomes, Blocks
+    global Entities, ContourMap, Line, Beziers, Brushes, Biomes, Blocks, Sectors
 
     FancyDisplay = False
 
@@ -437,27 +423,47 @@ def main():
 
     Blocks = [
         [0, 0, 0],
-        # [1, 0, 0],
-        # [-1, 0, 0],
-        [0, 1, 0],
+        [1, 0, 0],
         [1, 1, 0],
-        # [-1, 1, 0],
-        # [0, 2, 0],
         [1, 2, 0],
-        # [-1, 2, 0],
-        # [0, 3, 0],
-        [1, 3, 0],
-        # [-1, 3, 0],
+        [0, 1, 0],
+        [0, 2, 0],
     ]
+
+    Sectors = {}
+
+    for Entry in Blocks:
+        # [1, 0, 0]
+        Sectors[tools.sector_encode(Entry[0], Entry[1])] = [Entry[2]]
+
+    # puts in 4 booleans to tell you if nearby sectors are filled too
+    # think of it as "is there a wall in this direction"
+    for Sector in Sectors:
+
+        XCoord = int(Sector.split("x")[0])
+        YCoord = int(Sector.split("x")[1])
+
+        Sectors[Sector] += [
+            len(Sectors.get(tools.sector_encode(XCoord + 1, YCoord), [])) == 0
+        ]
+        Sectors[Sector] += [
+            len(Sectors.get(tools.sector_encode(XCoord, YCoord - 1), [])) == 0
+        ]
+        Sectors[Sector] += [
+            len(Sectors.get(tools.sector_encode(XCoord - 1, YCoord), [])) == 0
+        ]
+        Sectors[Sector] += [
+            len(Sectors.get(tools.sector_encode(XCoord, YCoord + 1), [])) == 0
+        ]
 
     Extents = bounds(Blocks)
     Path = []
     Brushes = []
 
     Path += [[[2040, -32, 208], -90]]
-    Path += [[[2040 - 4080, (4080 * 3) - 32, 208], -90]]
+    Path += [[[2040 + 4080, (4080 * 3) - 32, 208], -90]]
 
-    Line, Entities = pathfinder.solve(Path)
+    Line, Entities = pathfinder.solve(Path, Sectors)
 
     Beziers = curvature.generate_line(Line)
 
@@ -465,7 +471,7 @@ def main():
     print("Line generation complete in " + elapsed)
 
     if FancyDisplay:
-        curvature.display_path(Beziers, Line)
+        curvature.display_path(Beziers, Line, Extents)
 
     """rough pseudocode for converting between blocklists and module outputs
 

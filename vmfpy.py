@@ -220,13 +220,13 @@ def synthesize_entities(Entities):
             "angles" "{Ent.get("ang-pitch",0)} {Ent.get("ang-yaw",0)} {Ent.get("ang-roll",0)}"
             "fademindist" "-1"
             "fadescale" "1"
-            "model" "{Ent.get("mdl","models/trakpak3_rsg/straights/s0512_0fw_0pg_+0512x00000x0000.mdl")}"
+            "model" "{Ent.get("mdl","models/props_2fort/frog.mdl")}"
             "skin" "0"
-            "solid" "6"
+            "solid" "{Ent.get("skin",0)}"
             "origin" "{Ent["pos-x"]} {Ent["pos-y"]} {Ent["pos-z"]}"
             editor
             {{
-                "color" "255 255 0"
+                "color" "200 200 150"
                 "visgroupshown" "1"
                 "visgroupautoshown" "1"
                 "logicalpos" "[0 0]"

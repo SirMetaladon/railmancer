@@ -3,46 +3,17 @@ from scipy.spatial import KDTree
 import math
 
 
-def sector_encode(X, Y):
-
-    return str(X) + "x" + str(Y)
-
-
 def point_generator(
     density_field,
     bounds,
     num_dots,
     minimum_spacing,
-    Blocks,
+    Sectors,
     resolution=1000,
 ):
 
-    global Sectors
-    Sectors = {}
-
-    for Entry in Blocks:
-        # [1, 0, 0]
-        Sectors[sector_encode(Entry[0], Entry[1])] = [Entry[2]]
-
-    # puts in 4 booleans to tell you if nearby sectors are filled too
-    # think of it as "is there a wall in this direction"
-    for Sector in Sectors:
-
-        XCoord = int(Sector.split("x")[0])
-        YCoord = int(Sector.split("x")[1])
-
-        Sectors[Sector] += [
-            len(Sectors.get(sector_encode(XCoord + 1, YCoord), [])) == 0
-        ]
-        Sectors[Sector] += [
-            len(Sectors.get(sector_encode(XCoord, YCoord - 1), [])) == 0
-        ]
-        Sectors[Sector] += [
-            len(Sectors.get(sector_encode(XCoord - 1, YCoord), [])) == 0
-        ]
-        Sectors[Sector] += [
-            len(Sectors.get(sector_encode(XCoord, YCoord + 1), [])) == 0
-        ]
+    global SectorData
+    SectorData = Sectors
 
     """
     Generate dots distributed according to a density field, with improved apportioning.
@@ -108,7 +79,7 @@ def density_field(x, y):
 
     BaseX = math.floor(x / 4080)
     BaseY = math.floor(y / 4080)
-    Sector = Sectors.get(str(BaseX) + "x" + str(BaseY), [])
+    Sector = SectorData.get(str(BaseX) + "x" + str(BaseY), [])
 
     if not len(Sector):
         return 0

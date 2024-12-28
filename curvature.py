@@ -52,13 +52,6 @@ def max_manhattan(v1, v2):
     return max(abs(v1[0] - v2[0]), abs(v1[1] - v2[1]))
 
 
-def determine_constants(Extents: list = [0, 0, 0, 0]):
-
-    global canvas_scale, canvas_offset
-    canvas_scale = 0.11
-    canvas_offset = (-2040, -2048)
-
-
 def canvas(Point):
     return (
         (Point[0] + canvas_offset[0]) * canvas_scale,
@@ -249,12 +242,18 @@ def bezier_curve_points(start_position, end_position, start_direction, end_direc
     return [start_position, p1, p2, end_position]
 
 
-def display_path(BezList: list, Line: list):
+def display_path(BezList: list, Line: list, Extents):
+
+    global canvas_scale, canvas_offset
 
     screen = turtle.Screen()
     screen.colormode(255)
     screen.bgcolor("black")
     screen.setup(1300, 1000)
+
+    # convert extents into these values
+    canvas_scale = 0.11  # 0.22 = 1 block is on screen
+    canvas_offset = (-2040, -2048)
 
     turtle.speed(0)
     turtle.penup()
@@ -271,8 +270,6 @@ def display_path(BezList: list, Line: list):
 
 def generate_line(Line):
 
-    Extents = [0, 0, 0, 0]
-    determine_constants(Extents)
     Beziers = []
 
     for NID in range(len(Line) - 1):

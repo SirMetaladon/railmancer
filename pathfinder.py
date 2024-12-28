@@ -1,4 +1,4 @@
-import importer, tools, random, bisect, time
+import track, tools, random, bisect, time, math
 import numpy as np
 
 
@@ -13,7 +13,7 @@ def write_track(Position, NextPosition, Direction, MDL, Heading):
 
     data = Track_Library[MDL]
 
-    Line += [[NextPosition, tools.rot_z(importer.get_heading(Direction), Heading)]]
+    Line += [[NextPosition, tools.rot_z(track.get_heading(Direction), Heading)]]
 
     if Direction != data["EndDirection"] and data["EndDirection"][:1] != "8":
         ModelPos = NextPosition
@@ -141,17 +141,65 @@ def valid_next_tracks(Direction, MinimumRadiusLevel):
     return Output
 
 
-def new_position_valid(Position, Direction, Heading):
+def new_position_valid(Position, Direction, Heading, OldPos):
+
+    global Bad
 
     Print = False
 
-    if (
-        PreExploredMatrix.get(matrix_hash(Position, Direction, Heading), False)
-        or Heading != -90
-    ):
+    if PreExploredMatrix.get(matrix_hash(Position, Direction, Heading), False):
         if Print:
-            print(f"I've been here, or {Heading}")
+            print(f"I've been here.")
         return False  # already explored here
+
+    # it occurs to me that a boundary box system might genuinely make this thing better than this complex "guess ahead" nonsene, because at least it can't generate out into the void
+
+    """CornerRadius = 700
+
+    def interpolate_points(start, end, intermediate):
+
+        start = np.array(start)
+        end = np.array(end)
+        num_points = math.ceil(np.linalg.norm(end - start) / intermediate) + 2
+
+        return [tuple(point) for point in np.linspace(start, end, num_points)]
+
+    for SubPos in interpolate_points(OldPos, Position, 2000):
+
+        Sector_X = math.floor(SubPos[0] / 4080)
+        Sector_Y = math.floor(SubPos[1] / 4080)
+
+        Sector = SectorData.get(tools.sector_encode(Sector_X, Sector_Y), [])
+        if not len(Sector):
+            Bad.append((SubPos[0], SubPos[1]))
+            return False
+
+    return True
+    Corner_X = round(Position[0] / 4080)
+    Corner_Y = round(Position[1] / 4080)
+
+    if not (
+        SectorData.get(tools.sector_encode(Corner_X, Corner_Y), False)
+        or not SectorData.get(tools.sector_encode(Corner_X, Corner_Y - 1), False)
+        or not SectorData.get(tools.sector_encode(Corner_X - 1, Corner_Y - 1), False)
+        or not SectorData.get(tools.sector_encode(Corner_X - 1, Corner_Y), False)
+    ):
+
+        # distance from that corner must be higher than the corner radius
+        Distance_from_Corner = np.linalg.norm(
+            np.array(
+                [
+                    Position[0] - (Corner_X * 4080),
+                    Position[1] - (Corner_Y * 4080),
+                    0,
+                ]
+            )
+        )
+
+        if Distance_from_Corner < CornerRadius:
+            return False
+
+    return True"""
 
     # if it meets the requirements
     """
@@ -167,8 +215,7 @@ def new_position_valid(Position, Direction, Heading):
     #is the sign of Y relevant? Yes, because the angles are sensitive to it.
 
     if the end heading was 180, the coordinates would be -2040 x, -3104 y"""
-
-    Head_Deflect = (EndPt[1] - Heading) % 90
+    Head_Deflect = (EndPt[1] - Heading) % 180
     Pos_Deflect = np.round(tools.rot_z(EndPt[0] - Position, EndPt[1]))
     X_Deflect = Pos_Deflect[0]
     Y_Deflect = Pos_Deflect[1]
@@ -177,6 +224,7 @@ def new_position_valid(Position, Direction, Heading):
     # print(f"Position {Position} and Deflection {Pos_Deflect}")
 
     # need some code here to determine what curvature level we're at right now and how to factor that in - don't think we're safe if the radius is higher
+    # would like to automate the process of writing these, but oh well
 
     Realignments = {
         0: {
@@ -191,7 +239,16 @@ def new_position_valid(Position, Direction, Heading):
             "2lt": [[1056, 256, "left", 1 / 2]],
             "4rt": [[1568, 640, "right", 1]],
             "4lt": [[1568, 640, "left", 1]],
-        }
+        },
+        90: {
+            "0fw": [[2048, 2048, "right", 9999999]],
+            "1rt": [[2048 + 704, 2048 - 96, "right", 1 / 4]],
+            "1lt": [[1120 + 640, 608 + 1568, "left", 1 / 4]],
+            "2rt": [[2048 + 1056, 2048 - 256, "right", 1 / 2]],
+            "2lt": [[736 + 640, 512 + 1568, "left", 1 / 2]],
+            "4rt": [[2048 + 1568, 2048 - 640, "right", 1]],
+            "4lt": [[640, 1568, "left", 1]],
+        },
     }
 
     if Head_Deflect == 0 and Direction == "0fw" and Y_Deflect == 0:
@@ -284,19 +341,24 @@ def new_position_valid(Position, Direction, Heading):
 
 def recursive_track_explorer(PosIn, DirIn, HeadIn, SoFarIn):
 
-    global PreExploredMatrix, SavedDirections
+    global PreExploredMatrix, SavedDirections, Bad
 
     PreExploredMatrix = dict()
     SavedDirections = dict()
 
+    Scatter = []
+    Bad = []
+
     ToEvaluate = [(PosIn, DirIn, HeadIn, SoFarIn, 100000)]
     Ticker = 0
 
-    while len(ToEvaluate) & Ticker < 1000000:
+    while len(ToEvaluate) & Ticker < 100000:
 
         Current = ToEvaluate.pop(0)
         # print(Current)
         Direction = Current[1]
+
+        Scatter.append((Current[0][0], Current[0][1]))
 
         Ticker += 1
 
@@ -311,7 +373,7 @@ def recursive_track_explorer(PosIn, DirIn, HeadIn, SoFarIn):
             print("WINNAR", Current[3])
             return Current[3]
 
-        Choices = valid_next_tracks(Direction, 1)
+        Choices = valid_next_tracks(Direction, 0)
 
         for Track in Choices:
 
@@ -328,7 +390,7 @@ def recursive_track_explorer(PosIn, DirIn, HeadIn, SoFarIn):
             if NewDirection[:1] == "8":
                 NewDirection = "0fw"
 
-            if new_position_valid(NewPosition, NewDirection, NewHeading):
+            if new_position_valid(NewPosition, NewDirection, NewHeading, Position):
 
                 LastRadius = Track_Library[Track[0]]["Radius"]
                 if LastRadius == 0:
@@ -357,18 +419,33 @@ def recursive_track_explorer(PosIn, DirIn, HeadIn, SoFarIn):
             print("orly")
             return Current[3]
 
+    import matplotlib.pyplot as plt
+
+    Scatter = np.array(Scatter)
+    Bad = np.array(Bad)
+
+    # Plot the result
+    plt.figure(figsize=(8, 8))
+    plt.scatter(Scatter[:, 0], Scatter[:, 1], s=2, c="blue", alpha=0.7)
+    plt.scatter(Bad[:, 0], Bad[:, 1], s=2, c="red", alpha=0.7)
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.show()
+
     print(f"Pathfinder gave up after {Ticker} iterations!")
 
     return ToEvaluate[0][3] if len(ToEvaluate) > 0 else []
 
 
-def solve(path):
+def solve(path, Sectors):
 
-    global Line, Entities, Track_Library, StartPt, EndPt
+    global Line, Entities, Track_Library, StartPt, EndPt, SectorData
+
+    SectorData = Sectors
     Line = [[np.array(path[0][0]), tools.rot_z([-1, 0], path[0][1])]]
     Entities = []
     directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
-    Track_Library = importer.build_track_library(directory, ".mdl")
+    Track_Library = track.build_track_library(directory, ".mdl")
 
     write_track(
         np.array(path[0][0]),
