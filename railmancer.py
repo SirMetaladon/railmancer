@@ -1,6 +1,13 @@
 import random, math
-import noisetest, curvature, scatter, pathfinder, tools, vmfpy
+import noisetest, curvature, scatter, pathfinder, tools, vmfpy, parser
 import numpy as np
+from scipy.spatial import KDTree
+
+
+def build_blocks(xmin, xmax, ymin, ymax):
+
+    grid = [[x, y, 0] for x in range(xmin, xmax + 1) for y in range(ymin, ymax + 1)]
+    return grid
 
 
 def bounds(blocklist):
@@ -43,47 +50,12 @@ def height_sample(real_x, real_y, samples, radius):
     return Heights
 
 
-def twodify(LineObject):
-
-    List = []
-    for Subvector in LineObject:
-
-        List += [np.array([Subvector[0], Subvector[1]])]
-
-    return List
-
-
 def distance_to_line(real_x, real_y):
-    # rough pseudocode:
-    # determine what segment we're on (query endpoints + 2/3rds and 1/3rd point for each + compare distances)
-    # for that segment, use newton-style narrowing until the distance change is less than 5 per jump or something
 
-    # BETTER PLAN:
-    # there's got to be some way where I can run a few layers on ALL lines (newtonian progression), then run a simple calculation to
-    # guess an asemptote on which one might eventually arrive. If one is far but racing in, it's much more likely than one that is
-    # close but barely making progress even while covering substantial portions of the line.
-    # What if we evaluated all lines, then too the top 20% of ones who made the most progress towards it, as a function of percentage away from it?
+    Shortest, idx = line_distance_tree.query([real_x, real_y])
+    Height = line_distance_heights[idx]
 
-    target_point = np.array([real_x, real_y])
-    Shortest = 999999
-
-    # dumb "check everything" solution
-    for Subsegment in Beziers:
-        ts = np.linspace(
-            0, 1, int(np.linalg.norm(Subsegment[0] - Subsegment[3]) / 50) + 1
-        )
-
-        for t in ts:
-            bezier_pt = np.array([curvature.bezier(t, twodify(Subsegment))])
-            distance = np.linalg.norm(bezier_pt - target_point)
-            Shortest = min(distance, Shortest)
-
-    """
-    # Find the t with the minimum distance
-    min_index = np.argmin(distances)
-    closest_t = ts[min_index]"""
-
-    return Shortest  # distances[closest_t]
+    return Shortest, Height  # distances[closest_t]
 
 
 def distribute(bounds, min_distance, num_dots):
@@ -106,10 +78,9 @@ def distribute(bounds, min_distance, num_dots):
 
             Model = random.choices(Choices, Weights)[0]
 
-            if (
-                distance_to_line(Point[0], Point[1])
-                <= Biomes["alpine_snow"]["models"][Model]["exclusion_radius"]
-            ):
+            dist, height = distance_to_line(Point[0], Point[1])
+
+            if dist <= Biomes["alpine_snow"]["models"][Model]["exclusion_radius"]:
                 continue
 
             StumpSize = Biomes["alpine_snow"]["models"][Model]["base_radius"]
@@ -166,7 +137,7 @@ def row_encode(heights: list):
 
 def query_alpha(real_x, real_y):
 
-    dist = distance_to_line(real_x, real_y)
+    dist, height = distance_to_line(real_x, real_y)
 
     HeightSamples = height_sample(real_x, real_y, 6, 20)
 
@@ -272,7 +243,7 @@ def linterp(a, b, x):
     return a * (1 - x) + b * x
 
 
-def rescale_terrain(initial_height, distance):
+def rescale_terrain(initial_height, distance, height):
 
     metric = (
         min(
@@ -280,18 +251,15 @@ def rescale_terrain(initial_height, distance):
             Biomes["alpine_snow"]["terrain"]["track_bias_slope"],
         )
         / Biomes["alpine_snow"]["terrain"]["track_bias_slope"]
-    )  # 2 modules away, plus a track width buffer
-
-    # initial_height is going to be somewhere in the range of 0 to 1400, roughly
-    # we need to make it go from 0 to 400 at 0 distance, and 400 to 1400 at 2 blocks away (8160 distance)
+    )
 
     top = linterp(
-        Biomes["alpine_snow"]["terrain"]["track_max"],
+        Biomes["alpine_snow"]["terrain"]["track_max"] + height,
         Biomes["alpine_snow"]["terrain"]["bias_max"],
         metric,
     )
     bottom = linterp(
-        Biomes["alpine_snow"]["terrain"]["track_min"],
+        Biomes["alpine_snow"]["terrain"]["track_min"] + height,
         Biomes["alpine_snow"]["terrain"]["bias_min"],
         metric,
     )
@@ -329,11 +297,14 @@ def cut_and_fill_heightmap(heightmap, scale_x, shove_x, scale_y, shove_y):
             real_x = ((virtual_x + 0.5) / len(heightmap)) * scale_x + shove_x
             real_y = ((virtual_y + 0.5) / len(heightmap[0])) * scale_y + shove_y
 
-            distance = distance_to_line(real_x, real_y)
+            distance, height = distance_to_line(real_x, real_y)
 
-            scaled = rescale_terrain(heightmap[virtual_x][virtual_y], distance)
+            scaled = rescale_terrain(
+                heightmap[virtual_x][virtual_y], distance, height - 208
+            )
 
-            result = carve_height(scaled, 164, distance)
+            result = carve_height(scaled, height - 40, distance)
+            # 40 is the height of the terrain compared to the origin of the track
 
             heightmap[virtual_x][virtual_y] = result
 
@@ -345,7 +316,7 @@ def main():
     tools.click("total")
     tools.click("submodule")
 
-    global Entities, ContourMap, Line, Beziers, Brushes, Biomes, Blocks, Sectors
+    global Entities, ContourMap, Beziers, Brushes, Biomes, Blocks, Sectors, line_distance_tree, line_distance_heights
 
     FancyDisplay = False
 
@@ -406,29 +377,24 @@ def main():
                 },
             },
             "terrain": {
-                "track_bias_slope": 2000,
+                "track_bias_slope": 3500,
                 "track_bias_base": 400,
                 "cut_power": 1.5,  # curve shape - goes from 1 (flat slope) to inf (really steep and agressive)
                 "cut_scale": 150,  # this controls the height of a 1-doubling for that power; think scale 10 on power 2 = the curve intersects at dist = 20, clamp = 40
                 "cut_basewidth": 250,  # how far out the curve starts - think flat area under the track before the cut/fill starts
                 "cut_slump": 0.7,  # this value scales it down a bit so it's not so steep on a 45 degree angle
-                "bias_max": 1400,
-                "bias_min": 300,
-                "track_max": 500,
+                "bias_max": 3500,
+                "bias_min": -1300,
+                "track_max": 300,
                 "track_min": 0,
                 "too_steep_alpha": 2 / 3,
             },
         }
     }
 
-    Blocks = [
-        [0, 0, 0],
-        [1, 0, 0],
-        [1, 1, 0],
-        [1, 2, 0],
-        [0, 1, 0],
-        [0, 2, 0],
-    ]
+    Blocks = []
+
+    Blocks += build_blocks(-4, 3, -4, 3)
 
     Sectors = {}
 
@@ -463,15 +429,30 @@ def main():
     Path += [[[2040, -32, 208], -90]]
     Path += [[[2040 + 4080, (4080 * 3) - 32, 208], -90]]
 
-    Line, Entities = pathfinder.solve(Path, Sectors)
+    # Line, Entities = pathfinder.solve(Path, Sectors)
 
-    Beziers = curvature.generate_line(Line)
+    Beziers, Entities = parser.import_track("scan/snowline.vmf")
+
+    # Beziers = curvature.generate_line(Line)
+
+    sampled_points = []
+
+    for Subsegment in Beziers:
+        ts = np.linspace(
+            0, 1, int(np.linalg.norm(Subsegment[0] - Subsegment[3]) / 25) + 1
+        )
+
+        sampled_points += [(curvature.bezier(t, Subsegment, 3)) for t in ts]
+
+    points = [(x, y) for x, y, _ in sampled_points]
+    line_distance_heights = [val for _, _, val in sampled_points]
+    line_distance_tree = KDTree(points)
 
     elapsed = tools.display_time(tools.click("submodule"))
-    print("Line generation complete in " + elapsed)
+    print("Bezier generation complete in " + elapsed)
 
     if FancyDisplay:
-        curvature.display_path(Beziers, Line, Extents)
+        curvature.display_path(Beziers, Extents)
 
     """rough pseudocode for converting between blocklists and module outputs
 
@@ -506,15 +487,15 @@ def main():
         for octaves in octaves_list
     ]
 
-    elapsed = tools.display_time(tools.click("submodule"))
-    print("Perlin Noise complete in " + elapsed)
-
     heightmap_scale_x = 4080 * (Extents[1] - Extents[0] + 1)
     heightmap_scale_y = 4080 * (Extents[3] - Extents[2] + 1)
     heightmap_shift_x = 4080 * Extents[0]
     heightmap_shift_y = 4080 * Extents[2]
 
     scaled_heightmap = noisetest.rescale_heightmap(layers[2], 0, 1)
+
+    elapsed = tools.display_time(tools.click("submodule"))
+    print("Perlin Noise complete in " + elapsed)
 
     finalheightmap = cut_and_fill_heightmap(
         scaled_heightmap,
@@ -567,7 +548,9 @@ def main():
     elapsed = tools.display_time(tools.click("submodule"))
     print("Scattering complete in " + elapsed)
 
-    vmfpy.write_to_vmf(Brushes, Entities)
+    vmfpy.write_to_vmf(
+        Brushes, Entities, f"{"railmancer"}_{random.randint(3000,3999)}{".vmf"}"
+    )
 
     elapsed = tools.display_time(tools.click("total"))
     print("Railmancer Finished in " + elapsed)

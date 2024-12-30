@@ -4,7 +4,8 @@ import numpy as np
 from scipy.optimize import minimize
 
 
-def bezier(t, Bez):
+def bezier(t, Bez, dimensions):
+
     x = (
         (1 - t) ** 3 * Bez[0][0]
         + 3 * (1 - t) ** 2 * t * Bez[1][0]
@@ -18,7 +19,11 @@ def bezier(t, Bez):
         + t**3 * Bez[3][1]
     )
 
-    return x, y
+    if dimensions == 2:
+        return x, y
+    else:
+        # more calculations needed for precision, but for now:
+        return x, y, Bez[0][2] + (Bez[3][2] - Bez[0][2]) * t
 
 
 def get_perpendicular_vec2d(v):
@@ -59,41 +64,34 @@ def canvas(Point):
     )
 
 
-def draw_perpendicular_line(point, direction, length=50):
-    """Draws a perpendicular line at a given point and direction using Turtle graphics.
+def draw_perpendicular_line(point1, point2, distance=50):
 
-    Args:
-        point (tuple): The (x, y) coordinates of the starting point.
-        direction (tuple): The direction vector (dx, dy) along which the perpendicular is calculated.
-        length (float): The length of the perpendicular line to draw. Default is 50 units.
-    """
-    # Get a perpendicular vector to the direction
-    perp_vector = get_perpendicular_vec2d(direction)
+    x1, y1 = point1[0], point1[1]
+    x2, y2 = point2[0], point2[1]
 
-    # Normalize the perpendicular vector
-    perp_vector = normalize_vec2d(perp_vector)
+    # Compute the vector from point1 to point2
+    dx, dy = x2 - x1, y2 - y1
 
-    # Scale the perpendicular vector to the desired length
-    perp_vector = (
-        perp_vector[0] * length / canvas_scale,
-        perp_vector[1] * length / canvas_scale,
-    )
+    # Normalize the vector
+    length = math.sqrt(dx**2 + dy**2)
+    if length != 0:
 
-    # Calculate the endpoints of the perpendicular line
-    start_point = (
-        (point[0] - perp_vector[0] / 2),
-        (point[1] - perp_vector[1] / 2),
-    )
-    end_point = (
-        (point[0] + perp_vector[0] / 2),
-        (point[1] + perp_vector[1] / 2),
-    )
+        dx /= length
+        dy /= length
 
-    # Draw the perpendicular line
-    turtle.penup()
-    turtle.goto(canvas(start_point))
-    turtle.pendown()
-    turtle.goto(canvas(end_point))
+        # Find the perpendicular vector
+        perp_dx = -dy
+        perp_dy = dx
+
+        # Compute the two equidistant perpendicular points
+        pointA = (x1 + perp_dx * distance, y1 + perp_dy * distance)
+        pointB = (x1 - perp_dx * distance, y1 - perp_dy * distance)
+
+        # Draw the perpendicular line
+        turtle.penup()
+        turtle.goto(canvas(pointA))
+        turtle.pendown()
+        turtle.goto(canvas(pointB))
 
 
 def nudge(point, direction):
@@ -125,6 +123,7 @@ def draw_bezier_curve(Bez: list):
 
     mark(Bez[1])
     mark(Bez[2])
+    draw_perpendicular_line(Bez[3], Bez[2])
 
     turtle.penup()
     turtle.goto(canvas(Bez[0]))
@@ -136,7 +135,7 @@ def draw_bezier_curve(Bez: list):
         t = i / steps
         # Cubic Bezier formula
 
-        x, y = bezier(t, Bez)
+        x, y = bezier(t, Bez, 2)
 
         turtle.goto(canvas((x, y)))
         # THING TO DO: MAKE THIS CHANGE COLOR WITH Z-VALUE
@@ -242,7 +241,7 @@ def bezier_curve_points(start_position, end_position, start_direction, end_direc
     return [start_position, p1, p2, end_position]
 
 
-def display_path(BezList: list, Line: list, Extents):
+def display_path(BezList: list, Extents):
 
     global canvas_scale, canvas_offset
 
@@ -261,8 +260,7 @@ def display_path(BezList: list, Line: list, Extents):
     turtle.pencolor("white")
     turtle.hideturtle()
 
-    for Node in Line:
-        draw_perpendicular_line(Node[0], Node[1], 20)
+    draw_perpendicular_line(BezList[0][0], BezList[0][1])
 
     for Plot in BezList:
         draw_bezier_curve(Plot)

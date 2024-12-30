@@ -433,7 +433,7 @@ def block(block_x, block_y, block_z):
     ]
 
 
-def write_to_vmf(Brushes: list, Entities: list):
+def write_to_vmf(Brushes: list, Entities: list, filename):
 
     global ID
     ID = 1000
@@ -553,9 +553,7 @@ def write_to_vmf(Brushes: list, Entities: list):
     content = Start + BrushString + EntityString + End
 
     directory = "C:/Users/Metaladon/Desktop/Model Data/VMFS/railmancer"
-    full_file_path = os.path.join(
-        directory, f"{"railmancer"}_{random.randint(2000,2999)}{".vmf"}"
-    )
+    full_file_path = os.path.join(directory, filename)
 
     try:
         os.makedirs(directory, exist_ok=True)

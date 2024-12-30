@@ -15,33 +15,45 @@ for the entities section, break it by sub-part and identify models of interest
 
 def reprocess_raw_data(raw_entities):
 
-    import track
+    import track, curvature, tools
 
     Entities = []
-    Line = []
+    Beziers = []
 
     # recompile
     for raw_ent in raw_entities:
 
-        Pos = raw_ent["origin"].split(" ")
-        Ang = raw_ent["angles"].split(" ")
+        Pos = [float(coord) for coord in raw_ent["origin"].split(" ")]
+        Ang = [float(coord) for coord in raw_ent["angles"].split(" ")]
 
         Entities += [
             {
-                "pos-x": float(Pos[0]),
-                "pos-y": float(Pos[1]),
-                "pos-z": float(Pos[2]),
+                "pos-x": Pos[0],
+                "pos-y": Pos[1],
+                "pos-z": Pos[2],
                 "mdl": raw_ent["model"],
                 "skin": raw_ent["skin"],
-                "ang-yaw": float(Ang[1]),
+                "ang-yaw": Ang[1],
             }
         ]
 
         Data = track.process_file(raw_ent["model"])
 
-        print(Data)
+        # start point is always just the 0 of the model
+        if Data:  # this is a rail that needs a line
 
-    return Entities, Line
+            EndPos = Pos + tools.rot_z(Data["Move"], Ang[1])
+
+            Beziers += [
+                curvature.bezier_curve_points(
+                    Pos,
+                    EndPos,
+                    tools.rot_z(track.get_heading(Data["StartDirection"]), Ang[1]),
+                    tools.rot_z(track.get_heading(Data["EndDirection"]), Ang[1] + 180),
+                )
+            ]
+
+    return Beziers, Entities
 
 
 def import_track(path):
@@ -73,6 +85,3 @@ def import_track(path):
             )
 
     return reprocess_raw_data(entities)
-
-
-import_track("scan/start.vmf")
