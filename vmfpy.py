@@ -1,4 +1,13 @@
-import os, random
+import os, re
+
+
+def re_id(original_string, replacement):
+
+    # looking for "id" "00000" where the zeroes are any number
+    pattern = r'"id" "\d+"'
+
+    replacement_string = f'"id" "{replacement}"'
+    return re.sub(pattern, replacement_string, original_string)
 
 
 def add_entity(Pos, MDL, Ang):
@@ -213,25 +222,97 @@ def synthesize_entities(Entities):
 
     for Ent in Entities:
 
-        Output += f"""entity
-        {{
-            "id" "{get_ID()}"
-            "classname" "{Ent.get("type","prop_static")}"
-            "angles" "{Ent.get("ang-pitch",0)} {Ent.get("ang-yaw",0)} {Ent.get("ang-roll",0)}"
-            "fademindist" "-1"
-            "fadescale" "1"
-            "model" "{Ent.get("mdl","models/props_2fort/frog.mdl")}"
-            "skin" "0"
-            "solid" "{Ent.get("skin",0)}"
-            "origin" "{Ent["pos-x"]} {Ent["pos-y"]} {Ent["pos-z"]}"
-            editor
+        # if Ent.get("raw_entity", False):
+
+        # Output += re_id(Ent["raw_entity"], get_ID())
+
+        if Ent.get("classname", False) == "tp3_switch":
+
+            Output += f"""entity
             {{
-                "color" "200 200 150"
-                "visgroupshown" "1"
-                "visgroupautoshown" "1"
-                "logicalpos" "[0 0]"
-            }}
-        }}"""
+                "id" "{get_ID()}"
+                "classname" "tp3_switch"
+                "angles" "{Ent.get("ang-pitch",0)} {Ent.get("ang-yaw",0)} {Ent.get("ang-roll",0)}"
+                "animated" "1"
+                "collision_dv" "1"
+                "collision_mn" "1"
+                "derail" "0"
+                "disableshadows" "1"
+                "gmod_allowtools" "advdupe2 tp3_node_editor tp3_node_chainer tp3_path_configurator"
+                "lever" "{Ent.get("lever","misconfigured")}"
+                "model" "{Ent.get("mdl","models/props_2fort/frog.mdl")}"
+                "skin" "{Ent.get("skin",0)}"
+                "origin" "{Ent["pos-x"]} {Ent["pos-y"]} {Ent["pos-z"]}"
+                editor
+                {{
+                    "color" "220 30 220"
+                    "visgroupshown" "1"
+                    "visgroupautoshown" "1"
+                    "logicalpos" "[0 0]"
+                }}
+            }}"""
+
+        elif Ent.get("classname", False) == "tp3_switch_lever_anim":
+
+            Output += f"""entity
+            {{
+                "id" "{get_ID()}"
+                "classname" "tp3_switch_lever_anim"
+                "angles" "{Ent.get("ang-pitch",0)} {Ent.get("ang-yaw",0)} {Ent.get("ang-roll",0)}"
+                "autoreset" "0"
+                "autoscan" "0"
+                "behavior" "-1"
+                "collision_dv" "1"
+                "collision_mn" "1"
+                "gmod_allowtools" "advdupe2 tp3_node_editor tp3_node_chainer tp3_path_configurator"
+                "levertype" "0"
+                "locked" "0"
+                "model" "{Ent.get("mdl","models/props_2fort/frog.mdl")}"
+                "nowire" "0"
+                "seq_idle_close" "idle_close"
+                "seq_idle_open" "idle_open"
+                "seq_throw_close" "throw_close"
+                "seq_throw_open" "throw_open"
+                "skin" "{Ent.get("skin",0)}"
+                "targetname" "{Ent.get("lever","misconfigured")}"
+                "targetstate" "0"
+                "origin" "{Ent["pos-x"]} {Ent["pos-y"]} {Ent["pos-z"]}"
+                editor
+                {{
+                    "color" "220 30 220"
+                    "visgroupshown" "1"
+                    "visgroupautoshown" "1"
+                    "logicalpos" "[0 0]"
+                }}
+            }}"""
+
+        else:  # implied if you don't recognize the class or prop_static
+
+            Shadows = ""
+            if Ent.get("shadows", None) == "noself":
+                Shadows = '''"disableselfshadowing" "1"
+	                            "disableshadows" "1"'''
+
+            Output += f"""entity
+            {{
+                "id" "{get_ID()}"
+                "classname" "prop_static"
+                "angles" "{Ent.get("ang-pitch",0)} {Ent.get("ang-yaw",0)} {Ent.get("ang-roll",0)}"
+                "fademindist" "-1"
+                "fadescale" "1"
+                "model" "{Ent.get("mdl","models/props_2fort/frog.mdl")}"
+                "skin" "0"
+                "solid" "{Ent.get("skin",0)}"
+                "origin" "{Ent["pos-x"]} {Ent["pos-y"]} {Ent["pos-z"]}"
+                {Shadows}
+                editor
+                {{
+                    "color" "200 200 150"
+                    "visgroupshown" "1"
+                    "visgroupautoshown" "1"
+                    "logicalpos" "[0 0]"
+                }}
+            }}"""
 
     Output += f"""entity
 {{

@@ -50,12 +50,17 @@ def height_sample(real_x, real_y, samples, radius):
     return Heights
 
 
-def distance_to_line(real_x, real_y):
+def distance_to_line(real_x, real_y, dim=2):
 
     Shortest, idx = line_distance_tree.query([real_x, real_y])
+
+    if dim == 2:
+        return Shortest
+
+    # if dim != 2
     Height = line_distance_heights[idx]
 
-    return Shortest, Height  # distances[closest_t]
+    return Shortest, Height
 
 
 def distribute(bounds, min_distance, num_dots):
@@ -78,7 +83,7 @@ def distribute(bounds, min_distance, num_dots):
 
             Model = random.choices(Choices, Weights)[0]
 
-            dist, height = distance_to_line(Point[0], Point[1])
+            dist = distance_to_line(Point[0], Point[1])
 
             if dist <= Biomes["alpine_snow"]["models"][Model]["exclusion_radius"]:
                 continue
@@ -112,6 +117,7 @@ def distribute(bounds, min_distance, num_dots):
                     "ang-yaw": random.randrange(-180, 180),
                     "ang-pitch": random.randrange(-4, 4),
                     "ang-roll": random.randrange(-4, 4),
+                    "shadows": "noself",
                 }
             ]
 
@@ -137,7 +143,7 @@ def row_encode(heights: list):
 
 def query_alpha(real_x, real_y):
 
-    dist, height = distance_to_line(real_x, real_y)
+    dist = distance_to_line(real_x, real_y)
 
     HeightSamples = height_sample(real_x, real_y, 6, 20)
 
@@ -146,7 +152,14 @@ def query_alpha(real_x, real_y):
         - Biomes["alpine_snow"]["terrain"]["too_steep_alpha"]
     )
 
-    return min(min(max(0, (dist) / 3), 255), min(255 * OverSteep, 255))
+    return min(
+        min(
+            max(0, (dist) / Biomes["alpine_snow"]["terrain"]["ballast_alpha_distance"]),
+            1,
+        )
+        * 255,
+        min(255 * OverSteep, 255),
+    )
 
 
 def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End):
@@ -297,13 +310,15 @@ def cut_and_fill_heightmap(heightmap, scale_x, shove_x, scale_y, shove_y):
             real_x = ((virtual_x + 0.5) / len(heightmap)) * scale_x + shove_x
             real_y = ((virtual_y + 0.5) / len(heightmap[0])) * scale_y + shove_y
 
-            distance, height = distance_to_line(real_x, real_y)
+            distance, height = distance_to_line(real_x, real_y, 3)
 
-            scaled = rescale_terrain(
-                heightmap[virtual_x][virtual_y], distance, height - 208
+            scaled = rescale_terrain(heightmap[virtual_x][virtual_y], distance, height)
+
+            result = carve_height(
+                scaled,
+                height + Biomes["alpine_snow"]["terrain"]["cut_base_height"],
+                distance,
             )
-
-            result = carve_height(scaled, height - 40, distance)
             # 40 is the height of the terrain compared to the origin of the track
 
             heightmap[virtual_x][virtual_y] = result
@@ -377,17 +392,19 @@ def main():
                 },
             },
             "terrain": {
-                "track_bias_slope": 3500,
-                "track_bias_base": 400,
-                "cut_power": 1.5,  # curve shape - goes from 1 (flat slope) to inf (really steep and agressive)
+                "track_bias_slope": 3000,
+                "track_bias_base": 100,
+                "cut_power": 2,  # curve shape - goes from 1 (flat slope) to inf (really steep and agressive)
                 "cut_scale": 150,  # this controls the height of a 1-doubling for that power; think scale 10 on power 2 = the curve intersects at dist = 20, clamp = 40
                 "cut_basewidth": 250,  # how far out the curve starts - think flat area under the track before the cut/fill starts
-                "cut_slump": 0.7,  # this value scales it down a bit so it's not so steep on a 45 degree angle
-                "bias_max": 3500,
-                "bias_min": -1300,
-                "track_max": 300,
-                "track_min": 0,
+                "cut_slump": 0.9,  # this value scales it down a bit so it's not so steep on a 45 degree angle
+                "bias_max": 5000,
+                "bias_min": -2000,
+                "track_max": 60,  # relative to the track
+                "track_min": -60,  # relative to the track
                 "too_steep_alpha": 2 / 3,
+                "ballast_alpha_distance": 400,
+                "cut_base_height": -45,  # distance from track origin
             },
         }
     }
@@ -447,6 +464,28 @@ def main():
     points = [(x, y) for x, y, _ in sampled_points]
     line_distance_heights = [val for _, _, val in sampled_points]
     line_distance_tree = KDTree(points)
+
+    for ID in range(len(Entities)):
+
+        Ent = Entities[ID]
+
+        try:
+            if Ent[0][0] == "collapse":
+                Collapse = 1
+            else:
+                Collapse = 0
+        except:
+            Collapse = 0
+
+        if Collapse:
+
+            FirstDistance = distance_to_line(Ent[0][1][0], Ent[0][1][1])
+            SecondDistance = distance_to_line(Ent[0][2][0], Ent[0][2][1])
+
+            if FirstDistance > SecondDistance:
+                Entities[ID] = Ent[1]
+            else:
+                Entities[ID] = Ent[2]
 
     elapsed = tools.display_time(tools.click("submodule"))
     print("Bezier generation complete in " + elapsed)

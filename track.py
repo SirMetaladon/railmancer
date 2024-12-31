@@ -51,25 +51,27 @@ def get_heading(raw_direction):
         return (0, -4)
 
 
-def convertToAngle(Direction):
+def direction_to_angle(Direction):
 
     Test = Direction[0]
+    Handedness = 1 if "lt" in Direction else -1
+
     if Test == "0":
         return 0
     elif Test == "1":
-        return 14
+        return 14 * Handedness
     elif Test == "2":
-        return 26.6
+        return 26.6 * Handedness
     elif Test == "4":
-        return 45
+        return 45 * Handedness
     elif Test == "8":
-        return 90
+        return 90 * Handedness
 
 
 def determine_length(StartDirection, EndDirection, Radius):
 
-    StartAngle = convertToAngle(StartDirection)
-    EndAngle = convertToAngle(EndDirection)
+    StartAngle = abs(direction_to_angle(StartDirection))
+    EndAngle = abs(direction_to_angle(EndDirection))
 
     Degrees = EndAngle - StartAngle
 
@@ -98,16 +100,18 @@ def process_arc(path):
 
     ApproxGrade = round((ChangeZ / Length) * 100, 2)
 
-    return {
-        "Length": Length,
-        "Radius": Radius,
-        "StartDirection": StartDirection,
-        "EndDirection": EndDirection,
-        "GradeLevel": GradeLevel,
-        "Move": [-ChangeX, ChangeY, ChangeZ],
-        "ApproxGrade": ApproxGrade,
-        "RealGrade": RealGrade,
-    }
+    return [
+        {
+            "Length": Length,
+            "Radius": Radius,
+            "StartDirection": StartDirection,
+            "EndDirection": EndDirection,
+            "GradeLevel": GradeLevel,
+            "Move": [-ChangeX, ChangeY, ChangeZ],
+            "ApproxGrade": ApproxGrade,
+            "RealGrade": RealGrade,
+        }
+    ]
 
 
 def process_straight(path):
@@ -129,16 +133,96 @@ def process_straight(path):
 
     ApproxGrade = round((ChangeZ / Length) * 100, 2)
 
-    return {
-        "Length": Length,
-        "Radius": 0,
-        "StartDirection": StartDirection,
-        "EndDirection": EndDirection,
-        "GradeLevel": GradeLevel,
-        "Move": [-ChangeX, ChangeY, ChangeZ],
-        "ApproxGrade": ApproxGrade,
-        "RealGrade": RealGrade,
-    }
+    return [
+        {
+            "Length": Length,
+            "Radius": 0,
+            "StartDirection": StartDirection,
+            "EndDirection": EndDirection,
+            "GradeLevel": GradeLevel,
+            "Move": [-ChangeX, ChangeY, ChangeZ],
+            "ApproxGrade": ApproxGrade,
+            "RealGrade": RealGrade,
+        }
+    ]
+
+
+def process_turnout(path):
+
+    data = list(path[-1].split("_"))
+    StartDirection = data[0][1:]
+    EndDirection = data[1]
+
+    data2 = data[3].split("x")
+    ChangeX = int(data2[0])
+    ChangeY = int(data2[1])
+
+    data3 = data[4].split("x")
+    ChangeX2 = int(data3[0])
+    ChangeY2 = int(data3[1])
+
+    # I may come back and allow the pathfinder to use these, but I highly doubt it
+    # Much more likely I just use symbolic pieces and swap them in on compile.
+
+    return [
+        {
+            "Length": 0,
+            "Radius": 0,
+            "StartDirection": StartDirection,
+            "EndDirection": StartDirection,
+            "GradeLevel": 0,
+            "Move": [-ChangeX, ChangeY, 0],
+            "ApproxGrade": 0,
+            "RealGrade": 0,
+        },
+        {
+            "Length": 0,
+            "Radius": 0,
+            "StartDirection": StartDirection,
+            "EndDirection": EndDirection,
+            "GradeLevel": 0,
+            "Move": [-ChangeX2, ChangeY2, 0],
+            "ApproxGrade": 0,
+            "RealGrade": 0,
+        },
+    ]
+
+
+def process_siding(path):
+
+    data = list(path[-1].split("_"))
+    StartDirection = data[0][1:]
+
+    data2 = data[3].split("x")
+    ChangeX = int(data2[0])
+    ChangeY = int(data2[1])
+
+    data3 = data[4].split("x")
+    ChangeX2 = int(data3[0])
+    ChangeY2 = int(data3[1])
+
+    return [
+        {
+            "Length": 0,
+            "Radius": 0,
+            "StartDirection": StartDirection,
+            "EndDirection": StartDirection,
+            "GradeLevel": 0,
+            "Move": [-ChangeX, ChangeY, 0],
+            "ApproxGrade": 0,
+            "RealGrade": 0,
+        },
+        {
+            "Length": 0,
+            "Radius": 0,
+            "StartDirection": StartDirection,
+            "EndDirection": StartDirection,
+            "GradeLevel": 0,
+            "Move": [-ChangeX2, ChangeY2, 0],
+            "ApproxGrade": 0,
+            "RealGrade": 0,
+        },
+    ]
 
 
 def process_file(model):
@@ -153,6 +237,18 @@ def process_file(model):
 
         return process_straight(path)
 
+    elif path[3] == "turnouts":
+
+        return process_turnout(path)
+
+    elif path[3] == "sidings":
+
+        return process_siding(path)
+
+    print(f"No support for {model}")
+
+    return []
+
 
 def build_track_library(directory, extension):
 
@@ -166,9 +262,10 @@ def build_track_library(directory, extension):
                     "\\", "/"
                 )
 
-                Entry = process_file(model)
+                Track_Data = process_file(model)[0]
 
-                if Entry is not None:
-                    Track_Library[model] = Entry
+                if len(Track_Data) == 1:
+                    # more than 1 is a switch, less than 1 is an invalid model
+                    Track_Library[model] = Track_Data
 
     return Track_Library
