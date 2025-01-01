@@ -326,14 +326,35 @@ def cut_and_fill_heightmap(heightmap, scale_x, shove_x, scale_y, shove_y):
     return heightmap
 
 
+def encode_lines(Beziers, LineFidelity):
+
+    sampled_points = []
+
+    for Subsegment in Beziers:
+        ts = np.linspace(
+            0, 1, int(np.linalg.norm(Subsegment[0] - Subsegment[3]) / LineFidelity) + 1
+        )
+
+        sampled_points += [(curvature.bezier(t, Subsegment, 3)) for t in ts]
+
+    points = [(x, y) for x, y, _ in sampled_points]
+    return [val for _, _, val in sampled_points], KDTree(points)
+
+
 def main():
 
     tools.click("total")
     tools.click("submodule")
 
-    global Entities, ContourMap, Beziers, Brushes, Biomes, Blocks, Sectors, line_distance_tree, line_distance_heights
+    global Entities, ContourMap, Brushes, Biomes, Blocks, Sectors, line_distance_tree, line_distance_heights
 
     FancyDisplay = False
+
+    LineFidelity = 25  # average units between sampled points on lines; higher is grainer but faster
+
+    Terrain_Seed = 0  # 0  for random, or you can specify it
+
+    Sector_Size = 4080  # I'd highly reccomend not touching this
 
     Biomes = {
         "alpine_snow": {
@@ -356,12 +377,6 @@ def main():
                     "base_radius": 75,
                     "steepness": 4 / 5,
                 },
-                # "models/props_forest/rock006c.mdl": {
-                #    "weight": 20,
-                #    "exclusion_radius": 150,
-                #    "base_radius": 25,
-                #    "steepness": 4 / 5,
-                # },
                 "models/props_forest/rock001.mdl": {
                     "weight": 5,
                     "exclusion_radius": 350,
@@ -402,15 +417,21 @@ def main():
                 "bias_min": -2000,
                 "track_max": 60,  # relative to the track
                 "track_min": -60,  # relative to the track
-                "too_steep_alpha": 2 / 3,
+                "too_steep_alpha": 3 / 4,
                 "ballast_alpha_distance": 400,
                 "cut_base_height": -45,  # distance from track origin
+                "models_per_sector": 125,
+                "noise_hill_resolution": 0.7,
+                "noise_size": 25,
+                "noise_persistence": 0.2,
+                "noise_lacunarity": 4,
+                "noise_octaves": 2,
             },
         }
     }
 
     Blocks = []
-
+    # programmed to be the size of the full map right now
     Blocks += build_blocks(-4, 3, -4, 3)
 
     Sectors = {}
@@ -440,30 +461,22 @@ def main():
         ]
 
     Extents = bounds(Blocks)
-    Path = []
+
     Brushes = []
 
-    Path += [[[2040, -32, 208], -90]]
-    Path += [[[2040 + 4080, (4080 * 3) - 32, 208], -90]]
-
+    # Path = []
+    # Path += [[[2040, -32, 208], -90]]
+    # Path += [[[2040 + Sector_Size, (Sector_Size * 3) - 32, 208], -90]]
+    # pathfinder is current nonfunctional until I rebuild it
     # Line, Entities = pathfinder.solve(Path, Sectors)
+    # Beziers = curvature.generate_line(Line)
 
     Beziers, Entities = parser.import_track("scan/snowline.vmf")
 
-    # Beziers = curvature.generate_line(Line)
+    if FancyDisplay:
+        curvature.display_path(Beziers, Extents)
 
-    sampled_points = []
-
-    for Subsegment in Beziers:
-        ts = np.linspace(
-            0, 1, int(np.linalg.norm(Subsegment[0] - Subsegment[3]) / 25) + 1
-        )
-
-        sampled_points += [(curvature.bezier(t, Subsegment, 3)) for t in ts]
-
-    points = [(x, y) for x, y, _ in sampled_points]
-    line_distance_heights = [val for _, _, val in sampled_points]
-    line_distance_tree = KDTree(points)
+    line_distance_heights = line_distance_tree = encode_lines(Beziers, LineFidelity)
 
     for ID in range(len(Entities)):
 
@@ -490,9 +503,6 @@ def main():
     elapsed = tools.display_time(tools.click("submodule"))
     print("Bezier generation complete in " + elapsed)
 
-    if FancyDisplay:
-        curvature.display_path(Beziers, Extents)
-
     """rough pseudocode for converting between blocklists and module outputs
 
     for every incoming block-grid coordinates:
@@ -506,32 +516,30 @@ def main():
     else, make a wall on that block facing that direction
     repeat for all blocks"""
 
-    Hill_Resolution = 0.7
-    Noise_Size = 25
+    heightmap_scale_x = Sector_Size * (Extents[1] - Extents[0] + 1)
+    heightmap_scale_y = Sector_Size * (Extents[3] - Extents[2] + 1)
+    heightmap_shift_x = Sector_Size * Extents[0]
+    heightmap_shift_y = Sector_Size * Extents[2]
 
-    # Noise Parameters
-    width = Noise_Size * (Extents[1] - Extents[0] + 1)
-    height = Noise_Size * (Extents[3] - Extents[2] + 1)
-    scale = Noise_Size / Hill_Resolution
-    octaves_list = [1, 2, 16]
-    persistence = 0.2
-    lacunarity = 4
-    seed = random.randint(1, 100)
+    Noise_Library = {}
 
-    # Generate layers of Perlin noise
-    layers = [
-        noisetest.generate_perlin_noise(
-            width, height, scale, octaves, persistence, lacunarity, seed
+    for Biome in Biomes.items():
+
+        width = Biome[1]["noise_size"] * (Extents[1] - Extents[0] + 1)
+        height = Biome[1]["noise_size"] * (Extents[3] - Extents[2] + 1)
+        scale = Biome[1]["noise_size"] / Biome[1]["noise_hill_resolution"]
+
+        perlin_noise = noisetest.generate_perlin_noise(
+            width,
+            height,
+            scale,
+            Biome[1]["noise_octaves"],
+            Biome[1]["noise_persistence"],
+            Biome[1]["noise_lacunarity"],
+            random.randint(1, 100) if Terrain_Seed == 0 else Terrain_Seed,
         )
-        for octaves in octaves_list
-    ]
 
-    heightmap_scale_x = 4080 * (Extents[1] - Extents[0] + 1)
-    heightmap_scale_y = 4080 * (Extents[3] - Extents[2] + 1)
-    heightmap_shift_x = 4080 * Extents[0]
-    heightmap_shift_y = 4080 * Extents[2]
-
-    scaled_heightmap = noisetest.rescale_heightmap(layers[2], 0, 1)
+    scaled_heightmap = noisetest.rescale_heightmap(perlin_noise, 0, 1)
 
     elapsed = tools.display_time(tools.click("submodule"))
     print("Perlin Noise complete in " + elapsed)
@@ -543,11 +551,6 @@ def main():
         heightmap_scale_y,
         heightmap_shift_y,
     )
-
-    layers[2] = finalheightmap
-
-    # if FancyDisplay:
-    # noisetest.display_perlin_layers(layers)
 
     ContourMap = {
         "map": finalheightmap,
@@ -577,8 +580,8 @@ def main():
 
     Entities += distribute(
         (
-            (Extents[0] * 4080, (Extents[1] + 1) * 4080),
-            (Extents[2] * 4080, (Extents[3] + 1) * 4080),
+            (Extents[0] * Sector_Size, (Extents[1] + 1) * Sector_Size),
+            (Extents[2] * Sector_Size, (Extents[3] + 1) * Sector_Size),
         ),
         110,
         125,  # count
