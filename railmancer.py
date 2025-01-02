@@ -26,10 +26,10 @@ def bounds(blocklist):
 
 def query_height(real_x, real_y):
 
-    virtual_x = (real_x - ContourMap["x_shift"]) / (ContourMap["x_scale"])
-    virtual_y = (real_y - ContourMap["y_shift"]) / (ContourMap["y_scale"])
+    virtual_x = (real_x - ContourMaps["x_shift"]) / (ContourMaps["x_scale"])
+    virtual_y = (real_y - ContourMaps["y_shift"]) / (ContourMaps["y_scale"])
 
-    height = noisetest.bilinear_interpolation(ContourMap["map"], virtual_x, virtual_y)
+    height = noisetest.bilinear_interpolation(ContourMaps["map"], virtual_x, virtual_y)
 
     return height
 
@@ -256,7 +256,21 @@ def linterp(a, b, x):
     return a * (1 - x) + b * x
 
 
-def rescale_terrain(initial_height, distance, height):
+def realize_position(heightmap, virtual_x, virtual_y):
+
+    return ((virtual_x + 0.5) / len(heightmap)) * ContourMaps["scale_x"] + ContourMaps[
+        "shift_x"
+    ], ((virtual_y + 0.5) / len(heightmap[0])) * ContourMaps["scale_y"] + ContourMaps[
+        "shift_y"
+    ]
+
+
+def generate_heightmap_min_max():
+
+    MinMap = []
+    MaxMap = []
+
+    # initial_height, distance, track_height):
 
     metric = (
         min(
@@ -267,19 +281,24 @@ def rescale_terrain(initial_height, distance, height):
     )
 
     top = linterp(
-        Biomes["alpine_snow"]["terrain"]["track_max"] + height,
+        Biomes["alpine_snow"]["terrain"]["track_max"] + track_height,
         Biomes["alpine_snow"]["terrain"]["bias_max"],
         metric,
     )
     bottom = linterp(
-        Biomes["alpine_snow"]["terrain"]["track_min"] + height,
+        Biomes["alpine_snow"]["terrain"]["track_min"] + track_height,
         Biomes["alpine_snow"]["terrain"]["bias_min"],
         metric,
     )
 
-    depth = top - bottom
 
-    return (initial_height * depth) + bottom
+def rescale_terrain(heightmap, virtual_x, virtual_y):
+
+    return linterp(
+        ContourMaps["max_height"][virtual_x][virtual_y],
+        ContourMaps["min_height"][virtual_x][virtual_y],
+        heightmap[virtual_x][virtual_y],
+    )
 
 
 def carve_height(initial_height, intended_height, distance):
@@ -302,24 +321,25 @@ def carve_height(initial_height, intended_height, distance):
     )
 
 
-def cut_and_fill_heightmap(heightmap, scale_x, shove_x, scale_y, shove_y):
+def cut_and_fill_heightmap(heightmap):
 
     for virtual_x in range(len(heightmap)):
         for virtual_y in range(len(heightmap[0])):
 
-            real_x = ((virtual_x + 0.5) / len(heightmap)) * scale_x + shove_x
-            real_y = ((virtual_y + 0.5) / len(heightmap[0])) * scale_y + shove_y
+            # converts the normalized position into one rescaled by the height min/max
+            scaled = rescale_terrain(heightmap, virtual_x, virtual_y)
+
+            real_x, real_y = realize_position(heightmap, virtual_x, virtual_y)
 
             distance, height = distance_to_line(real_x, real_y, 3)
-
-            scaled = rescale_terrain(heightmap[virtual_x][virtual_y], distance, height)
 
             result = carve_height(
                 scaled,
                 height + Biomes["alpine_snow"]["terrain"]["cut_base_height"],
                 distance,
             )
-            # 40 is the height of the terrain compared to the origin of the track
+
+            # if the distance is less than the base cut width, search for nearby lines and take the lowest carve distance
 
             heightmap[virtual_x][virtual_y] = result
 
@@ -346,7 +366,7 @@ def main():
     tools.click("total")
     tools.click("submodule")
 
-    global Entities, ContourMap, Brushes, Biomes, Blocks, Sectors, line_distance_tree, line_distance_heights
+    global Entities, ContourMaps, Brushes, Biomes, Blocks, Sectors, line_distance_tree, line_distance_heights
 
     FancyDisplay = False
 
@@ -432,7 +452,8 @@ def main():
 
     Blocks = []
     # programmed to be the size of the full map right now
-    Blocks += build_blocks(-4, 3, -4, 3)
+    # Blocks += build_blocks(-4, 3, -4, 3)
+    Blocks += build_blocks(-2, 1, -2, 1)
 
     Sectors = {}
 
@@ -471,12 +492,12 @@ def main():
     # Line, Entities = pathfinder.solve(Path, Sectors)
     # Beziers = curvature.generate_line(Line)
 
-    Beziers, Entities = parser.import_track("scan/snowline.vmf")
+    Beziers, Entities = parser.import_track("scan/swirly.vmf")
 
     if FancyDisplay:
         curvature.display_path(Beziers, Extents)
 
-    line_distance_heights = line_distance_tree = encode_lines(Beziers, LineFidelity)
+    line_distance_heights, line_distance_tree = encode_lines(Beziers, LineFidelity)
 
     for ID in range(len(Entities)):
 
@@ -521,44 +542,43 @@ def main():
     heightmap_shift_x = Sector_Size * Extents[0]
     heightmap_shift_y = Sector_Size * Extents[2]
 
-    Noise_Library = {}
+    """the plan:
+    make a noisemap of the minimum height of the terrain and another for the maximum height based on the lines
+    for each biome, generate noisemaps; then adjust them to the master heightmap min/maxes, then cut them
+    
+    """
 
-    for Biome in Biomes.items():
-
-        width = Biome[1]["noise_size"] * (Extents[1] - Extents[0] + 1)
-        height = Biome[1]["noise_size"] * (Extents[3] - Extents[2] + 1)
-        scale = Biome[1]["noise_size"] / Biome[1]["noise_hill_resolution"]
-
-        perlin_noise = noisetest.generate_perlin_noise(
-            width,
-            height,
-            scale,
-            Biome[1]["noise_octaves"],
-            Biome[1]["noise_persistence"],
-            Biome[1]["noise_lacunarity"],
-            random.randint(1, 100) if Terrain_Seed == 0 else Terrain_Seed,
-        )
-
-    scaled_heightmap = noisetest.rescale_heightmap(perlin_noise, 0, 1)
-
-    elapsed = tools.display_time(tools.click("submodule"))
-    print("Perlin Noise complete in " + elapsed)
-
-    finalheightmap = cut_and_fill_heightmap(
-        scaled_heightmap,
-        heightmap_scale_x,
-        heightmap_shift_x,
-        heightmap_scale_y,
-        heightmap_shift_y,
-    )
-
-    ContourMap = {
-        "map": finalheightmap,
+    ContourMaps = {
         "x_scale": heightmap_scale_x,
         "x_shift": heightmap_shift_x,
         "y_scale": heightmap_scale_y,
         "y_shift": heightmap_shift_y,
     }
+
+    ContourMaps["min_height"], ContourMaps["max_height"] = generate_heightmap_min_max()
+
+    for Biome in Biomes.items():
+
+        width = Biome[1]["terrain"]["noise_size"] * (Extents[1] - Extents[0] + 1)
+        height = Biome[1]["terrain"]["noise_size"] * (Extents[3] - Extents[2] + 1)
+        scale = (
+            Biome[1]["terrain"]["noise_size"]
+            / Biome[1]["terrain"]["noise_hill_resolution"]
+        )
+
+        base_biome_heightmap = noisetest.generate_perlin_noise(
+            width,
+            height,
+            scale,
+            Biome[1]["terrain"]["noise_octaves"],
+            Biome[1]["terrain"]["noise_persistence"],
+            Biome[1]["terrain"]["noise_lacunarity"],
+            random.randint(1, 100) if Terrain_Seed == 0 else Terrain_Seed,
+        )
+
+        normalized_heightmap = noisetest.rescale_heightmap(base_biome_heightmap, 0, 1)
+
+        ContourMaps[Biome[0]] = cut_and_fill_heightmap(normalized_heightmap)
 
     elapsed = tools.display_time(tools.click("submodule"))
     print("Contours done in " + elapsed)
