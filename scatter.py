@@ -89,16 +89,16 @@ def density_field(x, y):
         Value = 1
 
         # True = there is a wall in the +x direction, so if the co-ords are 0,0, the wall should start at 3060 and go up to 3x the normal height by the time we have reached 4080
-        if Sector[1]:
+        if Sector[1] is not False:
             Value += max(3 * ((x - (BaseX * 4080) - 3060) / 1020), 0)
         # -y direction
-        if Sector[2]:
+        if Sector[2] is not False:
             Value += max(3 * ((-y + (BaseY * 4080) + 1020) / 1020), 0)
         # -x direction
-        if Sector[3]:
+        if Sector[3] is not False:
             Value += max(3 * ((-x + (BaseX * 4080) + 1020) / 1020), 0)
         # +y direction
-        if Sector[4]:
+        if Sector[4] is not False:
             Value += max(3 * ((y - (BaseY * 4080) - 3060) / 1020), 0)
 
     return max(Value, 0)

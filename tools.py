@@ -70,8 +70,3 @@ def extract(Dict, ToInvestigate, LookingFor, Default):
         Output += [Dict[Entry].get(LookingFor, Default)]
 
     return Output
-
-
-def sector_encode(X, Y):
-
-    return str(X) + "x" + str(Y)

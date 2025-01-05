@@ -55,10 +55,10 @@ def solid(Brush: list):
     if Brush[6] == "wall":
         Top_Texture = "TOOLS/TOOLSNODRAW"
         Bottom_Texture = "TOOLS/TOOLSNODRAW"
-        Negative_X_Texture = "tools/toolsskybox"
-        Positive_X_Texture = "tools/toolsskybox"
-        Positive_Y_Texture = "tools/toolsskybox"
-        Negative_Y_Texture = "tools/toolsskybox"
+        Negative_X_Texture = "TOOLS/TOOLSNODRAW"
+        Positive_X_Texture = "TOOLS/TOOLSNODRAW"
+        Positive_Y_Texture = "TOOLS/TOOLSNODRAW"
+        Negative_Y_Texture = "TOOLS/TOOLSNODRAW"
 
     elif Brush[6] == "ceiling":
         Top_Texture = "TOOLS/TOOLSNODRAW"
@@ -372,8 +372,8 @@ def ceiling(block_x: int, block_y: int, block_z: int):
         (block_x + 1) * 16 * 255,
         block_y * 16 * 255,
         (block_y + 1) * 16 * 255,
-        (block_z + 114) * 16,
-        (block_z + 115) * 16,
+        (block_z) * 16,
+        (block_z + 1) * 16,
         "ceiling",
     ]
 
@@ -467,7 +467,7 @@ def displacements(block_x: int, block_y: int, block_z: int):
     return Disps
 
 
-def wall(block_x: int, block_y: int, block_z: int, dir: int):
+def wall(block_x: int, block_y: int, block_z: int, height: int, dir: int, type="wall"):
 
     dir = dir % 4
 
@@ -476,7 +476,7 @@ def wall(block_x: int, block_y: int, block_z: int, dir: int):
         x_max = 255
         y_min = 0
         y_max = 255
-    elif dir == 1:
+    elif dir == 3:
         x_min = 0
         x_max = 255
         y_min = 254
@@ -486,32 +486,48 @@ def wall(block_x: int, block_y: int, block_z: int, dir: int):
         x_max = 1
         y_min = 0
         y_max = 255
-    elif dir == 3:
+    elif dir == 1:
         x_min = 0
         x_max = 255
         y_min = 0
         y_max = 1
 
     return [
-        255 * 16 * block_x + x_min * 16,
-        255 * 16 * block_x + x_max * 16,
-        255 * 16 * block_y + y_min * 16,
-        255 * 16 * block_y + y_max * 16,
+        16 * (block_x * 255 + x_min),
+        16 * (block_x * 255 + x_max),
+        16 * (block_y * 255 + y_min),
+        16 * (block_y * 255 + y_max),
         16 * block_z,
-        16 * block_z + 114 * 16,
-        "wall",
+        16 * height,
+        type,
     ]
 
 
-def block(block_x, block_y, block_z):
-    return [
-        floor(block_x, block_y, block_z),
-        wall(block_x, block_y, block_z, 0),
-        wall(block_x, block_y, block_z, 1),
-        wall(block_x, block_y, block_z, 2),
-        wall(block_x, block_y, block_z, 3),
-        ceiling(block_x, block_y, block_z),
+def block(block, sector):
+    x, y, bottom, top = block
+
+    Brushes = [
+        floor(x, y, bottom),
+        ceiling(x, y, top),
     ]
+
+    for dir in range(4):
+        AdjacentSector = sector[dir + 1]
+        if (
+            AdjacentSector is False
+            or AdjacentSector[0] > top
+            or AdjacentSector[1] < bottom
+        ):
+            Brushes += [wall(x, y, bottom, top, dir, "ceiling")]
+
+        else:
+
+            if AdjacentSector[0] > bottom and AdjacentSector[0] < top:
+                Brushes += [wall(x, y, AdjacentSector[0], bottom, dir)]
+            if AdjacentSector[1] < top and AdjacentSector[1] > bottom:
+                Brushes += [wall(x, y, AdjacentSector[1], top, dir, "ceiling")]
+
+    return Brushes
 
 
 def write_to_vmf(Brushes: list, Entities: list, filename):

@@ -2,11 +2,24 @@ import random, math
 import noisetest, curvature, scatter, pathfinder, tools, vmfpy, parser
 import numpy as np
 from scipy.spatial import KDTree
+from scipy.ndimage import gaussian_filter
 
 
-def build_blocks(xmin, xmax, ymin, ymax):
+def encode_sector(X, Y):
 
-    grid = [[x, y, 0] for x in range(xmin, xmax + 1) for y in range(ymin, ymax + 1)]
+    return str(X) + "x" + str(Y)
+
+
+def get_sector(X, Y):
+
+    return Sectors.get(encode_sector(X, Y), False)
+
+
+def build_blocks(xmin=-4, xmax=3, ymin=-4, ymax=3, height=114):
+
+    grid = [
+        [x, y, 0, height] for x in range(xmin, xmax + 1) for y in range(ymin, ymax + 1)
+    ]
     return grid
 
 
@@ -29,7 +42,9 @@ def query_height(real_x, real_y):
     virtual_x = (real_x - ContourMaps["x_shift"]) / (ContourMaps["x_scale"])
     virtual_y = (real_y - ContourMaps["y_shift"]) / (ContourMaps["y_scale"])
 
-    height = noisetest.bilinear_interpolation(ContourMaps["map"], virtual_x, virtual_y)
+    height = noisetest.bilinear_interpolation(
+        ContourMaps["alpine_snow"], virtual_x, virtual_y
+    )
 
     return height
 
@@ -52,13 +67,13 @@ def height_sample(real_x, real_y, samples, radius):
 
 def distance_to_line(real_x, real_y, dim=2):
 
-    Shortest, idx = line_distance_tree.query([real_x, real_y])
+    Shortest, idx = LineDistanceTree.query([real_x, real_y])
 
     if dim == 2:
         return Shortest
 
     # if dim != 2
-    Height = line_distance_heights[idx]
+    Height = LineDistanceHeights[idx]
 
     return Shortest, Height
 
@@ -164,8 +179,9 @@ def query_alpha(real_x, real_y):
 
 def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End):
 
+    # 8 multiplier due to the range function below (the power of the displacement is 3, or 2^3 = 8)
     scale_x = (X_Start - X_End) / -8
-    scale_y = (Y_Start - Y_End) / 8  # multiplier due to the range function below
+    scale_y = (Y_Start - Y_End) / 8
     shift_x = X_Start
     shift_y = Y_End
 
@@ -175,7 +191,7 @@ def displacement_build(X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End):
     ]
 
     heights = [
-        [query_height(position[0], position[1]) for position in x_layer]
+        [(query_height(position[0], position[1]) - Z_Start) for position in x_layer]
         for x_layer in posgrid
     ]
 
@@ -256,40 +272,63 @@ def linterp(a, b, x):
     return a * (1 - x) + b * x
 
 
-def realize_position(heightmap, virtual_x, virtual_y):
+def realize_position(virtual_x, virtual_y):
 
-    return ((virtual_x + 0.5) / len(heightmap)) * ContourMaps["scale_x"] + ContourMaps[
-        "shift_x"
-    ], ((virtual_y + 0.5) / len(heightmap[0])) * ContourMaps["scale_y"] + ContourMaps[
-        "shift_y"
+    return ((virtual_x + 0.5) / ContourMaps["width"]) * ContourMaps[
+        "x_scale"
+    ] + ContourMaps["x_shift"], (
+        (virtual_y + 0.5) / ContourMaps["height"]
+    ) * ContourMaps[
+        "y_scale"
+    ] + ContourMaps[
+        "y_shift"
     ]
 
 
 def generate_heightmap_min_max():
 
-    MinMap = []
-    MaxMap = []
+    MinMap = [
+        [0 for _ in range(ContourMaps["height"])] for _ in range(ContourMaps["width"])
+    ]
+    MaxMap = [
+        [0 for _ in range(ContourMaps["height"])] for _ in range(ContourMaps["width"])
+    ]
 
-    # initial_height, distance, track_height):
+    for virtual_x in range(ContourMaps["width"]):
+        for virtual_y in range(ContourMaps["height"]):
 
-    metric = (
-        min(
-            max(distance - Biomes["alpine_snow"]["terrain"]["track_bias_base"], 0),
-            Biomes["alpine_snow"]["terrain"]["track_bias_slope"],
-        )
-        / Biomes["alpine_snow"]["terrain"]["track_bias_slope"]
-    )
+            real_x, real_y = realize_position(virtual_x, virtual_y)
 
-    top = linterp(
-        Biomes["alpine_snow"]["terrain"]["track_max"] + track_height,
-        Biomes["alpine_snow"]["terrain"]["bias_max"],
-        metric,
-    )
-    bottom = linterp(
-        Biomes["alpine_snow"]["terrain"]["track_min"] + track_height,
-        Biomes["alpine_snow"]["terrain"]["bias_min"],
-        metric,
-    )
+            distance, height = distance_to_line(real_x, real_y, 3)
+
+            Sector = get_sector(
+                math.floor(real_x / Sector_Size), math.floor(real_y / Sector_Size)
+            )
+
+            metric = min(
+                max(
+                    distance - Biomes["alpine_snow"]["terrain"]["track_bias_base"],
+                    0,
+                )
+                / Biomes["alpine_snow"]["terrain"]["track_bias_slope"],
+                1,
+            )
+
+            top = linterp(
+                Biomes["alpine_snow"]["terrain"]["track_max"] + height,
+                (Sector[0][1] * 16) - 428,  # lowest tree height
+                metric,
+            )
+            bottom = linterp(
+                Biomes["alpine_snow"]["terrain"]["track_min"] + height,
+                (Sector[0][0] * 16),
+                metric,
+            )
+
+            MinMap[virtual_x][virtual_y] = bottom
+            MaxMap[virtual_x][virtual_y] = top
+
+    return gaussian_filter(MinMap, sigma=1), gaussian_filter(MaxMap, sigma=1)
 
 
 def rescale_terrain(heightmap, virtual_x, virtual_y):
@@ -323,13 +362,15 @@ def carve_height(initial_height, intended_height, distance):
 
 def cut_and_fill_heightmap(heightmap):
 
+    global Entities
+
     for virtual_x in range(len(heightmap)):
         for virtual_y in range(len(heightmap[0])):
 
             # converts the normalized position into one rescaled by the height min/max
             scaled = rescale_terrain(heightmap, virtual_x, virtual_y)
 
-            real_x, real_y = realize_position(heightmap, virtual_x, virtual_y)
+            real_x, real_y = realize_position(virtual_x, virtual_y)
 
             distance, height = distance_to_line(real_x, real_y, 3)
 
@@ -339,6 +380,7 @@ def cut_and_fill_heightmap(heightmap):
                 distance,
             )
 
+            # Entities += [vmfpy.frog(real_x, real_y, result)]
             # if the distance is less than the base cut width, search for nearby lines and take the lowest carve distance
 
             heightmap[virtual_x][virtual_y] = result
@@ -366,7 +408,7 @@ def main():
     tools.click("total")
     tools.click("submodule")
 
-    global Entities, ContourMaps, Brushes, Biomes, Blocks, Sectors, line_distance_tree, line_distance_heights
+    global Entities, ContourMaps, Brushes, Biomes, Blocks, Sectors, LineDistanceTree, LineDistanceHeights, Sector_Size
 
     FancyDisplay = False
 
@@ -375,6 +417,7 @@ def main():
     Terrain_Seed = 0  # 0  for random, or you can specify it
 
     Sector_Size = 4080  # I'd highly reccomend not touching this
+    Noise_Size = 25  # same here, higher compile times on one side and lower resolution leading to jagged displacements on the other
 
     Biomes = {
         "alpine_snow": {
@@ -401,21 +444,21 @@ def main():
                     "weight": 5,
                     "exclusion_radius": 350,
                     "base_radius": 170,
-                    "steepness": 3,
+                    "steepness": 2,
                     "min_steep": 2 / 5,
                 },
                 "models/props_forest/rock002.mdl": {
                     "weight": 5,
                     "exclusion_radius": 350,
                     "base_radius": 120,
-                    "steepness": 3,
+                    "steepness": 2,
                     "min_steep": 2 / 5,
                 },
                 "models/props_forest/rock003.mdl": {
                     "weight": 5,
                     "exclusion_radius": 350,
                     "base_radius": 140,
-                    "steepness": 3,
+                    "steepness": 2,
                     "min_steep": 2 / 5,
                 },
                 "models/props_forest/rock004.mdl": {
@@ -442,7 +485,6 @@ def main():
                 "cut_base_height": -45,  # distance from track origin
                 "models_per_sector": 125,
                 "noise_hill_resolution": 0.7,
-                "noise_size": 25,
                 "noise_persistence": 0.2,
                 "noise_lacunarity": 4,
                 "noise_octaves": 2,
@@ -450,36 +492,36 @@ def main():
         }
     }
 
-    Blocks = []
-    # programmed to be the size of the full map right now
-    # Blocks += build_blocks(-4, 3, -4, 3)
-    Blocks += build_blocks(-2, 1, -2, 1)
+    Blocks = build_blocks(-2, 1, -2, 1)
 
     Sectors = {}
 
     for Entry in Blocks:
         # [1, 0, 0]
-        Sectors[tools.sector_encode(Entry[0], Entry[1])] = [Entry[2]]
+        Sectors[encode_sector(Entry[0], Entry[1])] = [(Entry[2], Entry[3])]
 
-    # puts in 4 booleans to tell you if nearby sectors are filled too
-    # think of it as "is there a wall in this direction"
+    # puts in 4 height values to tell you if nearby sectors are filled too
+    # think of it as "is there a wall in this direction, and if so how high is it's floor"
+
+    def probe_sector(x, y):
+
+        Sector = get_sector(x, y)
+
+        if Sector is False:
+            return False
+
+        else:
+            return Sector[0]
+
     for Sector in Sectors:
 
         XCoord = int(Sector.split("x")[0])
         YCoord = int(Sector.split("x")[1])
 
-        Sectors[Sector] += [
-            len(Sectors.get(tools.sector_encode(XCoord + 1, YCoord), [])) == 0
-        ]
-        Sectors[Sector] += [
-            len(Sectors.get(tools.sector_encode(XCoord, YCoord - 1), [])) == 0
-        ]
-        Sectors[Sector] += [
-            len(Sectors.get(tools.sector_encode(XCoord - 1, YCoord), [])) == 0
-        ]
-        Sectors[Sector] += [
-            len(Sectors.get(tools.sector_encode(XCoord, YCoord + 1), [])) == 0
-        ]
+        Sectors[Sector] += [probe_sector(XCoord + 1, YCoord)]
+        Sectors[Sector] += [probe_sector(XCoord, YCoord - 1)]
+        Sectors[Sector] += [probe_sector(XCoord - 1, YCoord)]
+        Sectors[Sector] += [probe_sector(XCoord, YCoord + 1)]
 
     Extents = bounds(Blocks)
 
@@ -497,7 +539,7 @@ def main():
     if FancyDisplay:
         curvature.display_path(Beziers, Extents)
 
-    line_distance_heights, line_distance_tree = encode_lines(Beziers, LineFidelity)
+    LineDistanceHeights, LineDistanceTree = encode_lines(Beziers, LineFidelity)
 
     for ID in range(len(Entities)):
 
@@ -553,30 +595,27 @@ def main():
         "x_shift": heightmap_shift_x,
         "y_scale": heightmap_scale_y,
         "y_shift": heightmap_shift_y,
+        "width": Noise_Size * (Extents[1] - Extents[0] + 1),
+        "height": Noise_Size * (Extents[3] - Extents[2] + 1),
     }
+
+    # main axis is height, second axis is width in terms of structure
 
     ContourMaps["min_height"], ContourMaps["max_height"] = generate_heightmap_min_max()
 
     for Biome in Biomes.items():
 
-        width = Biome[1]["terrain"]["noise_size"] * (Extents[1] - Extents[0] + 1)
-        height = Biome[1]["terrain"]["noise_size"] * (Extents[3] - Extents[2] + 1)
-        scale = (
-            Biome[1]["terrain"]["noise_size"]
-            / Biome[1]["terrain"]["noise_hill_resolution"]
-        )
-
-        base_biome_heightmap = noisetest.generate_perlin_noise(
-            width,
-            height,
-            scale,
+        base_biome_noisemap = noisetest.generate_perlin_noise(
+            ContourMaps["height"],
+            ContourMaps["width"],
+            Noise_Size / Biome[1]["terrain"]["noise_hill_resolution"],
             Biome[1]["terrain"]["noise_octaves"],
             Biome[1]["terrain"]["noise_persistence"],
             Biome[1]["terrain"]["noise_lacunarity"],
             random.randint(1, 100) if Terrain_Seed == 0 else Terrain_Seed,
         )
 
-        normalized_heightmap = noisetest.rescale_heightmap(base_biome_heightmap, 0, 1)
+        normalized_heightmap = noisetest.rescale_heightmap(base_biome_noisemap, 0, 1)
 
         ContourMaps[Biome[0]] = cut_and_fill_heightmap(normalized_heightmap)
 
@@ -585,7 +624,8 @@ def main():
 
     for fill in Blocks:
 
-        Brushes += vmfpy.block(fill[0], fill[1], fill[2])
+        # 114 is standard height for modules
+        Brushes += vmfpy.block(fill, get_sector(fill[0], fill[1]))
         Disps = vmfpy.displacements(fill[0], fill[1], fill[2])
         for Entry in Disps:
             Entry += [
