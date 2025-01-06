@@ -1,4 +1,4 @@
-import track, curvature, tools
+import track, lines, tools
 import numpy as np
 
 
@@ -91,7 +91,7 @@ def reprocess_raw_data(raw_entities):
                 EndPos = Pos + tools.rot_z(Subsection["Move"], Ang[1])
 
                 Beziers += [
-                    curvature.bezier_curve_points(
+                    lines.bezier_curve_points(
                         Pos,
                         EndPos,
                         tools.rot_z(
@@ -107,6 +107,9 @@ def reprocess_raw_data(raw_entities):
 
 
 def import_track(path):
+
+    if path == "":
+        return [], []
 
     import re
 
@@ -151,5 +154,7 @@ def import_track(path):
                     "raw": entity_block,
                 }
             )
+
+    print("Imported " + path)
 
     return reprocess_raw_data(entities)

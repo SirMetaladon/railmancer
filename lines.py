@@ -280,3 +280,41 @@ def generate_line(Line):
         ]
 
     return Beziers
+
+
+def encode_lines(Beziers, LineFidelity):
+
+    global LineDistanceTree, LineDistanceHeights
+
+    from scipy.spatial import KDTree
+
+    if not len(Beziers):
+        sampled_points = [[100000, 100000, 100000]]
+    else:
+        sampled_points = []
+
+    for Subsegment in Beziers:
+        ts = np.linspace(
+            0, 1, int(np.linalg.norm(Subsegment[0] - Subsegment[3]) / LineFidelity) + 1
+        )
+
+        sampled_points += [(bezier(t, Subsegment, 3)) for t in ts]
+
+    points = [(x, y) for x, y, _ in sampled_points]
+
+    LineDistanceHeights, LineDistanceTree = [
+        val for _, _, val in sampled_points
+    ], KDTree(points)
+
+
+def distance_to_line(real_x, real_y, dim=2):
+
+    Shortest, idx = LineDistanceTree.query([real_x, real_y])
+
+    if dim == 2:
+        return Shortest
+
+    # if dim != 2
+    Height = LineDistanceHeights[idx]
+
+    return Shortest, Height

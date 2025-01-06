@@ -301,8 +301,8 @@ def synthesize_entities(Entities):
                 "fademindist" "-1"
                 "fadescale" "1"
                 "model" "{Ent.get("mdl","models/props_2fort/frog.mdl")}"
-                "skin" "0"
-                "solid" "{Ent.get("skin",0)}"
+                "skin" "{Ent.get("skin",0)}"
+                "solid" "6"
                 "origin" "{Ent["pos-x"]} {Ent["pos-y"]} {Ent["pos-z"]}"
                 {Shadows}
                 editor
@@ -378,90 +378,20 @@ def ceiling(block_x: int, block_y: int, block_z: int):
     ]
 
 
-def displacements(block_x: int, block_y: int, block_z: int):
+def displacements(block_x: int, block_y: int, block_z: int, subdivision):
 
     Disps = [
         [
-            block_x * 16 * 255,
-            (block_x + 1 / 3) * 16 * 255,
-            block_y * 16 * 255,
-            (block_y + 1 / 3) * 16 * 255,
+            (block_x + x / subdivision) * 16 * 255,
+            (block_x + ((x + 1) / subdivision)) * 16 * 255,
+            (block_y + y / subdivision) * 16 * 255,
+            (block_y + ((y + 1) / subdivision)) * 16 * 255,
             (block_z) * 16,
             (block_z + 1) * 16,
             "displacement",
-        ],
-        [
-            (block_x + 1 / 3) * 16 * 255,
-            (block_x + 2 / 3) * 16 * 255,
-            (block_y + 0) * 16 * 255,
-            (block_y + 1 / 3) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            (block_x + 2 / 3) * 16 * 255,
-            (block_x + 1) * 16 * 255,
-            (block_y + 0) * 16 * 255,
-            (block_y + 1 / 3) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            block_x * 16 * 255,
-            (block_x + 1 / 3) * 16 * 255,
-            (block_y + 1 / 3) * 16 * 255,
-            (block_y + 2 / 3) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            (block_x + 1 / 3) * 16 * 255,
-            (block_x + 2 / 3) * 16 * 255,
-            (block_y + 1 / 3) * 16 * 255,
-            (block_y + 2 / 3) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            (block_x + 2 / 3) * 16 * 255,
-            (block_x + 1) * 16 * 255,
-            (block_y + 1 / 3) * 16 * 255,
-            (block_y + 2 / 3) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            block_x * 16 * 255,
-            (block_x + 1 / 3) * 16 * 255,
-            (block_y + 2 / 3) * 16 * 255,
-            (block_y + 1) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            (block_x + 1 / 3) * 16 * 255,
-            (block_x + 2 / 3) * 16 * 255,
-            (block_y + 2 / 3) * 16 * 255,
-            (block_y + 1) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
-        [
-            (block_x + 2 / 3) * 16 * 255,
-            (block_x + 1) * 16 * 255,
-            (block_y + 2 / 3) * 16 * 255,
-            (block_y + 1) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
-            "displacement",
-        ],
+        ]
+        for y in range(subdivision)
+        for x in range(subdivision)
     ]
 
     return Disps

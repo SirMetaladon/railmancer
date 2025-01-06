@@ -2,6 +2,7 @@
   "LineFidelity": 25,
   "Sector_Size": 4080,
   "Noise_Size": 25,
+  "Disps_Per_Sector": 4,
   "Biomes": {
     "alpine_snow": {
       "models": {
@@ -70,7 +71,42 @@
         "noise_hill_resolution": 0.7,
         "noise_persistence": 0.2,
         "noise_lacunarity": 4,
-        "noise_octaves": 2
+        "noise_octaves": 2,
+        "noise_multiplier": 1, 
+        "minimum_tree_height": 430
+      }
+    },
+    "dev_null": {
+      "models": {
+        "models/props_2fort/cow001_reference.mdl": {
+          "weight": 1,
+          "exclusion_radius": 250,
+          "base_radius": 250,
+          "steepness": 0.1,
+          "height_offset": 30
+        }
+      },
+      "terrain": {
+        "track_bias_slope": 3000,
+        "track_bias_base": 96,
+        "cut_power": 2,
+        "cut_scale": 150,
+        "cut_basewidth": 250,
+        "cut_slump": 0.9,
+        "bias_max": 5000,
+        "bias_min": -2000,
+        "track_max": 60,
+        "track_min": -60,
+        "too_steep_alpha": 0.75,
+        "ballast_alpha_distance": 400,
+        "cut_base_height": -45,
+        "models_per_sector": 5,
+        "noise_hill_resolution": 0.7,
+        "noise_persistence": 0.2,
+        "noise_lacunarity": 4,
+        "noise_octaves": 2,
+        "noise_multiplier": 0,
+        "minimum_tree_height": 0
       }
     }
   }

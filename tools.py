@@ -93,3 +93,10 @@ def import_json(path: str):
     except Exception as e:
         print(e)
         print('Read failed on "' + str(path) + '".')
+
+
+def linterp(a, b, x):
+
+    x = max(0, min(1, x))
+
+    return a * (1 - x) + b * x

@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.spatial import KDTree
 import math
+import sectors
 
 
 def point_generator(
@@ -8,13 +9,8 @@ def point_generator(
     bounds,
     num_dots,
     minimum_spacing,
-    Sectors,
     resolution=1000,
 ):
-
-    global SectorData
-    SectorData = Sectors
-
     """
     Generate dots distributed according to a density field, with improved apportioning.
 
@@ -79,9 +75,9 @@ def density_field(x, y):
 
     BaseX = math.floor(x / 4080)
     BaseY = math.floor(y / 4080)
-    Sector = SectorData.get(str(BaseX) + "x" + str(BaseY), [])
+    Sector = sectors.get_sector(BaseX, BaseY)
 
-    if not len(Sector):
+    if not Sector:
         return 0
 
     else:
