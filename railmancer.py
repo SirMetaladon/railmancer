@@ -5,6 +5,33 @@ from scipy.spatial import KDTree
 from scipy.ndimage import gaussian_filter
 
 
+def collapse_quantum_switchstands(Entities):
+
+    for ID in range(len(Entities)):
+
+        Ent = Entities[ID]
+
+        try:
+            if Ent[0][0] == "collapse":
+                Collapse = 1
+            else:
+                Collapse = 0
+        except:
+            Collapse = 0
+
+        if Collapse:
+
+            FirstDistance = distance_to_line(Ent[0][1][0], Ent[0][1][1])
+            SecondDistance = distance_to_line(Ent[0][2][0], Ent[0][2][1])
+
+            if FirstDistance > SecondDistance:
+                Entities[ID] = Ent[1]
+            else:
+                Entities[ID] = Ent[2]
+
+    return Entities
+
+
 def encode_sector(X, Y):
 
     return str(X) + "x" + str(Y)
@@ -15,6 +42,41 @@ def get_sector(X, Y):
     return Sectors.get(encode_sector(X, Y), False)
 
 
+def build_sectors(Blocks):
+
+    global Sectors
+
+    Sectors = {}
+
+    for Entry in Blocks:
+        Sectors[encode_sector(Entry[0], Entry[1])] = [(Entry[2], Entry[3])]
+
+    # puts in 4 height values to tell you if nearby sectors are filled too
+    # think of it as "is there a wall in this direction, and if so how high is it's floor"
+
+    def probe_sector(x, y):
+
+        Sector = get_sector(x, y)
+
+        if Sector is False:
+            return False
+
+        else:
+            return Sector[0]
+
+    for Sector in Sectors:
+
+        XCoord = int(Sector.split("x")[0])
+        YCoord = int(Sector.split("x")[1])
+
+        Sectors[Sector] += [probe_sector(XCoord + 1, YCoord)]
+        Sectors[Sector] += [probe_sector(XCoord, YCoord - 1)]
+        Sectors[Sector] += [probe_sector(XCoord - 1, YCoord)]
+        Sectors[Sector] += [probe_sector(XCoord, YCoord + 1)]
+
+    return Sectors
+
+
 def build_blocks(xmin=-4, xmax=3, ymin=-4, ymax=3, height=114):
 
     grid = [
@@ -23,7 +85,7 @@ def build_blocks(xmin=-4, xmax=3, ymin=-4, ymax=3, height=114):
     return grid
 
 
-def bounds(blocklist):
+def build_extents(blocklist):
 
     Extents = [0, 0, 0, 0]
     # x min, x max, y min, y max
@@ -34,7 +96,16 @@ def bounds(blocklist):
         Extents[2] = min(Extents[2], block[1])
         Extents[3] = max(Extents[3], block[1])
 
-    return Extents
+    ContourMaps = {
+        "x_scale": CFG["Sector_Size"] * (Extents[1] - Extents[0] + 1),
+        "x_shift": CFG["Sector_Size"] * Extents[0],
+        "y_scale": CFG["Sector_Size"] * (Extents[3] - Extents[2] + 1),
+        "y_shift": CFG["Sector_Size"] * Extents[2],
+        "width": CFG["Noise_Size"] * (Extents[1] - Extents[0] + 1),
+        "height": CFG["Noise_Size"] * (Extents[3] - Extents[2] + 1),
+    }
+
+    return Extents, ContourMaps
 
 
 def query_height(real_x, real_y):
@@ -78,9 +149,7 @@ def distance_to_line(real_x, real_y, dim=2):
     return Shortest, Height
 
 
-def distribute(bounds, min_distance, num_dots):
-
-    TotalPoints = num_dots * len(Blocks)
+def distribute(bounds, min_distance, TotalPoints):
 
     EntsOut = []
     Points = scatter.point_generator(
@@ -92,7 +161,7 @@ def distribute(bounds, min_distance, num_dots):
         if TotalPoints:
             TotalPoints -= 1
 
-            ModelData = Biomes["alpine_snow"]["models"]
+            ModelData = CFG["Biomes"]["alpine_snow"]["models"]
             Choices = list(ModelData.keys())
             Weights = tools.extract(ModelData, Choices, "weight", 0)
 
@@ -100,17 +169,20 @@ def distribute(bounds, min_distance, num_dots):
 
             dist = distance_to_line(Point[0], Point[1])
 
-            if dist <= Biomes["alpine_snow"]["models"][Model]["exclusion_radius"]:
+            if (
+                dist
+                <= CFG["Biomes"]["alpine_snow"]["models"][Model]["exclusion_radius"]
+            ):
                 continue
 
-            StumpSize = Biomes["alpine_snow"]["models"][Model]["base_radius"]
+            StumpSize = CFG["Biomes"]["alpine_snow"]["models"][Model]["base_radius"]
 
             HeightSamples = height_sample(Point[0], Point[1], 5, StumpSize)
 
-            ModelSteepnessAllowed = Biomes["alpine_snow"]["models"][Model].get(
+            ModelSteepnessAllowed = CFG["Biomes"]["alpine_snow"]["models"][Model].get(
                 "steepness", 999
             )
-            LowestSteepnessAllowed = Biomes["alpine_snow"]["models"][Model].get(
+            LowestSteepnessAllowed = CFG["Biomes"]["alpine_snow"]["models"][Model].get(
                 "min_steep", -999
             )
 
@@ -164,12 +236,16 @@ def query_alpha(real_x, real_y):
 
     OverSteep = 1 - (
         ((max(HeightSamples) - min(HeightSamples)) / (40))
-        - Biomes["alpine_snow"]["terrain"]["too_steep_alpha"]
+        - CFG["Biomes"]["alpine_snow"]["terrain"]["too_steep_alpha"]
     )
 
     return min(
         min(
-            max(0, (dist) / Biomes["alpine_snow"]["terrain"]["ballast_alpha_distance"]),
+            max(
+                0,
+                (dist)
+                / CFG["Biomes"]["alpine_snow"]["terrain"]["ballast_alpha_distance"],
+            ),
             1,
         )
         * 255,
@@ -285,7 +361,7 @@ def realize_position(virtual_x, virtual_y):
     ]
 
 
-def generate_heightmap_min_max():
+def generate_heightmap_min_max(ContourMaps):
 
     MinMap = [
         [0 for _ in range(ContourMaps["height"])] for _ in range(ContourMaps["width"])
@@ -302,25 +378,27 @@ def generate_heightmap_min_max():
             distance, height = distance_to_line(real_x, real_y, 3)
 
             Sector = get_sector(
-                math.floor(real_x / Sector_Size), math.floor(real_y / Sector_Size)
+                math.floor(real_x / CFG["Sector_Size"]),
+                math.floor(real_y / CFG["Sector_Size"]),
             )
 
             metric = min(
                 max(
-                    distance - Biomes["alpine_snow"]["terrain"]["track_bias_base"],
+                    distance
+                    - CFG["Biomes"]["alpine_snow"]["terrain"]["track_bias_base"],
                     0,
                 )
-                / Biomes["alpine_snow"]["terrain"]["track_bias_slope"],
+                / CFG["Biomes"]["alpine_snow"]["terrain"]["track_bias_slope"],
                 1,
             )
 
             top = linterp(
-                Biomes["alpine_snow"]["terrain"]["track_max"] + height,
+                CFG["Biomes"]["alpine_snow"]["terrain"]["track_max"] + height,
                 (Sector[0][1] * 16) - 428,  # lowest tree height
                 metric,
             )
             bottom = linterp(
-                Biomes["alpine_snow"]["terrain"]["track_min"] + height,
+                CFG["Biomes"]["alpine_snow"]["terrain"]["track_min"] + height,
                 (Sector[0][0] * 16),
                 metric,
             )
@@ -347,13 +425,13 @@ def carve_height(initial_height, intended_height, distance):
         math.pow(
             max(
                 0,
-                (distance - Biomes["alpine_snow"]["terrain"]["cut_basewidth"])
-                / Biomes["alpine_snow"]["terrain"]["cut_scale"],
+                (distance - CFG["Biomes"]["alpine_snow"]["terrain"]["cut_basewidth"])
+                / CFG["Biomes"]["alpine_snow"]["terrain"]["cut_scale"],
             ),
-            Biomes["alpine_snow"]["terrain"]["cut_power"],
+            CFG["Biomes"]["alpine_snow"]["terrain"]["cut_power"],
         )
-        * Biomes["alpine_snow"]["terrain"]["cut_scale"]
-    ) * Biomes["alpine_snow"]["terrain"]["cut_slump"]
+        * CFG["Biomes"]["alpine_snow"]["terrain"]["cut_scale"]
+    ) * CFG["Biomes"]["alpine_snow"]["terrain"]["cut_slump"]
 
     return max(
         min(initial_height, intended_height + deviation), intended_height - deviation
@@ -376,7 +454,7 @@ def cut_and_fill_heightmap(heightmap):
 
             result = carve_height(
                 scaled,
-                height + Biomes["alpine_snow"]["terrain"]["cut_base_height"],
+                height + CFG["Biomes"]["alpine_snow"]["terrain"]["cut_base_height"],
                 distance,
             )
 
@@ -403,186 +481,74 @@ def encode_lines(Beziers, LineFidelity):
     return [val for _, _, val in sampled_points], KDTree(points)
 
 
+def configuration(path: str):
+
+    Data = tools.import_json(path)
+
+    try:
+        Data["Biomes"]
+    except:
+        # no biomes? crash on purpose, you need that!
+        print("Unable to get Biomes from CFG!")
+        print(Exception)
+
+    # this is the default CFG data
+    Expecting = [
+        ["Sector_Size", 4080],
+        ["Noise_Size", 25],
+        ["LineFidelity", 25],
+        ["Terrain_Seed", random.randint(0, 100)],
+    ]
+
+    for Entry in Expecting:
+        Data[Entry[0]] = Data.get(Entry[0], Entry[1])
+
+    return Data
+
+
 def main():
 
     tools.click("total")
     tools.click("submodule")
 
-    global Entities, ContourMaps, Brushes, Biomes, Blocks, Sectors, LineDistanceTree, LineDistanceHeights, Sector_Size
+    # internally defined globals (lists that need to be accessed, write-only effectively)
+    global Entities, Brushes, ContourMaps, Sectors, LineDistanceTree, LineDistanceHeights
 
-    FancyDisplay = False
+    # imported data
+    global CFG
 
-    LineFidelity = 25  # average units between sampled points on lines; higher is grainer but faster
-
-    Terrain_Seed = 0  # 0  for random, or you can specify it
-
-    Sector_Size = 4080  # I'd highly reccomend not touching this
-    Noise_Size = 25  # same here, higher compile times on one side and lower resolution leading to jagged displacements on the other
-
-    Biomes = {
-        "alpine_snow": {
-            "models": {
-                "models/props_foliage/tree_pine_extrasmall_snow.mdl": {
-                    "weight": 15,
-                    "exclusion_radius": 250,
-                    "base_radius": 55,
-                    "steepness": 4 / 5,
-                },
-                "models/props_foliage/tree_pine_small_snow.mdl": {
-                    "weight": 25,
-                    "exclusion_radius": 300,
-                    "base_radius": 55,
-                    "steepness": 4 / 5,
-                },
-                "models/props_foliage/tree_pine_huge_snow.mdl": {
-                    "weight": 35,
-                    "exclusion_radius": 350,
-                    "base_radius": 75,
-                    "steepness": 4 / 5,
-                },
-                "models/props_forest/rock001.mdl": {
-                    "weight": 5,
-                    "exclusion_radius": 350,
-                    "base_radius": 170,
-                    "steepness": 2,
-                    "min_steep": 2 / 5,
-                },
-                "models/props_forest/rock002.mdl": {
-                    "weight": 5,
-                    "exclusion_radius": 350,
-                    "base_radius": 120,
-                    "steepness": 2,
-                    "min_steep": 2 / 5,
-                },
-                "models/props_forest/rock003.mdl": {
-                    "weight": 5,
-                    "exclusion_radius": 350,
-                    "base_radius": 140,
-                    "steepness": 2,
-                    "min_steep": 2 / 5,
-                },
-                "models/props_forest/rock004.mdl": {
-                    "weight": 5,
-                    "exclusion_radius": 350,
-                    "base_radius": 120,
-                    "steepness": 3,
-                    "min_steep": 2 / 5,
-                },
-            },
-            "terrain": {
-                "track_bias_slope": 3000,
-                "track_bias_base": 100,
-                "cut_power": 2,  # curve shape - goes from 1 (flat slope) to inf (really steep and agressive)
-                "cut_scale": 150,  # this controls the height of a 1-doubling for that power; think scale 10 on power 2 = the curve intersects at dist = 20, clamp = 40
-                "cut_basewidth": 250,  # how far out the curve starts - think flat area under the track before the cut/fill starts
-                "cut_slump": 0.9,  # this value scales it down a bit so it's not so steep on a 45 degree angle
-                "bias_max": 5000,
-                "bias_min": -2000,
-                "track_max": 60,  # relative to the track
-                "track_min": -60,  # relative to the track
-                "too_steep_alpha": 3 / 4,
-                "ballast_alpha_distance": 400,
-                "cut_base_height": -45,  # distance from track origin
-                "models_per_sector": 125,
-                "noise_hill_resolution": 0.7,
-                "noise_persistence": 0.2,
-                "noise_lacunarity": 4,
-                "noise_octaves": 2,
-            },
-        }
-    }
-
-    Blocks = build_blocks(-2, 1, -2, 1)
-
-    Sectors = {}
-
-    for Entry in Blocks:
-        # [1, 0, 0]
-        Sectors[encode_sector(Entry[0], Entry[1])] = [(Entry[2], Entry[3])]
-
-    # puts in 4 height values to tell you if nearby sectors are filled too
-    # think of it as "is there a wall in this direction, and if so how high is it's floor"
-
-    def probe_sector(x, y):
-
-        Sector = get_sector(x, y)
-
-        if Sector is False:
-            return False
-
-        else:
-            return Sector[0]
-
-    for Sector in Sectors:
-
-        XCoord = int(Sector.split("x")[0])
-        YCoord = int(Sector.split("x")[1])
-
-        Sectors[Sector] += [probe_sector(XCoord + 1, YCoord)]
-        Sectors[Sector] += [probe_sector(XCoord, YCoord - 1)]
-        Sectors[Sector] += [probe_sector(XCoord - 1, YCoord)]
-        Sectors[Sector] += [probe_sector(XCoord, YCoord + 1)]
-
-    Extents = bounds(Blocks)
-
-    Brushes = []
+    CFG = configuration("config.json")
 
     # Path = []
     # Path += [[[2040, -32, 208], -90]]
-    # Path += [[[2040 + Sector_Size, (Sector_Size * 3) - 32, 208], -90]]
+    # Path += [[[2040 + CFG["Sector_Size"], (CFG["Sector_Size"] * 3) - 32, 208], -90]]
     # pathfinder is current nonfunctional until I rebuild it
     # Line, Entities = pathfinder.solve(Path, Sectors)
     # Beziers = curvature.generate_line(Line)
 
+    # Step 1: Import line object from a VMF, as well as the track entities themselves.
     Beziers, Entities = parser.import_track("scan/swirly.vmf")
 
-    if FancyDisplay:
-        curvature.display_path(Beziers, Extents)
+    # Step 2: Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
+    LineDistanceHeights, LineDistanceTree = encode_lines(Beziers, CFG["LineFidelity"])
 
-    LineDistanceHeights, LineDistanceTree = encode_lines(Beziers, LineFidelity)
+    # Step 2.5: Since the KDTree has been generated, collapse some special decisionmaking for track entities
+    Entities = collapse_quantum_switchstands(Entities)
 
-    for ID in range(len(Entities)):
+    # Step 3: Lay out the Block shape, currently done with a simple square.
+    Blocks = build_blocks(-1, 2, -1, 2)
 
-        Ent = Entities[ID]
+    # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are.
+    Sectors = build_sectors(Blocks)
 
-        try:
-            if Ent[0][0] == "collapse":
-                Collapse = 1
-            else:
-                Collapse = 0
-        except:
-            Collapse = 0
+    # Step 5: Builds the Extents and ContourMaps base from the sectors/blocks
+    Extents, ContourMaps = build_extents(Blocks)
 
-        if Collapse:
-
-            FirstDistance = distance_to_line(Ent[0][1][0], Ent[0][1][1])
-            SecondDistance = distance_to_line(Ent[0][2][0], Ent[0][2][1])
-
-            if FirstDistance > SecondDistance:
-                Entities[ID] = Ent[1]
-            else:
-                Entities[ID] = Ent[2]
+    # if FancyDisplay:
+    # curvature.display_path(Beziers, Extents)
 
     elapsed = tools.display_time(tools.click("submodule"))
     print("Bezier generation complete in " + elapsed)
-
-    """rough pseudocode for converting between blocklists and module outputs
-
-    for every incoming block-grid coordinates:
-
-    place a floor and ceiling at the correct height
-    populate a dict with the coordinates in x+" "y format with the Z value of that block
-
-    scan the contents of the dict and request all 4 pairs of that block + the surrounding blocks
-
-    if that pair exists (meaning that both coordinates show up in the dict), make adapters that exist on that side only (depending on Z height differences)
-    else, make a wall on that block facing that direction
-    repeat for all blocks"""
-
-    heightmap_scale_x = Sector_Size * (Extents[1] - Extents[0] + 1)
-    heightmap_scale_y = Sector_Size * (Extents[3] - Extents[2] + 1)
-    heightmap_shift_x = Sector_Size * Extents[0]
-    heightmap_shift_y = Sector_Size * Extents[2]
 
     """the plan:
     make a noisemap of the minimum height of the terrain and another for the maximum height based on the lines
@@ -590,29 +556,21 @@ def main():
     
     """
 
-    ContourMaps = {
-        "x_scale": heightmap_scale_x,
-        "x_shift": heightmap_shift_x,
-        "y_scale": heightmap_scale_y,
-        "y_shift": heightmap_shift_y,
-        "width": Noise_Size * (Extents[1] - Extents[0] + 1),
-        "height": Noise_Size * (Extents[3] - Extents[2] + 1),
-    }
+    # this needs to happen first, per district, then get rectified between biomes and districts... not sure how I'm going to do that
+    ContourMaps["min_height"], ContourMaps["max_height"] = generate_heightmap_min_max(
+        ContourMaps
+    )
 
-    # main axis is height, second axis is width in terms of structure
-
-    ContourMaps["min_height"], ContourMaps["max_height"] = generate_heightmap_min_max()
-
-    for Biome in Biomes.items():
+    for Biome in CFG["Biomes"].items():
 
         base_biome_noisemap = noisetest.generate_perlin_noise(
             ContourMaps["height"],
             ContourMaps["width"],
-            Noise_Size / Biome[1]["terrain"]["noise_hill_resolution"],
+            CFG["Noise_Size"] / Biome[1]["terrain"]["noise_hill_resolution"],
             Biome[1]["terrain"]["noise_octaves"],
             Biome[1]["terrain"]["noise_persistence"],
             Biome[1]["terrain"]["noise_lacunarity"],
-            random.randint(1, 100) if Terrain_Seed == 0 else Terrain_Seed,
+            CFG["Terrain_Seed"],
         )
 
         normalized_heightmap = noisetest.rescale_heightmap(base_biome_noisemap, 0, 1)
@@ -621,6 +579,8 @@ def main():
 
     elapsed = tools.display_time(tools.click("submodule"))
     print("Contours done in " + elapsed)
+
+    Brushes = []
 
     for fill in Blocks:
 
@@ -640,11 +600,11 @@ def main():
 
     Entities += distribute(
         (
-            (Extents[0] * Sector_Size, (Extents[1] + 1) * Sector_Size),
-            (Extents[2] * Sector_Size, (Extents[3] + 1) * Sector_Size),
+            (Extents[0] * CFG["Sector_Size"], (Extents[1] + 1) * CFG["Sector_Size"]),
+            (Extents[2] * CFG["Sector_Size"], (Extents[3] + 1) * CFG["Sector_Size"]),
         ),
         110,
-        125,  # count
+        125 * len(Sectors),  # count
     )
 
     elapsed = tools.display_time(tools.click("submodule"))

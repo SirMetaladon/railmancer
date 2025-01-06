@@ -70,3 +70,26 @@ def extract(Dict, ToInvestigate, LookingFor, Default):
         Output += [Dict[Entry].get(LookingFor, Default)]
 
     return Output
+
+
+def import_json(path: str):
+
+    import json
+
+    try:
+        with open(path, "r", encoding="utf-8-sig") as JSONIn:
+
+            content = JSONIn.read().strip()
+            Dict = json.loads(content)
+
+            print("Successfully read " + path)
+
+            return Dict
+
+    except UnicodeDecodeError as e:
+        print(f"Encoding error: " + str(e))
+    except json.JSONDecodeError as e:
+        print(f"JSON parsing error: " + str(e))
+    except Exception as e:
+        print(e)
+        print('Read failed on "' + str(path) + '".')

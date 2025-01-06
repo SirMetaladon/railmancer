@@ -1,0 +1,77 @@
+{
+  "LineFidelity": 25,
+  "Sector_Size": 4080,
+  "Noise_Size": 25,
+  "Biomes": {
+    "alpine_snow": {
+      "models": {
+        "models/props_foliage/tree_pine_extrasmall_snow.mdl": {
+          "weight": 15,
+          "exclusion_radius": 250,
+          "base_radius": 55,
+          "steepness": 0.8
+        },
+        "models/props_foliage/tree_pine_small_snow.mdl": {
+          "weight": 25,
+          "exclusion_radius": 300,
+          "base_radius": 55,
+          "steepness": 0.8
+        },
+        "models/props_foliage/tree_pine_huge_snow.mdl": {
+          "weight": 35,
+          "exclusion_radius": 350,
+          "base_radius": 75,
+          "steepness": 0.8
+        },
+        "models/props_forest/rock001.mdl": {
+          "weight": 5,
+          "exclusion_radius": 350,
+          "base_radius": 170,
+          "steepness": 2,
+          "min_steep": 0.4
+        },
+        "models/props_forest/rock002.mdl": {
+          "weight": 5,
+          "exclusion_radius": 350,
+          "base_radius": 120,
+          "steepness": 2,
+          "min_steep": 0.4
+        },
+        "models/props_forest/rock003.mdl": {
+          "weight": 5,
+          "exclusion_radius": 350,
+          "base_radius": 140,
+          "steepness": 2,
+          "min_steep": 0.4
+        },
+        "models/props_forest/rock004.mdl": {
+          "weight": 5,
+          "exclusion_radius": 350,
+          "base_radius": 120,
+          "steepness": 3,
+          "min_steep": 0.4
+        }
+      },
+      "terrain": {
+        "track_bias_slope": 3000,
+        "track_bias_base": 100,
+        "cut_power": 2,
+        "cut_scale": 150,
+        "cut_basewidth": 250,
+        "cut_slump": 0.9,
+        "bias_max": 5000,
+        "bias_min": -2000,
+        "track_max": 60,
+        "track_min": -60,
+        "too_steep_alpha": 0.75,
+        "ballast_alpha_distance": 400,
+        "cut_base_height": -45,
+        "models_per_sector": 125,
+        "noise_hill_resolution": 0.7,
+        "noise_persistence": 0.2,
+        "noise_lacunarity": 4,
+        "noise_octaves": 2
+      }
+    }
+  }
+}
