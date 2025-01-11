@@ -1,5 +1,5 @@
 import random
-import heightmap, lines, scatter, pathfinder, tools, vmfpy, parser, sectors
+import heightmap, lines, scatter, wayfinder, tools, vmfpy, parser, sectors
 
 
 def collapse_quantum_switchstands(Entities):
@@ -36,7 +36,7 @@ def build_blocks(xmin=-4, xmax=3, ymin=-4, ymax=3, bottom=0, top=114):
     ceiling = max(bottom, top)
 
     grid = [
-        [x, y, floor + (x + y) * 15, ceiling + (x + y) * 15]
+        [x, y, floor, ceiling]
         for x in range(xmin, xmax + 1)
         for y in range(ymin, ymax + 1)
     ]
@@ -284,6 +284,8 @@ def main():
 
     # internally defined globals (lists that need to be accessed, write-only effectively)
     global Entities, Brushes
+    Entities = []
+    Brushes = []
 
     # imported data
     global CFG
@@ -291,15 +293,22 @@ def main():
     CFG = configuration("config.json")
     TrackBase = ""
 
-    # Path = []
-    # Path += [[[2040, -32, 208], -90]]
-    # Path += [[[2040 + CFG["Sector_Size"], (CFG["Sector_Size"] * 3) - 32, 208], -90]]
-    # pathfinder is current nonfunctional until I rebuild it
-    # Line, Entities = pathfinder.solve(Path, Sectors)
-    # Beziers = curvature.generate_line(Line)
+    # Step 3: Lay out the Block shape, currently done with a simple square.
+    Blocks = build_blocks(-1, 2, -1, 2)
+
+    # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are.
+    sectors.build_sectors(Blocks)
+
+    Path = []
+    Path += [[[2040, -32, 208], "0fw", -90]]
+    Path += [
+        [[2040 + CFG["Sector_Size"], (CFG["Sector_Size"] * 3) - 32, 208], "0fw", -90]
+    ]
+
+    Beziers, Entities = wayfinder.realize(Path)
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.
-    Beziers, Entities = parser.import_track(TrackBase)
+    # Beziers, Entities = parser.import_track(TrackBase)
 
     # Step 2: Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
     lines.encode_lines(Beziers, CFG["LineFidelity"])
@@ -307,12 +316,6 @@ def main():
 
     # Step 2.5: Since the KDTree has been generated, collapse some special decisionmaking for track entities
     Entities = collapse_quantum_switchstands(Entities)
-
-    # Step 3: Lay out the Block shape, currently done with a simple square.
-    Blocks = build_blocks(-1, 2, -1, 2)
-
-    # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are.
-    sectors.build_sectors(Blocks)
 
     # Step 5: Builds the Extents and ContourMaps base from the sectors/blocks
     Extents = heightmap.build_heightmap_base(

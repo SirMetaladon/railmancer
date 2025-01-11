@@ -100,3 +100,10 @@ def linterp(a, b, x):
     x = max(0, min(1, x))
 
     return a * (1 - x) + b * x
+
+
+def blind_add(Dict, Key, Payload):
+
+    Object = Dict.get(Key, [])
+    Object += [Payload]
+    Dict[Key] = Object

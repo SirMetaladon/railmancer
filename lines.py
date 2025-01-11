@@ -266,6 +266,7 @@ def display_path(BezList: list, Extents):
         draw_bezier_curve(Plot)
 
 
+"""depreciated 1-11-25: line format is being removed in favor of beziers only, the interrim format was for input ease only
 def generate_line(Line):
 
     Beziers = []
@@ -279,7 +280,7 @@ def generate_line(Line):
             bezier_curve_points(Node1[0], Node2[0], Node1[1], reverse(Node2[1]))
         ]
 
-    return Beziers
+    return Beziers"""
 
 
 def encode_lines(Beziers, LineFidelity):
@@ -289,6 +290,7 @@ def encode_lines(Beziers, LineFidelity):
     from scipy.spatial import KDTree
 
     if not len(Beziers):
+        # placeholder value for maps with no track
         sampled_points = [[100000, 100000, 100000]]
     else:
         sampled_points = []

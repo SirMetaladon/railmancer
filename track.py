@@ -1,4 +1,4 @@
-import os, math
+import os, math, tools
 
 
 def determine_real_grade(raw_grade):
@@ -114,7 +114,9 @@ def process_arc(path):
     ]
 
 
-def process_straight(path):
+def process_straight(path, model):
+
+    global StraightMapping
 
     data = list(path[-1].split("_"))
     StartDirection = data[1]
@@ -133,6 +135,11 @@ def process_straight(path):
 
     ApproxGrade = round((ChangeZ / Length) * 100, 2)
 
+    StraightMapping[str(ChangeX) + "|" + EndDirection] = StraightMapping.get(
+        str(ChangeX) + "|" + EndDirection, {}
+    )
+    StraightMapping[str(ChangeX) + "|" + EndDirection][GradeLevel] = model
+
     return [
         {
             "Length": Length,
@@ -140,6 +147,11 @@ def process_straight(path):
             "StartDirection": StartDirection,
             "EndDirection": EndDirection,
             "GradeLevel": GradeLevel,
+            # for some reason, TP3 tracks are like this;
+            # the default (0 yaw) direction is -x, BUT
+            # the Y value from that position is still
+            # correct in the modelname. They're
+            # mirrored around X = 0, basically.
             "Move": [-ChangeX, ChangeY, ChangeZ],
             "ApproxGrade": ApproxGrade,
             "RealGrade": RealGrade,
@@ -235,7 +247,7 @@ def process_file(model):
 
     elif path[-2] == "straights":
 
-        return process_straight(path)
+        return process_straight(path, model)
 
     elif path[3] == "turnouts":
 
@@ -245,14 +257,17 @@ def process_file(model):
 
         return process_siding(path)
 
-    print(f"No support for {model}")
+    # print(f"No support for {model}")
 
     return []
 
 
 def build_track_library(directory, extension):
 
+    global StraightMapping
+
     Track_Library = {}
+    StraightMapping = {}
 
     for root, dirs, files in os.walk(directory):
         for file in files:
@@ -262,10 +277,18 @@ def build_track_library(directory, extension):
                     "\\", "/"
                 )
 
-                Track_Data = process_file(model)[0]
+                Track_Data = process_file(model)
 
                 if len(Track_Data) == 1:
                     # more than 1 is a switch, less than 1 is an invalid model
-                    Track_Library[model] = Track_Data
+                    Track_Library[model] = Track_Data[0]
 
     return Track_Library
+
+
+def length_to_model_straight(length, direction, gradelevel):
+
+    if direction == "4lt":
+        direction = "4rt"
+
+    return StraightMapping.get(f"{length}|{direction}", {}).get(gradelevel, "")
