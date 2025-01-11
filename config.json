@@ -2,7 +2,7 @@
   "LineFidelity": 25,
   "Sector_Size": 4080,
   "Noise_Size": 25,
-  "Disps_Per_Sector": 4,
+  "Disps_Per_Sector": 3,
   "Biomes": {
     "alpine_snow": {
       "models": {
