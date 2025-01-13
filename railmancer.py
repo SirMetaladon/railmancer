@@ -71,7 +71,7 @@ def distribute(bounds, min_distance, TotalPoints):
         if TotalPoints:
             TotalPoints -= 1
 
-            ModelData = CFG["Biomes"]["alpine_snow"]["models"]
+            ModelData = CFG["Biomes"]["hl2_white_forest"]["models"]
             Choices = list(ModelData.keys())
             Weights = tools.extract(ModelData, Choices, "weight", 0)
 
@@ -132,29 +132,33 @@ def row_encode(heights: list):
     return String
 
 
-def query_alpha(real_x, real_y):
+def query_alpha(real_x, real_y, Terrain):
 
     dist = lines.distance_to_line(real_x, real_y)
 
     HeightSamples = height_sample(real_x, real_y, 6, 20)
 
-    OverSteep = 1 - (
-        ((max(HeightSamples) - min(HeightSamples)) / (40))
-        - CFG["Biomes"]["alpine_snow"]["terrain"]["too_steep_alpha"]
-    )
+    LocalSlope = (max(HeightSamples) - min(HeightSamples)) / (40)
+    SlopeTarget = Terrain.get("alpha_steepness_cutoff", 0.75)
+    TransitionLength = Terrain.get("alpha_steepness_transition", 0.75)
 
-    return min(
-        min(
-            max(
-                0,
-                (dist)
-                / CFG["Biomes"]["alpine_snow"]["terrain"]["ballast_alpha_distance"],
-            ),
-            1,
-        )
-        * 255,
-        min(255 * OverSteep, 255),
-    )
+    if TransitionLength == 0:
+        SlopeMetric = 0 if LocalSlope < SlopeTarget else 1
+    else:
+        SlopeMetric = 0.5 + (LocalSlope - SlopeTarget) / TransitionLength
+
+    DistanceMetric = (
+        max(dist - Terrain.get("ballast_alpha_distance", 96), 0)
+        / Terrain.get("ballast_alpha_slope", 200)
+    ) * 255
+    SteepnessMetric = SlopeMetric * 255
+    NoiseMetric = random.uniform(-0.5, 0.5) * Terrain.get("alpha_noise_mult", 50)
+    TerrainMult = Terrain.get("disp_alpha_mult", 1)
+
+    BaseAlpha = min(DistanceMetric, SteepnessMetric)
+    AdjustedAlpha = tools.scale(BaseAlpha, TerrainMult, 255)
+
+    return tools.clamped(AdjustedAlpha + NoiseMetric, 0, 255)
 
 
 def displacement_build(Block):
@@ -179,9 +183,14 @@ def displacement_build(Block):
         ]
         for x_layer in posgrid
     ]
-
+    # reconfigure this later to check the specific sub-biome data for this exact position
     alphas = [
-        [query_alpha(position[0], position[1]) for position in x_layer]
+        [
+            query_alpha(
+                position[0], position[1], CFG["Biomes"]["hl2_white_forest"]["terrain"]
+            )
+            for position in x_layer
+        ]
         for x_layer in posgrid
     ]
 
@@ -336,7 +345,7 @@ def main():
     # this needs to happen first, per district, then get rectified between biomes and districts... not sure how I'm going to do that
 
     heightmap.generate_heightmap_min_max(
-        CFG["Sector_Size"], CFG["Biomes"]["alpine_snow"]["terrain"]
+        CFG["Sector_Size"], CFG["Biomes"]["hl2_white_forest"]["terrain"]
     )
 
     heightmap.generate_biome_heightmaps(
@@ -351,7 +360,15 @@ def main():
     for fill in Blocks:
 
         Brushes += vmfpy.block(fill, sectors.get_sector(fill[0], fill[1]))
-        Disps = vmfpy.displacements(fill[0], fill[1], fill[2], CFG["Disps_Per_Sector"])
+        Disps = vmfpy.displacements(
+            fill[0],
+            fill[1],
+            fill[2],
+            CFG["Disps_Per_Sector"],
+            CFG["Biomes"]["hl2_white_forest"]["terrain"].get(
+                "ground_texture", "dev/dev_blendmeasure"
+            ),
+        )
         for Entry in Disps:
             Entry += [displacement_build(Entry)]
         Brushes += Disps
@@ -359,14 +376,15 @@ def main():
     elapsed = tools.display_time(tools.click("submodule"))
     print("Brushes and Displacements done in " + elapsed)
 
+    Terrain = CFG["Biomes"]["hl2_white_forest"]["terrain"]
+
     Entities += distribute(
         (
             (Extents[0] * CFG["Sector_Size"], (Extents[1] + 1) * CFG["Sector_Size"]),
             (Extents[2] * CFG["Sector_Size"], (Extents[3] + 1) * CFG["Sector_Size"]),
         ),
-        110,
-        CFG["Biomes"]["alpine_snow"]["terrain"]["models_per_sector"]
-        * len(Blocks),  # count
+        Terrain.get("model_minimum_distance", 110),
+        Terrain.get("models_per_sector", 125) * len(Blocks),  # count
     )
 
     elapsed = tools.display_time(tools.click("submodule"))

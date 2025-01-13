@@ -288,7 +288,9 @@ def query_height(real_x, real_y):
     virtual_x = (real_x - ContourMaps["x_shift"]) / (ContourMaps["x_scale"])
     virtual_y = (real_y - ContourMaps["y_shift"]) / (ContourMaps["y_scale"])
 
-    height = bilinear_interpolation(ContourMaps["alpine_snow"], virtual_x, virtual_y)
+    height = bilinear_interpolation(
+        ContourMaps["hl2_white_forest"], virtual_x, virtual_y
+    )
 
     return height
 

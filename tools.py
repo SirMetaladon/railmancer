@@ -107,3 +107,15 @@ def blind_add(Dict, Key, Payload):
     Object = Dict.get(Key, [])
     Object += [Payload]
     Dict[Key] = Object
+
+
+def clamped(val, limit, limit2):
+
+    Top = max(limit, limit2)
+    Bot = min(limit, limit2)
+
+    return max(min(val, Top), Bot)
+
+
+def scale(val, scale, max):
+    return (val * scale) + ((max / 2) * (1 - scale))

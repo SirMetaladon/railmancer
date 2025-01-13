@@ -77,10 +77,9 @@ def solid(Brush: list):
         Negative_Y_Texture = "TOOLS/TOOLSNODRAW"
 
     elif Brush[6] == "displacement":
-        Displacement = Brush[7]
-        # snowy: nature/blendgroundtosnow001
+        Displacement = Brush[8]
         # grassy: cp_mountainlab/nature/groundtograss001
-        Top_Texture = "nature/blendgroundtosnow001"
+        Top_Texture = Brush[7]
         Bottom_Texture = "TOOLS/TOOLSNODRAW"
         Negative_X_Texture = "TOOLS/TOOLSNODRAW"
         Positive_X_Texture = "TOOLS/TOOLSNODRAW"
@@ -378,7 +377,7 @@ def ceiling(block_x: int, block_y: int, block_z: int):
     ]
 
 
-def displacements(block_x: int, block_y: int, block_z: int, subdivision):
+def displacements(block_x: int, block_y: int, block_z: int, subdivision, texture):
 
     Disps = [
         [
@@ -389,6 +388,7 @@ def displacements(block_x: int, block_y: int, block_z: int, subdivision):
             (block_z) * 16,
             (block_z + 1) * 16,
             "displacement",
+            texture,
         ]
         for y in range(subdivision)
         for x in range(subdivision)

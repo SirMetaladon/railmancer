@@ -4,7 +4,7 @@
   "Noise_Size": 25,
   "Disps_Per_Sector": 3,
   "Biomes": {
-    "alpine_snow": {
+    "tf2_alpine_snow": {
       "models": {
         "models/props_foliage/tree_pine_extrasmall_snow.mdl": {
           "weight": 15,
@@ -54,17 +54,19 @@
         }
       },
       "terrain": {
+        "ground_texture":"nature/blendgroundtosnow001",
         "track_bias_slope": 3000,
         "track_bias_base": 100,
         "cut_power": 2,
         "cut_scale": 150,
         "cut_basewidth": 250,
         "cut_slump": 0.9,
-        "bias_max": 5000,
-        "bias_min": -2000,
+        "terrain_max": 5000,
+        "terrain_min": -2000,
         "track_max": 60,
         "track_min": -60,
         "too_steep_alpha": 0.75,
+        "disp_alpha_mult": 1,
         "ballast_alpha_distance": 400,
         "cut_base_height": -45,
         "models_per_sector": 125,
@@ -72,8 +74,84 @@
         "noise_persistence": 0.2,
         "noise_lacunarity": 4,
         "noise_octaves": 2,
-        "noise_multiplier": 1, 
+        "noise_multiplier": 3, 
         "minimum_tree_height": 430
+      }
+    },
+    "hl2_white_forest": {
+      "models": {
+        "models/props_foliage/tree_pine06.mdl": {
+          "weight": 15,
+          "exclusion_radius": 400,
+          "base_radius": 40,
+          "steepness": 0.4
+        },
+        "models/props_foliage/tree_pine04.mdl": {
+          "weight": 15,
+          "exclusion_radius": 500,
+          "base_radius": 50,
+          "steepness": 0.4
+        },
+        "models/props_foliage/tree_pine05.mdl": {
+          "weight": 15,
+          "exclusion_radius": 550,
+          "base_radius": 60,
+          "steepness": 0.4
+        },
+        "models/props_foliage/tree_pine_large.mdl": {
+          "weight": 10,
+          "exclusion_radius": 600,
+          "base_radius": 70,
+          "steepness": 0.4
+        },
+        "models/props_wasteland/rockcliff_cluster01b.mdl":{
+          "weight": 3,
+          "exclusion_radius": 1000,
+          "base_radius": 700,
+          "min_steep": 0.3,
+          "height_offset": 270
+        },
+        "models/props_wasteland/rockcliff_cluster02a.mdl":{
+          "weight": 3,
+          "exclusion_radius": 700,
+          "base_radius": 550,
+          "min_steep": 0.3,
+          "height_offset": 270
+        },
+        "models/props_wasteland/rockcliff_cluster02b.mdl":{
+          "weight": 3,
+          "exclusion_radius": 700,
+          "base_radius": 600,
+          "min_steep": 0.3,
+          "height_offset": 270
+        }
+      },
+      "terrain": {
+        "ground_texture": "nature/blenddirtgrass005a",
+        "alpha_noise_mult": 200,
+        "track_bias_slope": 2000,
+        "track_bias_base": 0,
+        "cut_power": 4,
+        "cut_scale": 150,
+        "cut_basewidth": 150,
+        "cut_slump": 0.9,
+        "terrain_max": 5000,
+        "terrain_min": -2000,
+        "track_max": 150,
+        "track_min": -150,
+        "alpha_steepness_cutoff": 0.15,
+        "alpha_steepness_transition": 0.05,
+        "ballast_alpha_distance": 200,
+        "ballast_alpha_slope": 50,
+        "cut_base_height": -35,
+        "models_per_sector": 250,
+        "noise_hill_resolution": 0.7,
+        "noise_persistence": 0.2,
+        "noise_lacunarity": 4,
+        "noise_octaves": 2,
+        "noise_multiplier": 1, 
+        "minimum_tree_height": 480,
+        "model_minimum_distance": 100
       }
     },
     "dev_null": {
@@ -87,14 +165,15 @@
         }
       },
       "terrain": {
+        "ground_texture": "trakpak3_common/hammer/blendgrid_green_gray",
         "track_bias_slope": 3000,
         "track_bias_base": 96,
         "cut_power": 2,
         "cut_scale": 150,
         "cut_basewidth": 250,
         "cut_slump": 0.9,
-        "bias_max": 5000,
-        "bias_min": -2000,
+        "terrain_max": 5000,
+        "terrain_min": -2000,
         "track_max": 60,
         "track_min": -60,
         "too_steep_alpha": 0.75,
