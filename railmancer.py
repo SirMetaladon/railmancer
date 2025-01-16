@@ -29,7 +29,7 @@ def collapse_quantum_switchstands(Entities):
     return Entities
 
 
-def build_blocks(xmin=-4, xmax=3, ymin=-4, ymax=3, bottom=0, top=114):
+def build_blocks(xmin=-4, xmax=3, ymin=-4, ymax=3, bottom=0, top=514):
 
     # idiot insurance
     floor = min(bottom, top)
@@ -78,10 +78,24 @@ def distribute(bounds, min_distance, TotalPoints):
             ModelPath = random.choices(Choices, Weights)[0]
             Model = ModelData[ModelPath]
 
-            dist = lines.distance_to_line(Point[0], Point[1])
+            dist = (
+                lines.distance_to_line(Point[0], Point[1]) - Model["exclusion_radius"]
+            )
 
-            if dist <= Model["exclusion_radius"]:
+            Hardline = CFG["Biomes"]["hl2_white_forest"]["terrain"].get(
+                "tree_hard_distance", 128
+            )
+            Softline = CFG["Biomes"]["hl2_white_forest"]["terrain"].get(
+                "tree_fade_distance", 300
+            )
+
+            if dist <= Hardline:
                 continue
+            elif dist > Hardline and dist <= Softline:
+
+                Over = (dist - Hardline) / (Softline - Hardline)
+                if random.random() > Over:
+                    continue
 
             StumpSize = Model["base_radius"]
 
@@ -303,7 +317,8 @@ def main():
     TrackBase = ""
 
     # Step 3: Lay out the Block shape, currently done with a simple square.
-    Blocks = build_blocks(-1, 2, -1, 2)
+    Blocks = build_blocks()
+    # -1, 2, -1, 2
 
     # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are.
     sectors.build_sectors(Blocks)

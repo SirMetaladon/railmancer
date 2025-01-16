@@ -193,18 +193,20 @@ def generate_heightmap_min_max(Sector_Size, Terrain):
                 math.floor(real_y / Sector_Size),
             )
 
+            Top_of_Terrain = (Sector[0][1] * 16) - Terrain["minimum_tree_height"]
+
             metric = min(
                 max(
                     distance - Terrain["track_bias_base"],
                     0,
                 )
-                / Terrain["track_bias_slope"],
+                * (Terrain["track_bias_slope"] / Top_of_Terrain),
                 1,
             )
 
             top = tools.linterp(
                 Terrain["track_max"] + height,
-                (Sector[0][1] * 16) - Terrain["minimum_tree_height"],
+                Top_of_Terrain,
                 metric,
             )
             bottom = tools.linterp(
