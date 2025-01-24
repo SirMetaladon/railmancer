@@ -5,7 +5,9 @@ def encode_sector(X, Y):
 
 def get_sector(X, Y):
 
-    return Sectors.get(encode_sector(X, Y), False)
+    Payload = Sectors.get(encode_sector(X, Y), [False])[0]
+
+    return Payload
 
 
 def build_sectors(Blocks):
@@ -18,7 +20,7 @@ def build_sectors(Blocks):
         Sectors = {}
 
     for Entry in Blocks:
-        Sectors[encode_sector(Entry[0], Entry[1])] = [(Entry[2], Entry[3])]
+        Sectors[encode_sector(Entry[0], Entry[1])] = [[(Entry[2], Entry[3])]]
 
     # puts in 4 height values to tell you if nearby sectors are filled too
     # think of it as "is there a wall in this direction, and if so how high is it's floor"
@@ -38,9 +40,9 @@ def build_sectors(Blocks):
         XCoord = int(Sector.split("x")[0])
         YCoord = int(Sector.split("x")[1])
 
-        Sectors[Sector] += [probe_sector(XCoord + 1, YCoord)]
-        Sectors[Sector] += [probe_sector(XCoord, YCoord - 1)]
-        Sectors[Sector] += [probe_sector(XCoord - 1, YCoord)]
-        Sectors[Sector] += [probe_sector(XCoord, YCoord + 1)]
+        Sectors[Sector][0] += [probe_sector(XCoord + 1, YCoord)]
+        Sectors[Sector][0] += [probe_sector(XCoord, YCoord - 1)]
+        Sectors[Sector][0] += [probe_sector(XCoord - 1, YCoord)]
+        Sectors[Sector][0] += [probe_sector(XCoord, YCoord + 1)]
 
     return Sectors

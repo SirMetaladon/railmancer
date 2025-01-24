@@ -23,8 +23,8 @@ def build_heightmap_base(blocklist, Sector_Size, Noise_Size):
         "x_shift": Sector_Size * Extents[0],
         "y_scale": Sector_Size * (Extents[3] - Extents[2] + 1),
         "y_shift": Sector_Size * Extents[2],
-        "width": Noise_Size * (Extents[1] - Extents[0] + 1),
-        "height": Noise_Size * (Extents[3] - Extents[2] + 1),
+        "x_span": Noise_Size * (Extents[1] - Extents[0] + 1),
+        "y_span": Noise_Size * (Extents[3] - Extents[2] + 1),
     }
 
     return Extents
@@ -82,20 +82,20 @@ def bilinear_interpolation(Z, x, y):
 
 def generate_perlin_noise(scale, octaves, persistence, lacunarity, seed):
 
-    height = ContourMaps["height"]
-    width = ContourMaps["width"]
+    x_span = ContourMaps["x_span"]
+    y_span = ContourMaps["y_span"]
 
-    noise_array = np.zeros((height, width))
-    for y in range(height):
-        for x in range(width):
+    noise_array = np.zeros((x_span, y_span))
+    for y in range(x_span):
+        for x in range(y_span):
             noise_array[y][x] = pnoise2(
                 x / scale,
                 y / scale,
                 octaves=octaves,
                 persistence=persistence,
                 lacunarity=lacunarity,
-                repeatx=width,
-                repeaty=height,
+                repeatx=x_span,
+                repeaty=y_span,
                 base=seed,
             )
     return noise_array
@@ -159,16 +159,16 @@ def bleed(data, dir, strength=0.2, iterations=30, size=1):
 def generate_blank_map():
 
     return [
-        [0 for _ in range(ContourMaps["height"])] for _ in range(ContourMaps["width"])
+        [0 for _ in range(ContourMaps["y_span"])] for _ in range(ContourMaps["x_span"])
     ]
 
 
 def realize_position(virtual_x, virtual_y):
 
-    return ((virtual_x + 0.5) / ContourMaps["width"]) * ContourMaps[
+    return ((virtual_x + 0.5) / ContourMaps["x_span"]) * ContourMaps[
         "x_scale"
     ] + ContourMaps["x_shift"], (
-        (virtual_y + 0.5) / ContourMaps["height"]
+        (virtual_y + 0.5) / ContourMaps["y_span"]
     ) * ContourMaps[
         "y_scale"
     ] + ContourMaps[
@@ -181,8 +181,8 @@ def generate_heightmap_min_max(Sector_Size, Terrain):
     MinMap = generate_blank_map()
     MaxMap = generate_blank_map()
 
-    for virtual_x in range(ContourMaps["width"]):
-        for virtual_y in range(ContourMaps["height"]):
+    for virtual_x in range(ContourMaps["x_span"]):
+        for virtual_y in range(ContourMaps["y_span"]):
 
             real_x, real_y = realize_position(virtual_x, virtual_y)
 
@@ -193,7 +193,17 @@ def generate_heightmap_min_max(Sector_Size, Terrain):
                 math.floor(real_y / Sector_Size),
             )
 
-            Top_of_Terrain = (Sector[0][1] * 16) - Terrain["minimum_tree_height"]
+            if not Sector:
+
+                TopOfBlock = 114
+                BottomOfBlock = 0
+
+            else:
+
+                TopOfBlock = Sector[0][1]
+                BottomOfBlock = Sector[0][0]
+
+            Top_of_Terrain = (TopOfBlock * 16) - Terrain["minimum_tree_height"]
 
             metric = min(
                 max(
@@ -211,7 +221,7 @@ def generate_heightmap_min_max(Sector_Size, Terrain):
             )
             bottom = tools.linterp(
                 Terrain["track_min"] + height,
-                (Sector[0][0] * 16),
+                (BottomOfBlock * 16),
                 metric,
             )
 
@@ -255,6 +265,15 @@ def cut_and_fill_heightmap(heightmap, Terrain):
 
     for virtual_x in range(len(heightmap)):
         for virtual_y in range(len(heightmap[0])):
+
+            """print(
+                np.shape(heightmap),
+                len(heightmap),
+                len(heightmap[0]),
+                virtual_x,
+                virtual_y,
+                np.shape(ContourMaps["max_height"]),
+            )"""
 
             # converts the normalized position into one rescaled by the height min/max
             scaled = rescale_terrain(heightmap, virtual_x, virtual_y, Terrain)

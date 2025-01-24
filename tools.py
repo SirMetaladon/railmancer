@@ -119,3 +119,21 @@ def clamped(val, limit, limit2):
 
 def scale(val, scale, max):
     return (val * scale) + ((max / 2) * (1 - scale))
+
+
+def nudge(point, direction):
+
+    return (
+        point[0] + direction[0],
+        point[1] + direction[1],
+    )
+
+
+def quadnudge(point, length):
+
+    return [
+        nudge(point, [length, 0]),
+        nudge(point, [-length, 0]),
+        nudge(point, [0, length]),
+        nudge(point, [0, -length]),
+    ]

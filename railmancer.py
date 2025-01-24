@@ -29,7 +29,7 @@ def collapse_quantum_switchstands(Entities):
     return Entities
 
 
-def build_blocks(xmin=-4, xmax=3, ymin=-4, ymax=3, bottom=0, top=514):
+def build_blocks_square(xmin=-4, xmax=3, ymin=-4, ymax=3, bottom=0, top=514):
 
     # idiot insurance
     floor = min(bottom, top)
@@ -41,6 +41,47 @@ def build_blocks(xmin=-4, xmax=3, ymin=-4, ymax=3, bottom=0, top=514):
         for y in range(ymin, ymax + 1)
     ]
     return grid
+
+
+def block_path_random(xpos, ypos, count, block_height, step_height):
+
+    encoding = {sectors.encode_sector(xpos, ypos): [0]}
+    outputs = [[xpos, ypos, 0, block_height]]
+
+    for current_height in range(count):
+        block_move_options = tools.quadnudge((xpos, ypos), 1)
+        random.shuffle(block_move_options)
+
+        while block_move_options:
+            Pick = block_move_options.pop()
+            x_new, y_new = Pick
+
+            if x_new < -4 or x_new > 3 or y_new < -4 or y_new > 3:
+                continue
+
+            new_height = current_height * step_height
+
+            Sector = sectors.encode_sector(x_new, y_new)
+            if encoding.get(Sector, [-block_height])[-1] + block_height > new_height:
+                continue
+
+            tools.blind_add(encoding, Sector, new_height)
+
+            xpos = x_new
+            ypos = y_new
+            outputs += [[xpos, ypos, new_height, new_height + block_height]]
+
+            break
+
+        if not block_move_options:
+            break
+
+        # if the new positions aren't taken AND
+
+    # Options = tools.quadnudge((xstart,ystart),1)
+    # pick a valid one at random
+
+    return outputs
 
 
 def height_sample(real_x, real_y, samples, radius):
@@ -314,11 +355,15 @@ def main():
     global CFG
 
     CFG = configuration("config.json")
-    TrackBase = ""
+    TrackBase = ""  # "scan/squamish.vmf"
 
     # Step 3: Lay out the Block shape, currently done with a simple square.
-    Blocks = build_blocks()
+    # Blocks = build_blocks_square(0, 0, 0, 0)
     # -1, 2, -1, 2
+
+    Blocks = block_path_random(0, 0, 30, 114, 7)
+
+    print(Blocks)
 
     # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are.
     sectors.build_sectors(Blocks)
@@ -332,7 +377,7 @@ def main():
     Beziers, Entities = wayfinder.realize(Path)
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.
-    # Beziers, Entities = parser.import_track(TrackBase)
+    Beziers, Entities = parser.import_track(TrackBase)
 
     # Step 2: Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
     lines.encode_lines(Beziers, CFG["LineFidelity"])
@@ -345,6 +390,8 @@ def main():
     Extents = heightmap.build_heightmap_base(
         Blocks, CFG["Sector_Size"], CFG["Noise_Size"]
     )
+
+    # lines.display_path(Beziers, Extents)
 
     elapsed = tools.display_time(tools.click("submodule"))
     print("Bezier generation complete in " + elapsed)

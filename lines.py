@@ -2,6 +2,7 @@ import turtle
 import math
 import numpy as np
 from scipy.optimize import minimize
+import tools
 
 
 def bezier(t, Bez, dimensions):
@@ -94,27 +95,21 @@ def draw_perpendicular_line(point1, point2, distance=50):
         turtle.goto(canvas(pointB))
 
 
-def nudge(point, direction):
-
-    return (
-        point[0] + direction[0],
-        point[1] + direction[1],
-    )
-
-
 def mark(point, length=8):
     """Draws a green cross at the specified point."""
+
+    Points = tools.quadnudge(point, length / canvas_scale)
 
     # Draw the perpendicular line
     turtle.penup()
     turtle.color("green")
-    turtle.goto(canvas(nudge(point, [length / canvas_scale, 0])))
+    turtle.goto(canvas(Points[0]))
     turtle.pendown()
-    turtle.goto(canvas(nudge(point, [-length / canvas_scale, 0])))
+    turtle.goto(canvas(Points[1]))
     turtle.penup()
-    turtle.goto(canvas(nudge(point, [0, length / canvas_scale])))
+    turtle.goto(canvas(Points[2]))
     turtle.pendown()
-    turtle.goto(canvas(nudge(point, [0, -length / canvas_scale])))
+    turtle.goto(canvas(Points[3]))
     turtle.penup()
     turtle.color("white")
 

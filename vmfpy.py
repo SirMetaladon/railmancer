@@ -441,12 +441,17 @@ def block(block, sector):
         ceiling(x, y, top),
     ]
 
+    # this entire mechanism will need to be replaced due to multiple layers
+    # logic should be "am I connected more than a certain number of units, and am I the majority connection in my own stack? or something"
+
     for dir in range(4):
         AdjacentSector = sector[dir + 1]
+
         if (
             AdjacentSector is False
             or AdjacentSector[0] > top
             or AdjacentSector[1] < bottom
+            or abs(AdjacentSector[0] - bottom) > 10
         ):
             Brushes += [wall(x, y, bottom, top, dir, "ceiling")]
 
