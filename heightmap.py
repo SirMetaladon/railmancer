@@ -5,18 +5,18 @@ import random, itertools, math
 import lines, sectors, tools, terrain
 
 
-def build_heightmap_base(blocklist, Sector_Size, Noise_Size, SectorsPerGrid):
+def build_heightmap_base(Sector_Size, Noise_Size, SectorsPerGrid):
 
     global biome_maps
 
-    Extents = [0, 0, 0, 0]
+    """Extents = [0, 0, 0, 0]
     # x min, x max, y min, y max
 
     for block in blocklist:
         Extents[0] = min(Extents[0], block[0])
         Extents[1] = max(Extents[1], block[0])
         Extents[2] = min(Extents[2], block[1])
-        Extents[3] = max(Extents[3], block[1])
+        Extents[3] = max(Extents[3], block[1])"""
 
     biome_maps = {
         "sector_span_physical": Sector_Size,
@@ -24,8 +24,6 @@ def build_heightmap_base(blocklist, Sector_Size, Noise_Size, SectorsPerGrid):
         # "sector_shift": Sector_Size * ((SectorsPerGrid / 2) - 1),
         "overall_span_noise": Noise_Size * SectorsPerGrid,
     }
-
-    return Extents
 
 
 def bilinear_interpolation(Z, x, y):
@@ -61,29 +59,6 @@ def bilinear_interpolation(Z, x, y):
     )
 
     return output
-
-
-def generate_3d_perlin_noise(scale, octaves, persistence, lacunarity, seed):
-
-    span = biome_maps["span_noise"]
-
-    noise_array = np.zeros((span, span, span))
-    for z in range(span):
-        for y in range(span):
-            for x in range(span):
-                noise_array[z][y][x] = pnoise3(
-                    x / scale,
-                    y / scale,
-                    z / scale,
-                    octaves=octaves,
-                    persistence=persistence,
-                    lacunarity=lacunarity,
-                    base=seed,
-                )
-
-    noise_array = rescale_heightmap(noise_array, 0, 1)
-
-    return noise_array
 
 
 def display_perlin_layers(layers, cmap="viridis"):
@@ -166,9 +141,9 @@ def convert_virtual_to_real_pos(virtual_x, virtual_y, Sector):
     return real_x, real_y
 
 
-def convert_real_to_noise_pos(real_x, real_y, Sector):
+def convert_real_to_noise_pos(real_x, real_y, sector_data):
 
-    sector_x, sector_y = Sector["x"], Sector["y"]
+    sector_x, sector_y = sector_data["x"], sector_data["y"]
 
     noise_x = (real_x / biome_maps["sector_span_physical"] - sector_x) * biome_maps[
         "sector_span_noise"
@@ -180,7 +155,7 @@ def convert_real_to_noise_pos(real_x, real_y, Sector):
     return noise_x, noise_y
 
 
-def generate_sector_heightmaps(Sector_Size, Sectors):
+def generate_sector_heightmaps(Sectors):
     #
 
     for Sector in Sectors.items():
@@ -286,35 +261,41 @@ def generate_heightmap_node(sector, virtual_x, virtual_y):
 
 def cut_and_fill_sector_heightmaps(Sectors):
 
-    for sector in Sectors:
+    for sector in Sectors.items():
 
         # since it's guarenteed to be square, and all the same size
-        heightmap = sector[0]["heightmap"]
+        heightmap = sector[1][0]["heightmap"]
         poll_values = np.linspace(0, 1, len(heightmap))
+
+        # print(heightmap)
 
         for virtual_x in poll_values:
             for virtual_y in poll_values:
 
-                generate_heightmap_node(sector, virtual_x, virtual_y)
+                generate_heightmap_node(sector[1], virtual_x, virtual_y)
 
 
 def query_height(real_x, real_y, sector):
 
-    virtual_x, virtual_y = convert_real_to_noise_pos(real_x, real_y, sector)
+    virtual_x, virtual_y = convert_real_to_noise_pos(real_x, real_y, sector[0])
 
     height = bilinear_interpolation(sector[0]["heightmap"], virtual_x, virtual_y)
 
     return height
 
 
-def generate_per_biome_heightmaps(Biomes, Noise_Size, Terrain_Seed):
+def sample_terrain(x, y, z=10):
 
-    for Biome in Biomes.items():
+    Terrain = terrain.get()
 
-        biome_maps[Biome[0]] = generate_3d_perlin_noise(
-            Noise_Size / Biome[1]["terrain"]["noise_hill_resolution"],
-            Biome[1]["terrain"]["noise_octaves"],
-            Biome[1]["terrain"]["noise_persistence"],
-            Biome[1]["terrain"]["noise_lacunarity"],
-            Terrain_Seed,
-        )
+    scale = biome_maps["overall_span_noise"] / Terrain["noise_hill_resolution"]
+
+    return pnoise3(
+        x / scale,
+        y / scale,
+        z / scale,
+        octaves=Terrain["noise_octaves"],
+        persistence=Terrain["noise_persistence"],
+        lacunarity=Terrain["noise_lacunarity"],
+        base=Terrain["seed"],
+    )

@@ -434,12 +434,17 @@ def wall(block_x: int, block_y: int, block_z: int, height: int, dir: int, type="
     ]
 
 
-def create_scenery_block(block, sector):
-    x, y, bottom, top = block
+def create_scenery_block(sector):
+    block_x, block_y, block_floor, block_ceiling = (
+        sector[0]["x"],
+        sector[0]["y"],
+        sector[0]["floor"],
+        sector[0]["ceiling"],
+    )
 
     Brushes = [
-        floor(x, y, bottom),
-        ceiling(x, y, top),
+        floor(block_x, block_y, block_floor),
+        ceiling(block_x, block_y, block_ceiling),
     ]
 
     # this entire mechanism will need to be replaced due to multiple layers
@@ -451,16 +456,25 @@ def create_scenery_block(block, sector):
         adjacent_sector = sector[dir + 1]
 
         if adjacent_sector is False:
-            Brushes += [wall(x, y, bottom, top, dir, "ceiling")]
+            Brushes += [
+                wall(block_x, block_y, block_floor, block_ceiling, dir, "ceiling")
+            ]
 
         else:
-            _, _, nearby_floor, nearby_ceiling = adjacent_sector[0]
+            nearby_floor, nearby_ceiling = (
+                adjacent_sector["floor"],
+                adjacent_sector["ceiling"],
+            )
 
-            if nearby_floor > bottom:
-                Brushes += [wall(x, y, nearby_floor, bottom, dir)]
+            if nearby_floor > block_floor:
+                Brushes += [wall(block_x, block_y, nearby_floor, block_floor, dir)]
 
-            if nearby_ceiling < top:
-                Brushes += [wall(x, y, nearby_ceiling, top, dir, "ceiling")]
+            if nearby_ceiling < block_ceiling:
+                Brushes += [
+                    wall(
+                        block_x, block_y, nearby_ceiling, block_ceiling, dir, "ceiling"
+                    )
+                ]
 
     return Brushes
 

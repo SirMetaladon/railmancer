@@ -1,22 +1,4 @@
-"""def encode_sector(X, Y):
-
-    return 
-
-
-def get_sector(X, Y):
-
-    return Sectors.get(encode_sector(X, Y), False)
-    
-
-    def probe_sector(x, y):
-
-        Sector = get_sector(x, y)
-
-        if Sector is False:
-            return False
-
-        else:
-            return Sector[0]"""
+import random, tools
 
 
 def within_sector_height(sector_id, height):
@@ -36,7 +18,7 @@ def get_sector_id(x, y, height):
 
     for possible_sector in sector_list:
 
-        if within_sector_height(sector_list[0], height):
+        if within_sector_height(possible_sector, height):
 
             return possible_sector
 
@@ -45,16 +27,20 @@ def get_sector_id(x, y, height):
 
 def get_connected_sector_data(x, y, height):
 
-    sector_id = get_sector_id(x, y, height)
+    sector_id = get_sector_id(x, y, height + 21)
 
     if sector_id is False:
         return False
 
     sector_data = Sectors[sector_id][0]
 
-    if abs(height - sector_data["floor"]) > 21:
+    if abs(height - sector_data["floor"]) <= 21:
         # it may be prudent to add more checks here for more absurd (low-height) blocks, but it's low priority (just don't make blocks less than 21 high?)
+        # print(x, y, sector_data)
         return sector_data
+
+    else:
+        return False
 
 
 def new_sector(x, y, floor, ceiling):
@@ -86,7 +72,54 @@ def new_sector(x, y, floor, ceiling):
     ]
 
 
-def build_sectors(Blocks):
+def sector_path_random(data):
+
+    x_current, y_current, count, block_height, step_height = data
+
+    def code(x, y):
+        return f"{x}|{y}"
+
+    encoding = {code(x_current, y_current): [0]}
+    new_sector(x=x_current, y=y_current, floor=0, ceiling=block_height)
+
+    for current_height in range(count):
+        block_move_options = tools.quadnudge((x_current, y_current), 1)
+        random.shuffle(block_move_options)
+
+        done = False
+
+        while block_move_options:
+            Pick = block_move_options.pop()
+            x_new, y_new = Pick
+
+            if x_new < -4 or x_new > 3 or y_new < -4 or y_new > 3:
+                continue
+
+            new_height = (current_height + 1) * step_height
+
+            Sector = code(x_new, y_new)
+            if encoding.get(Sector, [-block_height])[-1] + block_height > new_height:
+                continue
+
+            tools.blind_add(encoding, Sector, new_height)
+
+            new_sector(
+                x=x_new,
+                y=y_new,
+                floor=new_height,
+                ceiling=new_height + block_height,
+            )
+
+            x_current, y_current = x_new, y_new
+
+            done = True
+            break
+
+        if not done:
+            break
+
+
+def build_sectors(build_method, data):
 
     global Sectors, sector_lookup_grid
 
@@ -96,11 +129,9 @@ def build_sectors(Blocks):
         Sectors = {}
         sector_lookup_grid = {}
 
-    for Entry in Blocks:
+    if build_method == "sector_path_random":
 
-        x, y, floor, ceiling = Entry
-
-        new_sector(x=x, y=y, floor=floor, ceiling=ceiling)
+        sector_path_random(data)
 
     for Sector in Sectors.items():
 
@@ -123,3 +154,18 @@ def build_sectors(Blocks):
         ]
 
     return Sectors
+
+
+"""def build_blocks_square(xmin=-4, xmax=3, ymin=-4, ymax=3, bottom=0, top=514):
+
+    # idiot insurance
+    floor = min(bottom, top)
+    ceiling = max(bottom, top)
+
+    grid = [
+        [x, y, floor, ceiling]
+        for x in range(xmin, xmax + 1)
+        for y in range(ymin, ymax + 1)
+    ]
+    return grid
+"""

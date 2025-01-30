@@ -29,64 +29,6 @@ def collapse_quantum_switchstands(Entities):
     return Entities
 
 
-def build_blocks_square(xmin=-4, xmax=3, ymin=-4, ymax=3, bottom=0, top=514):
-
-    # idiot insurance
-    floor = min(bottom, top)
-    ceiling = max(bottom, top)
-
-    grid = [
-        [x, y, floor, ceiling]
-        for x in range(xmin, xmax + 1)
-        for y in range(ymin, ymax + 1)
-    ]
-    return grid
-
-
-def block_path_random(xpos, ypos, count, block_height, step_height):
-
-    def code(x, y):
-        return f"{x}|{y}"
-
-    encoding = {code(xpos, ypos): [0]}
-    outputs = [[xpos, ypos, 0, block_height]]
-
-    for current_height in range(count):
-        block_move_options = tools.quadnudge((xpos, ypos), 1)
-        random.shuffle(block_move_options)
-
-        while block_move_options:
-            Pick = block_move_options.pop()
-            x_new, y_new = Pick
-
-            if x_new < -4 or x_new > 3 or y_new < -4 or y_new > 3:
-                continue
-
-            new_height = (current_height + 1) * step_height
-
-            Sector = code(x_new, y_new)
-            if encoding.get(Sector, [-block_height])[-1] + block_height > new_height:
-                continue
-
-            tools.blind_add(encoding, Sector, new_height)
-
-            xpos = x_new
-            ypos = y_new
-            outputs += [[xpos, ypos, new_height, new_height + block_height]]
-
-            break
-
-        if not block_move_options:
-            break
-
-        # if the new positions aren't taken AND
-
-    # Options = tools.quadnudge((xstart,ystart),1)
-    # pick a valid one at random
-
-    return outputs
-
-
 def height_sample(real_x, real_y, samples, radius, sector):
 
     SectorSize = 360 / samples
@@ -216,7 +158,7 @@ def query_alpha(real_x, real_y, Terrain, sector):
     return tools.clamped(AdjustedAlpha + NoiseMetric, 0, 255)
 
 
-def displacement_build(Block):
+def displacement_build(Block, sector):
 
     X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End = Block[:6]
 
@@ -233,14 +175,17 @@ def displacement_build(Block):
 
     heights = [
         [
-            (heightmap.query_height(position[0], position[1]) - Z_End)
+            (heightmap.query_height(position[0], position[1], sector) - Z_End)
             for position in x_layer
         ]
         for x_layer in posgrid
     ]
     # reconfigure this later to check the specific sub-biome data for this exact position
     alphas = [
-        [query_alpha(position[0], position[1], terrain.get()) for position in x_layer]
+        [
+            query_alpha(position[0], position[1], terrain.get(), sector)
+            for position in x_layer
+        ]
         for x_layer in posgrid
     ]
 
@@ -324,21 +269,13 @@ def main():
     CFG = terrain.configuration("config.json")
     TrackBase = ""  # "scan/squamish.vmf"
 
-    # Step 3: Lay out the Block shape, currently done with a simple square.
-    # Blocks = build_blocks_square(0, 0, 0, 0)
-    # -1, 2, -1, 2
-
-    Blocks = block_path_random(0, 0, 1000, 90, 7)
-
-    print(Blocks)
-
     Path = []
     Path += [[[2040, -32, 208], "0fw", -90]]
     Path += [
         [[2040 + CFG["Sector_Size"], (CFG["Sector_Size"] * 3) - 32, 208], "0fw", -90]
     ]
 
-    Beziers, Entities = wayfinder.realize(Path)
+    # Beziers, Entities = wayfinder.realize(Path)
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.
     Beziers, Entities = parser.import_track(TrackBase)
@@ -351,12 +288,11 @@ def main():
     Entities = collapse_quantum_switchstands(Entities)
 
     # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are. Also contains a map for "what block is next to this one"
-    Sectors = sectors.build_sectors(Blocks)
+    Sectors = sectors.build_sectors("sector_path_random", (0, 0, 1000, 90, 7))
 
     # Step 5: Builds the Extents and ContourMaps base from the sectors/blocks
     # the large number is the size of the Hammer grid
-    Extents = heightmap.build_heightmap_base(
-        Blocks,
+    heightmap.build_heightmap_base(
         CFG["Sector_Size"],
         CFG["Noise_Size"],
         math.floor(32768 / CFG["Sector_Size"]),
@@ -367,19 +303,12 @@ def main():
     elapsed = tools.display_time(tools.click("submodule"))
     print("Bezier generation complete in " + elapsed)
 
-    """the plan:
-    make a noisemap of the minimum height of the terrain and another for the maximum height based on the lines
-    for each biome, generate noisemaps; then adjust them to the master heightmap min/maxes, then cut them
-    
-    """
+    heightmap.generate_sector_heightmaps(Sectors)
 
-    # this needs to happen first, per district, then get rectified between biomes and districts... not sure how I'm going to do that
+    print(Sectors["0x0x0"])
 
-    heightmap.generate_sector_heightmaps(CFG["Sector_Size"], Sectors)
-
-    heightmap.generate_biome_heightmaps(
-        CFG["Biomes"], CFG["Noise_Size"], CFG["Terrain_Seed"]
-    )
+    elapsed = tools.display_time(tools.click("submodule"))
+    print("Sector Generation done in " + elapsed)
 
     heightmap.cut_and_fill_sector_heightmaps(Sectors)
 
@@ -388,20 +317,23 @@ def main():
 
     Brushes = []
 
-    for fill in Blocks:
+    for sector in Sectors.items():
 
-        Brushes += vmfpy.create_scenery_block(fill)
+        sector_data = sector[1]
+        x, y, z = sector_data[0]["x"], sector_data[0]["y"], sector_data[0]["floor"]
+
+        Brushes += vmfpy.create_scenery_block(sector_data)
         Disps = vmfpy.displacements(
-            fill[0],
-            fill[1],
-            fill[2],
+            x,
+            y,
+            z,
             CFG["Disps_Per_Sector"],
             CFG["Biomes"]["hl2_white_forest"]["terrain"].get(
                 "ground_texture", "dev/dev_blendmeasure"
             ),
         )
         for Entry in Disps:
-            Entry += [displacement_build(Entry)]
+            Entry += [displacement_build(Entry, sector_data)]
         Brushes += Disps
 
     elapsed = tools.display_time(tools.click("submodule"))
@@ -409,20 +341,20 @@ def main():
 
     Terrain = CFG["Biomes"]["hl2_white_forest"]["terrain"]
 
-    Entities += distribute(
+    """Entities += distribute(
         (
             (Extents[0] * CFG["Sector_Size"], (Extents[1] + 1) * CFG["Sector_Size"]),
             (Extents[2] * CFG["Sector_Size"], (Extents[3] + 1) * CFG["Sector_Size"]),
         ),
         Terrain.get("model_minimum_distance", 110),
-        Terrain.get("models_per_sector", 125) * len(Blocks),  # count
-    )
+        Terrain.get("models_per_sector", 125),  # count
+    )"""
 
     elapsed = tools.display_time(tools.click("submodule"))
     print("Scattering complete in " + elapsed)
 
     vmfpy.write_to_vmf(
-        Brushes, Entities, f"{"railmancer"}_{random.randint(3000,3999)}{".vmf"}"
+        Brushes, Entities, f"{"railmancer"}_{random.randint(4000,4999)}{".vmf"}"
     )
 
     elapsed = tools.display_time(tools.click("total"))
