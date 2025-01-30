@@ -1,7 +1,7 @@
 import track, tools, random, bisect, time, math
 import numpy as np
 from sympy import simplify
-import sectors, lines, pathways
+import lines, pathways
 from sympy import symbols, Eq, solve
 
 

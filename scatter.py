@@ -6,7 +6,7 @@ import sectors
 
 def point_generator(
     density_field,
-    bounds,
+    sector,
     num_dots,
     minimum_spacing,
     resolution=1000,
@@ -23,8 +23,8 @@ def point_generator(
     Returns:
         np.ndarray of shape (N, 2) with dot coordinates.
     """
-    x_min, x_max = bounds[0]
-    y_min, y_max = bounds[1]
+    x_min, x_max = sector[0]["x"], sector[0]["x"] + 1
+    y_min, y_max = sector[0]["y"], sector[0]["y"] + 1
 
     # Create a grid over the plane
     x_vals = np.linspace(x_min, x_max, resolution)
@@ -101,10 +101,6 @@ def density_field(x, y):
 
 
 """
-bounds = ((30, 4050), (30, 4050))
-num_dots = 250
-
-dots = point_generator(density_field, bounds, num_dots)
 
 
 # Plot the result

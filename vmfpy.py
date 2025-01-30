@@ -1,4 +1,5 @@
 import os, re
+import sectors
 
 
 def re_id(original_string, replacement):
@@ -401,22 +402,22 @@ def wall(block_x: int, block_y: int, block_z: int, height: int, dir: int, type="
 
     dir = dir % 4
 
-    if dir == 0:
+    if dir == 1:
         x_min = 254
         x_max = 255
         y_min = 0
         y_max = 255
-    elif dir == 3:
+    elif dir == 0:
         x_min = 0
         x_max = 255
         y_min = 254
         y_max = 255
-    elif dir == 2:
+    elif dir == 3:
         x_min = 0
         x_max = 1
         y_min = 0
         y_max = 255
-    elif dir == 1:
+    elif dir == 2:
         x_min = 0
         x_max = 255
         y_min = 0
@@ -433,7 +434,7 @@ def wall(block_x: int, block_y: int, block_z: int, height: int, dir: int, type="
     ]
 
 
-def block(block, sector):
+def create_scenery_block(block, sector):
     x, y, bottom, top = block
 
     Brushes = [
@@ -445,22 +446,21 @@ def block(block, sector):
     # logic should be "am I connected more than a certain number of units, and am I the majority connection in my own stack? or something"
 
     for dir in range(4):
-        AdjacentSector = sector[dir + 1]
 
-        if (
-            AdjacentSector is False
-            or AdjacentSector[0] > top
-            or AdjacentSector[1] < bottom
-            or abs(AdjacentSector[0] - bottom) > 10
-        ):
+        # the +1 is because [0] contains this sector's information
+        adjacent_sector = sector[dir + 1]
+
+        if adjacent_sector is False:
             Brushes += [wall(x, y, bottom, top, dir, "ceiling")]
 
         else:
+            _, _, nearby_floor, nearby_ceiling = adjacent_sector[0]
 
-            if AdjacentSector[0] > bottom and AdjacentSector[0] < top:
-                Brushes += [wall(x, y, AdjacentSector[0], bottom, dir)]
-            if AdjacentSector[1] < top and AdjacentSector[1] > bottom:
-                Brushes += [wall(x, y, AdjacentSector[1], top, dir, "ceiling")]
+            if nearby_floor > bottom:
+                Brushes += [wall(x, y, nearby_floor, bottom, dir)]
+
+            if nearby_ceiling < top:
+                Brushes += [wall(x, y, nearby_ceiling, top, dir, "ceiling")]
 
     return Brushes
 

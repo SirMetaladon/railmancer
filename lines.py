@@ -304,14 +304,9 @@ def encode_lines(Beziers, LineFidelity):
     ], KDTree(points)
 
 
-def distance_to_line(real_x, real_y, dim=2):
+def distance_to_line(real_x, real_y):
 
     Shortest, idx = LineDistanceTree.query([real_x, real_y])
-
-    if dim == 2:
-        return Shortest
-
-    # if dim != 2
     Height = LineDistanceHeights[idx]
 
     return Shortest, Height

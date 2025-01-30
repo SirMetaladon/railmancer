@@ -1,5 +1,5 @@
-import random
-import heightmap, lines, scatter, wayfinder, tools, vmfpy, parser, sectors
+import random, math
+import heightmap, lines, scatter, wayfinder, tools, vmfpy, parser, sectors, terrain
 
 
 def collapse_quantum_switchstands(Entities):
@@ -18,8 +18,8 @@ def collapse_quantum_switchstands(Entities):
 
         if Collapse:
 
-            FirstDistance = lines.distance_to_line(Ent[0][1][0], Ent[0][1][1])
-            SecondDistance = lines.distance_to_line(Ent[0][2][0], Ent[0][2][1])
+            FirstDistance, _ = lines.distance_to_line(Ent[0][1][0], Ent[0][1][1])
+            SecondDistance, _ = lines.distance_to_line(Ent[0][2][0], Ent[0][2][1])
 
             if FirstDistance > SecondDistance:
                 Entities[ID] = Ent[1]
@@ -45,7 +45,10 @@ def build_blocks_square(xmin=-4, xmax=3, ymin=-4, ymax=3, bottom=0, top=514):
 
 def block_path_random(xpos, ypos, count, block_height, step_height):
 
-    encoding = {sectors.encode_sector(xpos, ypos): [0]}
+    def code(x, y):
+        return f"{x}|{y}"
+
+    encoding = {code(xpos, ypos): [0]}
     outputs = [[xpos, ypos, 0, block_height]]
 
     for current_height in range(count):
@@ -59,9 +62,9 @@ def block_path_random(xpos, ypos, count, block_height, step_height):
             if x_new < -4 or x_new > 3 or y_new < -4 or y_new > 3:
                 continue
 
-            new_height = current_height * step_height
+            new_height = (current_height + 1) * step_height
 
-            Sector = sectors.encode_sector(x_new, y_new)
+            Sector = code(x_new, y_new)
             if encoding.get(Sector, [-block_height])[-1] + block_height > new_height:
                 continue
 
@@ -84,51 +87,48 @@ def block_path_random(xpos, ypos, count, block_height, step_height):
     return outputs
 
 
-def height_sample(real_x, real_y, samples, radius):
+def height_sample(real_x, real_y, samples, radius, sector):
 
     SectorSize = 360 / samples
-    Heights = [heightmap.query_height(real_x, real_y)]
+    Heights = [heightmap.query_height(real_x, real_y, sector)]
     Arm = [radius, 0]
 
     for Slice in range(samples):
 
         offset = tools.rot_z(Arm, Slice * SectorSize)
 
-        Example = heightmap.query_height(real_x + offset[0], real_y + offset[1])
+        Example = heightmap.query_height(real_x + offset[0], real_y + offset[1], sector)
         Heights += [Example]
 
     return Heights
 
 
-def distribute(bounds, min_distance, TotalPoints):
+def distribute(min_distance, TotalPoints, Sector):
 
     EntsOut = []
     Points = scatter.point_generator(
-        scatter.density_field, bounds, int(TotalPoints * 2), min_distance
+        scatter.density_field, Sector, int(TotalPoints * 2), min_distance
     )
+
+    Terrain = terrain.get()
 
     for Point in Points:
 
         if TotalPoints:
             TotalPoints -= 1
 
-            ModelData = CFG["Biomes"]["hl2_white_forest"]["models"]
+            ModelData = terrain.biome()["models"]
             Choices = list(ModelData.keys())
             Weights = tools.extract(ModelData, Choices, "weight", 0)
 
             ModelPath = random.choices(Choices, Weights)[0]
             Model = ModelData[ModelPath]
 
-            dist = (
-                lines.distance_to_line(Point[0], Point[1]) - Model["exclusion_radius"]
-            )
+            realdist, _ = lines.distance_to_line(Point[0], Point[1])
+            dist = realdist - Model["exclusion_radius"]
 
-            Hardline = CFG["Biomes"]["hl2_white_forest"]["terrain"].get(
-                "tree_hard_distance", 128
-            )
-            Softline = CFG["Biomes"]["hl2_white_forest"]["terrain"].get(
-                "tree_fade_distance", 300
-            )
+            Hardline = Terrain.get("tree_hard_distance", 128)
+            Softline = Terrain.get("tree_fade_distance", 300)
 
             if dist <= Hardline:
                 continue
@@ -140,7 +140,7 @@ def distribute(bounds, min_distance, TotalPoints):
 
             StumpSize = Model["base_radius"]
 
-            HeightSamples = height_sample(Point[0], Point[1], 5, StumpSize)
+            HeightSamples = height_sample(Point[0], Point[1], 5, StumpSize, Sector)
 
             ModelSteepnessAllowed = Model.get("steepness", 999)
             LowestSteepnessAllowed = Model.get("min_steep", -999)
@@ -187,11 +187,11 @@ def row_encode(heights: list):
     return String
 
 
-def query_alpha(real_x, real_y, Terrain):
+def query_alpha(real_x, real_y, Terrain, sector):
 
-    dist = lines.distance_to_line(real_x, real_y)
+    dist, _ = lines.distance_to_line(real_x, real_y)
 
-    HeightSamples = height_sample(real_x, real_y, 6, 20)
+    HeightSamples = height_sample(real_x, real_y, 6, 20, sector)
 
     LocalSlope = (max(HeightSamples) - min(HeightSamples)) / (40)
     SlopeTarget = Terrain.get("alpha_steepness_cutoff", 0.75)
@@ -240,12 +240,7 @@ def displacement_build(Block):
     ]
     # reconfigure this later to check the specific sub-biome data for this exact position
     alphas = [
-        [
-            query_alpha(
-                position[0], position[1], CFG["Biomes"]["hl2_white_forest"]["terrain"]
-            )
-            for position in x_layer
-        ]
+        [query_alpha(position[0], position[1], terrain.get()) for position in x_layer]
         for x_layer in posgrid
     ]
 
@@ -316,31 +311,6 @@ def displacement_build(Block):
 			}}"""
 
 
-def configuration(path: str):
-
-    Data = tools.import_json(path)
-
-    try:
-        Data["Biomes"]
-    except:
-        # no biomes? crash on purpose, you need that!
-        print("Unable to get Biomes from CFG!")
-        print(Exception)
-
-    # this is the default CFG data
-    Expecting = [
-        ["Sector_Size", 4080],
-        ["Noise_Size", 25],
-        ["LineFidelity", 25],
-        ["Terrain_Seed", random.randint(0, 100)],
-    ]
-
-    for Entry in Expecting:
-        Data[Entry[0]] = Data.get(Entry[0], Entry[1])
-
-    return Data
-
-
 def main():
 
     tools.click("total")
@@ -351,22 +321,16 @@ def main():
     Entities = []
     Brushes = []
 
-    # imported data
-    global CFG
-
-    CFG = configuration("config.json")
+    CFG = terrain.configuration("config.json")
     TrackBase = ""  # "scan/squamish.vmf"
 
     # Step 3: Lay out the Block shape, currently done with a simple square.
     # Blocks = build_blocks_square(0, 0, 0, 0)
     # -1, 2, -1, 2
 
-    Blocks = block_path_random(0, 0, 30, 114, 7)
+    Blocks = block_path_random(0, 0, 1000, 90, 7)
 
     print(Blocks)
-
-    # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are.
-    sectors.build_sectors(Blocks)
 
     Path = []
     Path += [[[2040, -32, 208], "0fw", -90]]
@@ -386,9 +350,16 @@ def main():
     # Step 2.5: Since the KDTree has been generated, collapse some special decisionmaking for track entities
     Entities = collapse_quantum_switchstands(Entities)
 
+    # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are. Also contains a map for "what block is next to this one"
+    Sectors = sectors.build_sectors(Blocks)
+
     # Step 5: Builds the Extents and ContourMaps base from the sectors/blocks
+    # the large number is the size of the Hammer grid
     Extents = heightmap.build_heightmap_base(
-        Blocks, CFG["Sector_Size"], CFG["Noise_Size"]
+        Blocks,
+        CFG["Sector_Size"],
+        CFG["Noise_Size"],
+        math.floor(32768 / CFG["Sector_Size"]),
     )
 
     # lines.display_path(Beziers, Extents)
@@ -401,18 +372,16 @@ def main():
     for each biome, generate noisemaps; then adjust them to the master heightmap min/maxes, then cut them
     
     """
-    # 2 means nothing at the moment, just 2 axies.
-    heightmap.generate_test_biomes(2)
 
     # this needs to happen first, per district, then get rectified between biomes and districts... not sure how I'm going to do that
 
-    heightmap.generate_heightmap_min_max(
-        CFG["Sector_Size"], CFG["Biomes"]["hl2_white_forest"]["terrain"]
-    )
+    heightmap.generate_sector_heightmaps(CFG["Sector_Size"], Sectors)
 
     heightmap.generate_biome_heightmaps(
         CFG["Biomes"], CFG["Noise_Size"], CFG["Terrain_Seed"]
     )
+
+    heightmap.cut_and_fill_sector_heightmaps(Sectors)
 
     elapsed = tools.display_time(tools.click("submodule"))
     print("Contours done in " + elapsed)
@@ -421,7 +390,7 @@ def main():
 
     for fill in Blocks:
 
-        Brushes += vmfpy.block(fill, sectors.get_sector(fill[0], fill[1]))
+        Brushes += vmfpy.create_scenery_block(fill)
         Disps = vmfpy.displacements(
             fill[0],
             fill[1],
