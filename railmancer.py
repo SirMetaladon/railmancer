@@ -1,5 +1,5 @@
 import random, math
-import heightmap, lines, scatter, wayfinder, tools, vmfpy, parser, sectors, terrain
+import heightmap, lines, scatter, wayfinder, tools, vmfpy, parser, sectors, terrain, track
 
 
 def collapse_quantum_switchstands(Entities):
@@ -266,8 +266,11 @@ def main():
     Entities = []
     Brushes = []
 
+    directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
+    track.build_track_library(directory, ".mdl")
+
     CFG = terrain.configuration("config.json")
-    TrackBase = ""  # "scan/squamish.vmf"
+    TrackBase = "scan/swirly.vmf"  # "scan/squamish.vmf"
 
     Path = []
     Path += [[[2040, -32, 208], "0fw", -90]]
@@ -288,7 +291,8 @@ def main():
     Entities = collapse_quantum_switchstands(Entities)
 
     # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are. Also contains a map for "what block is next to this one"
-    Sectors = sectors.build_sectors("sector_path_random", (0, 0, 1000, 90, 7))
+    # Sectors = sectors.build_sectors("sector_path_random", (0, 0, 1, 90, 0))
+    Sectors = sectors.build_sectors("sector_square", (-2, 2, -2, 2, 0, 214))
 
     # Step 5: Builds the Extents and ContourMaps base from the sectors/blocks
     # the large number is the size of the Hammer grid

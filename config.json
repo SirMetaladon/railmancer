@@ -1,7 +1,7 @@
 {
   "LineFidelity": 25,
   "Sector_Size": 4080,
-  "Noise_Size": 25,
+  "Noise_Size": 3,
   "Disps_Per_Sector": 3,
   "Biomes": {
     "tf2_alpine_snow": {
@@ -152,7 +152,7 @@
         "noise_persistence": 0.2,
         "noise_lacunarity": 4,
         "noise_octaves": 2,
-        "noise_multiplier": 1, 
+        "noise_multiplier": 0, 
         "minimum_tree_height": 480,
         "model_minimum_distance": 100,
         "tree_fade_distance": 1000,

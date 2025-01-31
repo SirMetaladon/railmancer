@@ -72,6 +72,24 @@ def new_sector(x, y, floor, ceiling):
     ]
 
 
+def sector_square(data):
+
+    xmin, xmax, ymin, ymax, bottom, top = data
+
+    # idiot insurance
+    floor = min(bottom, top)
+    ceiling = max(bottom, top)
+
+    for x in range(xmin, xmax + 1):
+        for y in range(ymin, ymax + 1):
+            new_sector(
+                x=x,
+                y=y,
+                floor=floor,
+                ceiling=ceiling,
+            )
+
+
 def sector_path_random(data):
 
     x_current, y_current, count, block_height, step_height = data
@@ -132,6 +150,10 @@ def build_sectors(build_method, data):
     if build_method == "sector_path_random":
 
         sector_path_random(data)
+
+    elif build_method == "sector_square":
+
+        sector_square(data)
 
     for Sector in Sectors.items():
 

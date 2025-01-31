@@ -2,7 +2,7 @@ import numpy as np
 from noise import pnoise3
 import matplotlib.pyplot as plt
 import random, itertools, math
-import lines, sectors, tools, terrain
+import lines, sectors, tools, terrain, time
 
 
 def build_heightmap_base(Sector_Size, Noise_Size, SectorsPerGrid):
@@ -26,23 +26,77 @@ def build_heightmap_base(Sector_Size, Noise_Size, SectorsPerGrid):
     }
 
 
-def bilinear_interpolation(Z, x, y):
+def unify(sector_object, LeftXCoord, RightXCoord, TopYCoord, BottomYCoord):
 
-    if len(Z) <= 1:
-        return 0
+    Size = len(sector_object[0]["heightmap"])
 
-    x_actual_pos = max(min(0.999, x), 0) * (len(Z) - 1)
-    y_actual_pos = max(min(0.999, y), 0) * (len(Z[0]) - 1)
+    if sector_object[0].get("unified", False) is not False:
+        Z = sector_object[0]["unified"]
+
+    else:
+
+        center = sector_object[0]["heightmap"]
+
+        othergrids = []
+        for x in range(4):
+            grid = sector_object[x + 1]
+
+            if grid is False:
+                othergrids += [blank_list_grid(2, Size, False)]
+            else:
+                othergrids += [grid["heightmap"]]
+
+        up, right, down, left = othergrids
+
+        Z = tools.merge_grids(center, left, right, up, down)
+        sector_object[0]["unified"] = Z
+
+    BottomLeftCornerAlpha = Z[LeftXCoord + Size][BottomYCoord + Size]
+    TopLeftCornerAlpha = Z[LeftXCoord + Size][TopYCoord + Size]
+    BottomRightCornerAlpha = Z[RightXCoord + Size][BottomYCoord + Size]
+    TopRightCornerAlpha = Z[RightXCoord + Size][TopYCoord + Size]
+
+    if BottomLeftCornerAlpha is False:
+        return False
+    if TopLeftCornerAlpha is False:
+        return False
+    if BottomRightCornerAlpha is False:
+        return False
+    if TopRightCornerAlpha is False:
+        return False
+
+    return (
+        BottomLeftCornerAlpha,
+        TopLeftCornerAlpha,
+        BottomRightCornerAlpha,
+        TopRightCornerAlpha,
+    )
+
+
+def sector_interpolator(sector_object, x, y):
+
+    if sector_object is None:
+        return 1000
+
+    x_actual_pos = max(min(1, x), 0) * (len(sector_object[0]["heightmap"]) - 1)
+    y_actual_pos = max(min(1, y), 0) * (len(sector_object[0]["heightmap"][0]) - 1)
 
     LeftXCoord = int(x)
     BottomYCoord = int(y)
 
     RightXCoord, TopYCoord = LeftXCoord + 1, BottomYCoord + 1
 
-    BottomLeftCornerAlpha = Z[LeftXCoord][BottomYCoord]
-    TopLeftCornerAlpha = Z[LeftXCoord][TopYCoord]
-    BottomRightCornerAlpha = Z[RightXCoord][BottomYCoord]
-    TopRightCornerAlpha = Z[RightXCoord][TopYCoord]
+    Corners = unify(sector_object, LeftXCoord, RightXCoord, TopYCoord, BottomYCoord)
+
+    if Corners == False:
+        return -1000
+
+    (
+        BottomLeftCornerAlpha,
+        TopLeftCornerAlpha,
+        BottomRightCornerAlpha,
+        TopRightCornerAlpha,
+    ) = Corners
 
     interp_ratio_x = x_actual_pos - LeftXCoord
     interp_ratio_y = y_actual_pos - BottomYCoord
@@ -116,24 +170,27 @@ def bleed(data, dir, strength=0.2, iterations=30, size=1):
     return data
 
 
-def generate_blank_map(dimensions, length):
+def blank_list_grid(dimensions, length, fill=0):
 
     size = range(length)
 
     if dimensions == 2:
 
-        return [[0 for _ in size] for _ in size]
+        return [[fill for _ in size] for _ in size]
 
     if dimensions == 3:
 
         # 3-dimensional array of zeroes
-        return [[[0 for _ in size] for _ in size] for _ in size]
+        return [[[fill for _ in size] for _ in size] for _ in size]
 
 
-def convert_virtual_to_real_pos(virtual_x, virtual_y, Sector):
+def convert_noise_to_real_pos(noise_x, noise_y, sector_data):
 
     # virtual X and Y are 0-1 within the sector
-    sector_x, sector_y = Sector["x"], Sector["y"]
+    sector_x, sector_y = sector_data["x"], sector_data["y"]
+
+    virtual_x = noise_x / biome_maps["sector_span_noise"]
+    virtual_y = noise_y / biome_maps["sector_span_noise"]
 
     real_x = (sector_x + virtual_x) * biome_maps["sector_span_physical"]
     real_y = (sector_y + virtual_y) * biome_maps["sector_span_physical"]
@@ -141,38 +198,34 @@ def convert_virtual_to_real_pos(virtual_x, virtual_y, Sector):
     return real_x, real_y
 
 
-def convert_real_to_noise_pos(real_x, real_y, sector_data):
+def convert_real_to_virtual_pos(real_x, real_y, sector_data):
 
     sector_x, sector_y = sector_data["x"], sector_data["y"]
 
-    noise_x = (real_x / biome_maps["sector_span_physical"] - sector_x) * biome_maps[
-        "sector_span_noise"
-    ]
-    noise_y = (real_y / biome_maps["sector_span_physical"] - sector_y) * biome_maps[
-        "sector_span_noise"
-    ]
+    virtual_x = (real_x / biome_maps["sector_span_physical"]) - sector_x
+    virtual_y = (real_y / biome_maps["sector_span_physical"]) - sector_y
 
-    return noise_x, noise_y
+    # noise_x = virtual_x * biome_maps["sector_span_noise"]
+    # noise_y = virtual_y * biome_maps["sector_span_noise"]
+
+    return virtual_x, virtual_y
 
 
 def generate_sector_heightmaps(Sectors):
-    #
 
     for Sector in Sectors.items():
 
-        MinMap = generate_blank_map(2, biome_maps["sector_span_noise"])
-        MaxMap = generate_blank_map(2, biome_maps["sector_span_noise"])
+        sector_data = Sector[1][0]
+
+        MinMap = blank_list_grid(2, biome_maps["sector_span_noise"])
+        MaxMap = blank_list_grid(2, biome_maps["sector_span_noise"])
+        sector_data["heightmap"] = blank_list_grid(2, biome_maps["sector_span_noise"])
 
         for noise_x in range(biome_maps["sector_span_noise"]):
             for noise_y in range(biome_maps["sector_span_noise"]):
 
-                virtual_x, virtual_y = (
-                    noise_x / biome_maps["sector_span_noise"],
-                    noise_y / biome_maps["sector_span_noise"],
-                )
-
-                real_x, real_y = convert_virtual_to_real_pos(
-                    virtual_x, virtual_y, Sector[1][0]
+                real_x, real_y = convert_noise_to_real_pos(
+                    noise_x, noise_y, sector_data
                 )
 
                 # replace with "get terrain at this point" feature
@@ -180,8 +233,8 @@ def generate_sector_heightmaps(Sectors):
 
                 distance, height = lines.distance_to_line(real_x, real_y)
 
-                TopOfBlock = Sector[1][0]["ceiling"]
-                BottomOfBlock = Sector[1][0]["floor"]
+                TopOfBlock = sector_data["ceiling"]
+                BottomOfBlock = sector_data["floor"]
 
                 Top_of_Terrain = (TopOfBlock * 16) - Terrain["minimum_tree_height"]
 
@@ -208,16 +261,16 @@ def generate_sector_heightmaps(Sectors):
                 MinMap[noise_x][noise_y] = bottom
                 MaxMap[noise_x][noise_y] = top
 
-        Sector[1][0]["minmap"] = bleed(MaxMap, "min")
-        Sector[1][0]["maxmap"] = bleed(MinMap, "max")
+        sector_data["maxmap"] = MaxMap
+        sector_data["minmap"] = MinMap
 
 
-def rescale_terrain(sector, virtual_x, virtual_y, Terrain):
+def rescale_terrain(sector_data, noise_x, noise_y, Terrain):
 
     return tools.linterp(
-        sector[6][virtual_x][virtual_y],
-        sector[5][virtual_x][virtual_y],
-        (Terrain["noise_multiplier"] * biome_maps["hl2_white_forest"])
+        sector_data["minmap"][noise_x][noise_y],
+        sector_data["maxmap"][noise_x][noise_y],
+        Terrain["noise_multiplier"]  # * biome_maps["hl2_white_forest"])
         + max(((1 - Terrain["noise_multiplier"]) * 0.5), 0),
     )
 
@@ -241,45 +294,49 @@ def carve_height(initial_height, intended_height, distance, Terrain):
     )
 
 
-def generate_heightmap_node(sector, virtual_x, virtual_y):
+def generate_heightmap_node(sector_object, noise_x, noise_y):
+
+    sector_data = sector_object[0]
 
     Terrain = terrain.get()
 
     # converts the normalized position into one rescaled by the height min/max
-    scaled = rescale_terrain(virtual_x, virtual_y, Terrain)
+    scaled = rescale_terrain(sector_data, noise_x, noise_y, Terrain)
 
-    real_x, real_y = convert_virtual_to_real_pos(virtual_x, virtual_y)
+    real_x, real_y = convert_noise_to_real_pos(noise_x, noise_y, sector_data)
 
-    distance, height = lines.distance_to_line(real_x, real_y, 3)
+    distance, height = lines.distance_to_line(real_x, real_y)
 
     result = carve_height(
         scaled, height + Terrain["cut_base_height"], distance, Terrain
     )
 
-    sector[0]["heightmap"][virtual_x][virtual_y] = result
+    sector_data["heightmap"][noise_x][noise_y] = result
 
 
 def cut_and_fill_sector_heightmaps(Sectors):
 
     for sector in Sectors.items():
 
+        sector_object = sector[1]
+
         # since it's guarenteed to be square, and all the same size
-        heightmap = sector[1][0]["heightmap"]
-        poll_values = np.linspace(0, 1, len(heightmap))
+        heightmap = sector_object[0]["heightmap"]
+        poll_values = range(len(heightmap))
 
         # print(heightmap)
 
-        for virtual_x in poll_values:
-            for virtual_y in poll_values:
+        for noise_x in poll_values:
+            for noise_y in poll_values:
 
-                generate_heightmap_node(sector[1], virtual_x, virtual_y)
+                generate_heightmap_node(sector_object, noise_x, noise_y)
 
 
-def query_height(real_x, real_y, sector):
+def query_height(real_x, real_y, sector_object):
 
-    virtual_x, virtual_y = convert_real_to_noise_pos(real_x, real_y, sector[0])
+    noise_x, noise_y = convert_real_to_virtual_pos(real_x, real_y, sector_object[0])
 
-    height = bilinear_interpolation(sector[0]["heightmap"], virtual_x, virtual_y)
+    height = sector_interpolator(sector_object, noise_x, noise_y)
 
     return height
 

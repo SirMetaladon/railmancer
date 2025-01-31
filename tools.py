@@ -137,3 +137,26 @@ def quadnudge(point, length):
         nudge(point, [0, length]),
         nudge(point, [0, -length]),
     ]
+
+
+def merge_grids(center, left, right, up, down, fill_value=True):
+    N = len(center)  # Each sub-grid is N x N
+    merged_size = 3 * N  # Final grid will be 3N x 3N
+
+    # Initialize the full grid with the fill_value
+    merged = [[fill_value] * merged_size for _ in range(merged_size)]
+
+    # Helper function to insert a grid into a position
+    def insert_grid(target, source, x_offset, y_offset):
+        for i in range(N):
+            for j in range(N):
+                target[x_offset + i][y_offset + j] = source[i][j]
+
+    # Place the 5 known grids into the merged grid
+    insert_grid(merged, center, N, N)
+    insert_grid(merged, left, 0, N)
+    insert_grid(merged, right, 2 * N, N)
+    insert_grid(merged, down, N, 0)
+    insert_grid(merged, up, N, 2 * N)
+
+    return merged  # The fully merged grid
