@@ -19,11 +19,13 @@ def configuration(path: str):
         ["Sector_Size", 4080],
         ["Noise_Size", 25],
         ["LineFidelity", 25],
-        ["Terrain_Seed", random.randint(0, 100)],
     ]
 
     for Entry in Expecting:
         CFG[Entry[0]] = CFG.get(Entry[0], Entry[1])
+
+    for Biome in CFG["Biomes"].values():
+        Biome["terrain"]["seed"] = random.randint(0, 100)
 
     return CFG
 

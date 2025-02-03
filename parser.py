@@ -1,4 +1,4 @@
-import track, lines, tools
+import track, lines, tools, entities
 import numpy as np
 
 
@@ -11,7 +11,6 @@ def get_lever():
 
 def reprocess_raw_data(raw_entities):
 
-    Entities = []
     Beziers = []
 
     # recompile
@@ -23,18 +22,16 @@ def reprocess_raw_data(raw_entities):
         # if raw_ent["classname"] != "prop_static":
         # Entities += [{"raw_entity": raw_ent["raw"] + "}"}]
 
-        Entities += [
-            {
-                "pos-x": Pos[0],
-                "pos-y": Pos[1],
-                "pos-z": Pos[2],
-                "mdl": raw_ent["model"],
-                "skin": raw_ent["skin"],
-                "ang-pitch": Ang[0],
-                "ang-yaw": Ang[1],
-                "ang-roll": Ang[2],
-            }
-        ]
+        Entity = {
+            "pos-x": Pos[0],
+            "pos-y": Pos[1],
+            "pos-z": Pos[2],
+            "mdl": raw_ent["model"],
+            "skin": raw_ent["skin"],
+            "ang-pitch": Ang[0],
+            "ang-yaw": Ang[1],
+            "ang-roll": Ang[2],
+        }
 
         Data = track.process_file(raw_ent["model"])
 
@@ -43,8 +40,10 @@ def reprocess_raw_data(raw_entities):
             if "switches" in raw_ent["model"]:
 
                 Lever = get_lever()
-                Entities[-1]["lever"] = Lever
-                Entities[-1]["classname"] = "tp3_switch"
+                Entity["lever"] = Lever
+                Entity["classname"] = "tp3_switch"
+
+                entities.add(Entity)
 
                 StandAngle = Ang[1] + track.direction_to_angle(
                     Data[0]["StartDirection"]
@@ -59,7 +58,7 @@ def reprocess_raw_data(raw_entities):
                     Pos, tools.rot_z(np.array([-110, 75, -17.5]), StandAngle)
                 )
 
-                Entities += [
+                entities.add(
                     [
                         ["collapse", StandPos1, StandPos2],
                         {
@@ -81,10 +80,11 @@ def reprocess_raw_data(raw_entities):
                             "classname": "tp3_switch_lever_anim",
                         },
                     ]
-                ]
+                )
 
-                # pick the correct model for the handedness and status
-                # possibly leave a microline there to clear space for the stand?
+            else:
+
+                entities.add(Entity)
 
             for Subsection in Data:  # this is a rail that needs a line
 
@@ -103,7 +103,7 @@ def reprocess_raw_data(raw_entities):
                     )
                 ]
 
-    return Beziers, Entities
+    return Beziers
 
 
 def import_track(path):

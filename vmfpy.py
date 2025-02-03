@@ -1,5 +1,5 @@
 import os, re
-import sectors
+import sectors, entities
 
 
 def re_id(original_string, replacement):
@@ -11,7 +11,7 @@ def re_id(original_string, replacement):
     return re.sub(pattern, replacement_string, original_string)
 
 
-def add_entity(Pos, MDL, Ang):
+def blank_entity(Pos, MDL, Ang):
 
     return {
         "pos-x": Pos[0],
@@ -22,10 +22,6 @@ def add_entity(Pos, MDL, Ang):
         "ang-yaw": Ang[1],
         "ang-roll": Ang[2],
     }
-
-
-def frog(x, y, z):
-    return add_entity([x, y, z], "models/props_2fort/frog.mdl", [0, 0, 0])
 
 
 def get_ID():
@@ -479,7 +475,7 @@ def create_scenery_block(sector):
     return Brushes
 
 
-def write_to_vmf(Brushes: list, Entities: list, filename):
+def write_to_vmf(Brushes: list, filename):
 
     global ID
     ID = 1000
@@ -594,7 +590,7 @@ def write_to_vmf(Brushes: list, Entities: list, filename):
     }"""
 
     BrushString = synthesize_brushes(Brushes)
-    EntityString = synthesize_entities(Entities)
+    EntityString = synthesize_entities(entities.get())
 
     content = Start + BrushString + EntityString + End
 

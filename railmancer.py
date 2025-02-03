@@ -1,32 +1,5 @@
 import random, math
-import heightmap, lines, scatter, wayfinder, tools, vmfpy, parser, sectors, terrain, track
-
-
-def collapse_quantum_switchstands(Entities):
-
-    for ID in range(len(Entities)):
-
-        Ent = Entities[ID]
-
-        try:
-            if Ent[0][0] == "collapse":
-                Collapse = 1
-            else:
-                Collapse = 0
-        except:
-            Collapse = 0
-
-        if Collapse:
-
-            FirstDistance, _ = lines.distance_to_line(Ent[0][1][0], Ent[0][1][1])
-            SecondDistance, _ = lines.distance_to_line(Ent[0][2][0], Ent[0][2][1])
-
-            if FirstDistance > SecondDistance:
-                Entities[ID] = Ent[1]
-            else:
-                Entities[ID] = Ent[2]
-
-    return Entities
+import heightmap, lines, scatter, wayfinder, tools, vmfpy, parser, sectors, terrain, track, entities
 
 
 def height_sample(real_x, real_y, samples, radius, sector):
@@ -175,7 +148,7 @@ def displacement_build(Block, sector):
 
     heights = [
         [
-            (heightmap.query_height(position[0], position[1], sector) - Z_End)
+            heightmap.query_height(position[0], position[1], sector) - Z_End
             for position in x_layer
         ]
         for x_layer in posgrid
@@ -262,8 +235,7 @@ def main():
     tools.click("submodule")
 
     # internally defined globals (lists that need to be accessed, write-only effectively)
-    global Entities, Brushes
-    Entities = []
+    global Brushes
     Brushes = []
 
     directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
@@ -278,21 +250,21 @@ def main():
         [[2040 + CFG["Sector_Size"], (CFG["Sector_Size"] * 3) - 32, 208], "0fw", -90]
     ]
 
-    # Beziers, Entities = wayfinder.realize(Path)
+    # Beziers = wayfinder.realize(Path)
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.
-    Beziers, Entities = parser.import_track(TrackBase)
+    Beziers = parser.import_track(TrackBase)
 
     # Step 2: Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
     lines.encode_lines(Beziers, CFG["LineFidelity"])
     # these values are stored as global variables in the lines module.
 
     # Step 2.5: Since the KDTree has been generated, collapse some special decisionmaking for track entities
-    Entities = collapse_quantum_switchstands(Entities)
+    entities.collapse_quantum_switchstands()
 
     # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are. Also contains a map for "what block is next to this one"
     # Sectors = sectors.build_sectors("sector_path_random", (0, 0, 1, 90, 0))
-    Sectors = sectors.build_sectors("sector_square", (-2, 2, -2, 2, 0, 214))
+    Sectors = sectors.build_sectors("sector_square", (0, 1, 0, 0, 0, 214))
 
     # Step 5: Builds the Extents and ContourMaps base from the sectors/blocks
     # the large number is the size of the Hammer grid
@@ -309,12 +281,12 @@ def main():
 
     heightmap.generate_sector_heightmaps(Sectors)
 
-    print(Sectors["0x0x0"])
-
     elapsed = tools.display_time(tools.click("submodule"))
     print("Sector Generation done in " + elapsed)
 
     heightmap.cut_and_fill_sector_heightmaps(Sectors)
+
+    # Sectors["0x0x0"][0]["heightmap"] = [[0, 0, 0], [1000, 0, 0], [0, 1000, 0]]
 
     elapsed = tools.display_time(tools.click("submodule"))
     print("Contours done in " + elapsed)
@@ -357,9 +329,7 @@ def main():
     elapsed = tools.display_time(tools.click("submodule"))
     print("Scattering complete in " + elapsed)
 
-    vmfpy.write_to_vmf(
-        Brushes, Entities, f"{"railmancer"}_{random.randint(4000,4999)}{".vmf"}"
-    )
+    vmfpy.write_to_vmf(Brushes, f"{"railmancer"}_{random.randint(4000,4999)}{".vmf"}")
 
     elapsed = tools.display_time(tools.click("total"))
     print("Railmancer Finished in " + elapsed)

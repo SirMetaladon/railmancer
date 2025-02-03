@@ -1,7 +1,7 @@
 {
   "LineFidelity": 25,
   "Sector_Size": 4080,
-  "Noise_Size": 3,
+  "Noise_Size": 25,
   "Disps_Per_Sector": 3,
   "Biomes": {
     "tf2_alpine_snow": {
@@ -70,7 +70,7 @@
         "ballast_alpha_distance": 400,
         "cut_base_height": -45,
         "models_per_sector": 125,
-        "noise_hill_resolution": 0.7,
+        "noise_hill_resolution": 1.5,
         "noise_persistence": 0.2,
         "noise_lacunarity": 4,
         "noise_octaves": 2,
@@ -148,11 +148,11 @@
         "ballast_alpha_slope": 50,
         "cut_base_height": -35,
         "models_per_sector": 250,
-        "noise_hill_resolution": 0.7,
-        "noise_persistence": 0.2,
+        "noise_hill_resolution": 70,
+        "noise_persistence": 5,
         "noise_lacunarity": 4,
         "noise_octaves": 2,
-        "noise_multiplier": 0, 
+        "noise_multiplier": 1, 
         "minimum_tree_height": 480,
         "model_minimum_distance": 100,
         "tree_fade_distance": 1000,
