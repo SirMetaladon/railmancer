@@ -1,5 +1,5 @@
 import random, math
-import heightmap, lines, scatter, wayfinder, tools, vmfpy, parser, sectors, terrain, track, entities
+import heightmap, lines, scatter, wayfinder, tools, vmfpy, parser, sectors, terrain, track, entities, trackhammer
 
 
 def height_sample(real_x, real_y, samples, radius, sector):
@@ -242,21 +242,21 @@ def main():
     track.build_track_library(directory, ".mdl")
 
     CFG = terrain.configuration("config.json")
-    TrackBase = "scan/swirly.vmf"  # "scan/squamish.vmf"
+    TrackBase = ""  # "scan/squamish.vmf"
 
     Path = []
-    Path += [[[2040, -32, 208], "0fw", -90]]
+    Path += [[[2040, -32 - 6000, 500], "0fw", -90]]
     Path += [
         [[2040 + CFG["Sector_Size"], (CFG["Sector_Size"] * 3) - 32, 208], "0fw", -90]
     ]
 
-    # Beziers = wayfinder.realize(Path)
+    trackhammer.start(Path[0], 100)
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.
-    Beziers = parser.import_track(TrackBase)
+    parser.import_track(TrackBase)
 
     # Step 2: Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
-    lines.encode_lines(Beziers, CFG["LineFidelity"])
+    lines.encode_lines(CFG["LineFidelity"])
     # these values are stored as global variables in the lines module.
 
     # Step 2.5: Since the KDTree has been generated, collapse some special decisionmaking for track entities
@@ -264,7 +264,7 @@ def main():
 
     # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are. Also contains a map for "what block is next to this one"
     # Sectors = sectors.build_sectors("sector_path_random", (0, 0, 1, 90, 0))
-    Sectors = sectors.build_sectors("sector_square", (0, 1, 0, 0, 0, 214))
+    Sectors = sectors.build_sectors("sector_square", (-4, 3, -2, 3, 0, 214))
 
     # Step 5: Builds the Extents and ContourMaps base from the sectors/blocks
     # the large number is the size of the Hammer grid

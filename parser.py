@@ -88,22 +88,7 @@ def reprocess_raw_data(raw_entities):
 
             for Subsection in Data:  # this is a rail that needs a line
 
-                EndPos = Pos + tools.rot_z(Subsection["Move"], Ang[1])
-
-                Beziers += [
-                    lines.bezier_curve_points(
-                        Pos,
-                        EndPos,
-                        tools.rot_z(
-                            track.get_heading(Subsection["StartDirection"]), Ang[1]
-                        ),
-                        tools.rot_z(
-                            track.get_heading(Subsection["EndDirection"]), Ang[1] + 180
-                        ),
-                    )
-                ]
-
-    return Beziers
+                lines.add_track(Pos, Subsection, Ang[1])
 
 
 def import_track(path):

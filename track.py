@@ -1,4 +1,6 @@
-import os, math, tools
+import os, math
+import numpy as np
+import lines, entities, tools
 
 
 def determine_real_grade(raw_grade):
@@ -116,7 +118,12 @@ def process_arc(path):
 
 def process_straight(path, model):
 
-    global StraightMapping
+    global track_straight_cache
+
+    try:
+        track_straight_cache
+    except:
+        track_straight_cache = {}
 
     data = list(path[-1].split("_"))
     StartDirection = data[1]
@@ -135,10 +142,10 @@ def process_straight(path, model):
 
     ApproxGrade = round((ChangeZ / Length) * 100, 2)
 
-    StraightMapping[str(ChangeX) + "|" + EndDirection] = StraightMapping.get(
+    track_straight_cache[str(ChangeX) + "|" + EndDirection] = track_straight_cache.get(
         str(ChangeX) + "|" + EndDirection, {}
     )
-    StraightMapping[str(ChangeX) + "|" + EndDirection][GradeLevel] = model
+    track_straight_cache[str(ChangeX) + "|" + EndDirection][GradeLevel] = model
 
     return [
         {
@@ -264,10 +271,9 @@ def process_file(model):
 
 def build_track_library(directory, extension):
 
-    global StraightMapping
+    global track_model_library
 
-    Track_Library = {}
-    StraightMapping = {}
+    track_model_library = {}
 
     for root, dirs, files in os.walk(directory):
         for file in files:
@@ -281,9 +287,7 @@ def build_track_library(directory, extension):
 
                 if len(Track_Data) == 1:
                     # more than 1 is a switch, less than 1 is an invalid model
-                    Track_Library[model] = Track_Data[0]
-
-    return Track_Library
+                    track_model_library[model] = Track_Data[0]
 
 
 def length_to_model_straight(length, direction, gradelevel):
@@ -291,4 +295,187 @@ def length_to_model_straight(length, direction, gradelevel):
     if direction == "4lt":
         direction = "4rt"
 
-    return StraightMapping.get(f"{length}|{direction}", {}).get(gradelevel, "")
+    return track_straight_cache.get(f"{length}|{direction}", {}).get(gradelevel, "")
+
+
+def add_track(pos, track_object, heading):
+
+    EndPos = pos + tools.rot_z(track_object["Move"], heading)
+
+    lines.write_bezier_points(
+        pos,
+        EndPos,
+        tools.rot_z(get_heading(track_object["StartDirection"]), heading),
+        tools.rot_z(get_heading(track_object["EndDirection"]), heading + 180),
+    )
+
+
+def write_track(
+    model,
+    prev_node,
+    new_node,
+):
+
+    track_data = track_model_library[model]
+
+    if (
+        new_node[1] != track_data["EndDirection"]
+        and track_data["EndDirection"][:1] != "8"
+    ):
+        ModelPos = new_node[0]
+        RotFix = 180
+    else:
+        ModelPos = prev_node[0]
+        RotFix = 0
+
+    ModelHeading = (
+        new_node[2] if track_data["EndDirection"][:1] != "8" else prev_node[2]
+    )
+
+    add_track(ModelPos, track_data, ModelHeading + RotFix)
+
+    entities.add(
+        {
+            "pos-x": ModelPos[0],
+            "pos-y": ModelPos[1],
+            "pos-z": ModelPos[2],
+            "mdl": model,
+            "ang-yaw": ModelHeading + RotFix,
+        }
+    )
+
+
+def updated_position(position, jump, heading):
+
+    return np.round(np.add(position, tools.rot_z(jump, heading)))
+
+
+def add_connector(pathnode):
+
+    import numpy as np
+
+    if pathnode[1] == "0fw":
+
+        new_pos = updated_position(pathnode[0], [-64, 0, 0], pathnode[2])
+
+        write_track(
+            np.array(pathnode[0]),
+            "0fw",
+            length_to_model_straight(64, "0fw", 0),
+            pathnode[2],
+            pathnode[2],
+        )
+
+        pathnode[0] = new_pos
+
+
+def append_track(Model, Node):
+
+    Position, Direction, Heading = Node
+
+    Data = track_model_library[Model]
+
+    NewDirection = (
+        Data["StartDirection"]
+        if Data["StartDirection"][:1] != Direction[:1]
+        else Data["EndDirection"]
+    )
+
+    # this will use the new heading rotation if it's a 45, and the old one if it's a 90
+    NewHand = (
+        Data["StartDirection"][1:]
+        if Data["StartDirection"][1:] != "fw"
+        else Data["EndDirection"][1:]
+    )
+    OldHand = Direction[1:]
+
+    NewHeading = Heading
+    if Direction[:1] == "4" and (NewHand != OldHand):
+        # if old hand is lt and
+        if NewHand == "rt":
+            NewHeading = Heading + 90
+        # if old hand is rt and
+        elif NewHand == "lt":
+            NewHeading = Heading - 90
+        # else, if 0fw, do nothing (as the heading has not changed)
+
+    NewPosition = updated_position(Position, Data["Move"], NewHeading)
+
+    # this mechanism does so for 90 degree angles
+
+    if NewDirection == "8rt":
+        NewHeading = Heading - 90
+    elif NewDirection == "8lt":
+        NewHeading = Heading + 90
+
+    if NewDirection[:1] == "8":
+        NewDirection = "0fw"
+
+    return NewPosition, NewDirection, NewHeading
+
+
+def write_pathfinder_data(model_list, start_node):
+
+    prev_node = start_node
+
+    for model in model_list:
+
+        new_node = append_track(model, prev_node)
+
+        # finalize track placement
+        write_track(model, prev_node, new_node)
+
+        prev_node = new_node
+
+
+def valid_next_tracks(Direction, MinimumRadiusLevel):
+
+    global valid_tracks_cache
+
+    try:
+        valid_tracks_cache
+    except:
+        valid_tracks_cache = {}
+
+    Index = Direction + str(MinimumRadiusLevel)
+
+    if valid_tracks_cache.get(Index, []):
+
+        return valid_tracks_cache[Index]
+
+    Output = []
+
+    Radii = [2048, 3072, 4096, 6144, 8192, 0]
+
+    AllowedRadii = Radii[MinimumRadiusLevel:]
+
+    for Track in list(track_model_library.items()):
+
+        """if Track[1]["GradeLevel"] != 0:
+        continue"""
+
+        if Track[1]["Radius"] not in AllowedRadii:
+            continue
+
+        if (
+            Track[1]["StartDirection"] != Direction
+            and Track[1]["EndDirection"] != Direction
+            and not (
+                (Direction[:1] == "4")
+                and (
+                    Track[1]["StartDirection"][:1] == "4"
+                    or Track[1]["EndDirection"][:1] == "4"
+                )
+            )
+        ):
+
+            continue
+
+        to_add = [Track, Track[1]["Length"]]
+
+        tools.heuristic_inserter(Output, to_add)
+
+    Output = [item[0] for item in Output]
+    valid_tracks_cache[Index] = Output
+
+    return Output

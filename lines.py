@@ -153,7 +153,14 @@ def bezier_curve(t, P0, P1, P2, P3):
     )
 
 
-def bezier_curve_points(start_position, end_position, start_direction, end_direction):
+def write_bezier_points(start_position, end_position, start_direction, end_direction):
+
+    global Beziers
+
+    try:
+        Beziers
+    except:
+        Beziers = []
 
     # Convert to 2 dimensions, as the bezier pathing does not concern height (and it makes the math easier)
     p0 = np.array([start_position[0], start_position[1]])
@@ -177,7 +184,7 @@ def bezier_curve_points(start_position, end_position, start_direction, end_direc
         # Control points the midpoint should work, right?
         p1 = p0 + d0 * np.linalg.norm(p3 - p0) / 2
         p2 = p1
-        return [start_position, p1, p2, end_position]
+        Beziers += [(start_position, p1, p2, end_position)]
 
     # Function to calculate the radius of curvature
     def curvature_radius(p0, p1, p2, p3, t):
@@ -208,11 +215,12 @@ def bezier_curve_points(start_position, end_position, start_direction, end_direc
         # Sample at multiple points along the curve to estimate the minimum radius
         for t in np.linspace(0, 1, 20):
             radius = curvature_radius(p0, p1, p2, p3, t)
-            if np.isnan(radius) or np.isinf(radius):
+            if not (np.isnan(radius) or np.isinf(radius)):
+                min_radius = min(min_radius, radius)
+            """else:
                 print(
                     f"Invalid radius at t={t}: {radius}, {start_position}, {end_position}"
-                )
-            min_radius = min(min_radius, radius)
+                )"""
 
         # Return negative to maximize radius
         return -min_radius
@@ -233,7 +241,7 @@ def bezier_curve_points(start_position, end_position, start_direction, end_direc
     p1 = p0 + best_params[0] * d0
     p2 = p3 + best_params[1] * d3
 
-    return [start_position, p1, p2, end_position]
+    Beziers += [(start_position, p1, p2, end_position)]
 
 
 def display_path(BezList: list, Extents):
@@ -271,14 +279,14 @@ def generate_line(Line):
         Node1 = Line[NID]
         Node2 = Line[NID + 1]
 
-        Beziers += [
-            bezier_curve_points(Node1[0], Node2[0], Node1[1], reverse(Node2[1]))
-        ]
+
+        write_bezier_points(Node1[0], Node2[0], Node1[1], reverse(Node2[1]))
+        
 
     return Beziers"""
 
 
-def encode_lines(Beziers, LineFidelity):
+def encode_lines(LineFidelity):
 
     global LineDistanceTree, LineDistanceHeights
 

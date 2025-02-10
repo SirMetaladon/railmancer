@@ -160,3 +160,13 @@ def merge_grids(center, left, right, up, down, fill_value=True):
     insert_grid(merged, up, N, 2 * N)
 
     return merged  # The fully merged grid
+
+
+def heuristic_inserter(stack, to_add):
+
+    heuristic = to_add[1]
+    for index, (_, h) in enumerate(stack):
+        if heuristic > h:
+            stack.insert(index, to_add)
+            return
+    stack.append(to_add)
