@@ -9,6 +9,8 @@ after the fail counter gets higher than, like, 10, back up 1 more track and add 
 
 """
 
+import tools
+
 
 def sprinkle_selector(list, variance, count):
 
@@ -56,11 +58,10 @@ def start(start_node, piece_count):
 
             test_node = track.append_track(test_track[0], current_node)
 
-            x = current_node[0][0]
-            y = current_node[0][1]
+            end = (test_node[0][0], test_node[0][1])
 
             # if track-end is inside the box
-            if x > -16000 and y > -16000 and x < 16000 and y < 16000:
+            if tools.within2d(end, 15000):
 
                 track_path_models += [test_track[0]]
                 exploration[len(track_path_models)]["node"] = test_node

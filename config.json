@@ -1,8 +1,13 @@
 {
-  "LineFidelity": 25,
-  "Sector_Size": 4080,
+  "line_maximum_poll_point_distance": 25, 
+  "sector_size": 4080,
   "Noise_Size": 25,
   "Disps_Per_Sector": 3,
+  "sector_snap_grid": 16,
+  "sector_minimum_wall_height": 1824,
+  "sector_minimum_track_depth": 200,
+  "sector_minimum_track_clearance": 600,
+  "sector_minimum_track_to_edge_distance": 512,
   "Biomes": {
     "tf2_alpine_snow": {
       "models": {

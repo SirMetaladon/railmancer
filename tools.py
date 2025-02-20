@@ -1,4 +1,4 @@
-import time
+import time, math
 import numpy as np
 
 
@@ -170,3 +170,16 @@ def heuristic_inserter(stack, to_add):
             stack.insert(index, to_add)
             return
     stack.append(to_add)
+
+
+def round_to_multiple(value, snapto, mode):
+
+    if mode == "floor":
+        return math.floor(value / snapto) * snapto
+    else:
+        return round(value / snapto) * snapto
+
+
+def within2d(tuple2d, range):
+
+    return abs(tuple2d[0]) < range and abs(tuple2d[1]) < range

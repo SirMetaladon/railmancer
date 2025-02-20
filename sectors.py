@@ -1,53 +1,62 @@
-import random, tools
+import random, tools, cfg, lines, math
 
 
-def within_sector_height(sector_id, height):
+def initialize():
+    global Sectors, sector_lookup_grid
 
-    return (
-        height >= Sectors[sector_id][0]["floor"]
-        and height <= Sectors[sector_id][0]["ceiling"]
-    )
+    try:
+        return Sectors
+    except:
+        Sectors = {}
+        sector_lookup_grid = {}
 
 
-def get_sector_id(x, y, height):
+def within_sector_height(sector_id, floor, ceiling):
+
+    floor_limit = max(floor, Sectors[sector_id][0]["floor"])
+    ceiling_limit = min(ceiling, Sectors[sector_id][0]["ceiling"])
+
+    return (ceiling_limit - floor_limit) >= cfg.get("sector_minimum_cube_gap")
+
+
+def get_connected_sector_data(x, y, floor, ceiling):
 
     sector_list = sector_lookup_grid.get(f"{x}x{y}", False)
 
     if sector_list == False:
         return False
 
+    sector_id = ""
+
     for possible_sector in sector_list:
 
-        if within_sector_height(possible_sector, height):
+        if within_sector_height(possible_sector, floor, ceiling):
 
-            return possible_sector
-
-    return False
-
-
-def get_connected_sector_data(x, y, height):
-
-    sector_id = get_sector_id(x, y, height + 21)
-
-    if sector_id is False:
-        return False
-
-    sector_data = Sectors[sector_id][0]
-
-    if abs(height - sector_data["floor"]) <= 21:
-        # it may be prudent to add more checks here for more absurd (low-height) blocks, but it's low priority (just don't make blocks less than 21 high?)
-        # print(x, y, sector_data)
-        return sector_data
+            sector_id = possible_sector
+            break
 
     else:
         return False
 
+    sector_data = Sectors[sector_id][0]
+
+    # if abs(height - sector_data["floor"]) <= 21:
+    # it may be prudent to add more checks here for more absurd (low-height) blocks, but it's low priority (just don't make blocks less than 21 high?)
+    # print(x, y, sector_data)
+    return sector_data
+
+    """else:
+        return False"""
+
 
 def new_sector(x, y, floor, ceiling):
 
+    floor_real = min(floor, ceiling)
+    ceiling_real = max(floor, ceiling)
+
     sector_lookup = f"{x}x{y}"
 
-    sector_id = f"{sector_lookup}x{floor}"
+    sector_id = f"{sector_lookup}x{floor_real}"
 
     if Sectors.get(sector_id, False) != False:
         print("Duplicate Block/floor combination detected! Ignoring: " + sector_id)
@@ -63,8 +72,8 @@ def new_sector(x, y, floor, ceiling):
             "id": sector_id,
             "x": x,
             "y": y,
-            "floor": floor,
-            "ceiling": ceiling,
+            "floor": floor_real,
+            "ceiling": ceiling_real,
             "minmap": [],
             "maxmap": [],
             "heightmap": [],
@@ -76,17 +85,13 @@ def sector_square(data):
 
     xmin, xmax, ymin, ymax, bottom, top = data
 
-    # idiot insurance
-    floor = min(bottom, top)
-    ceiling = max(bottom, top)
-
     for x in range(xmin, xmax + 1):
         for y in range(ymin, ymax + 1):
             new_sector(
                 x=x,
                 y=y,
-                floor=floor,
-                ceiling=ceiling,
+                floor=top,
+                ceiling=bottom,
             )
 
 
@@ -137,15 +142,7 @@ def sector_path_random(data):
             break
 
 
-def build_sectors(build_method, data):
-
-    global Sectors, sector_lookup_grid
-
-    try:
-        return Sectors
-    except:
-        Sectors = {}
-        sector_lookup_grid = {}
+def build_manual(build_method, data):
 
     if build_method == "sector_path_random":
 
@@ -155,39 +152,148 @@ def build_sectors(build_method, data):
 
         sector_square(data)
 
+
+def stitch():
+
     for Sector in Sectors.items():
 
         sector_id = Sector[0]
         XCoord = Sector[1][0]["x"]
         YCoord = Sector[1][0]["y"]
         FloorHeight = Sector[1][0]["floor"]
+        CeilingHeight = Sector[1][0]["ceiling"]
 
         Sectors[sector_id] += [
-            get_connected_sector_data(XCoord, YCoord + 1, FloorHeight)
+            get_connected_sector_data(XCoord, YCoord + 1, FloorHeight, CeilingHeight)
         ]
         Sectors[sector_id] += [
-            get_connected_sector_data(XCoord + 1, YCoord, FloorHeight)
+            get_connected_sector_data(XCoord + 1, YCoord, FloorHeight, CeilingHeight)
         ]
         Sectors[sector_id] += [
-            get_connected_sector_data(XCoord, YCoord - 1, FloorHeight)
+            get_connected_sector_data(XCoord, YCoord - 1, FloorHeight, CeilingHeight)
         ]
         Sectors[sector_id] += [
-            get_connected_sector_data(XCoord - 1, YCoord, FloorHeight)
+            get_connected_sector_data(XCoord - 1, YCoord, FloorHeight, CeilingHeight)
         ]
 
+
+def build_fit():
+
+    sector_minimum_wall_height = cfg.get("sector_minimum_wall_height")
+    sector_minimum_track_depth = cfg.get("sector_minimum_track_depth")
+    sector_minimum_track_clearance = cfg.get("sector_minimum_track_clearance")
+    sector_snap_grid = cfg.get("sector_snap_grid")
+    sector_size = cfg.get("sector_size")
+    sectors_per_map = cfg.get("sectors_per_map")
+    sector_minimum_track_to_edge_distance = cfg.get(
+        "sector_minimum_track_to_edge_distance"
+    )
+
+    points = lines.get_sampled_points()
+
+    points_extended = []
+
+    for point in points:
+
+        x, y, z = point
+
+        points_extended += [
+            [
+                x + sector_minimum_track_to_edge_distance,
+                y + sector_minimum_track_to_edge_distance,
+                z,
+            ]
+        ]
+        points_extended += [
+            [
+                x - sector_minimum_track_to_edge_distance,
+                y + sector_minimum_track_to_edge_distance,
+                z,
+            ]
+        ]
+        points_extended += [
+            [
+                x + sector_minimum_track_to_edge_distance,
+                y - sector_minimum_track_to_edge_distance,
+                z,
+            ]
+        ]
+        points_extended += [
+            [
+                x - sector_minimum_track_to_edge_distance,
+                y - sector_minimum_track_to_edge_distance,
+                z,
+            ]
+        ]
+
+    points += points_extended
+
+    sector_height_buckets = {}
+
+    for point in points:
+
+        sector_x = math.floor(point[0] / sector_size)
+        sector_y = math.floor(point[1] / sector_size)
+
+        if abs(sector_x + 0.5) > (sectors_per_map / 2):
+            continue
+
+        if abs(sector_y + 0.5) > (sectors_per_map / 2):
+            continue
+
+        sector_lookup = f"{sector_x}x{sector_y}"
+
+        if sector_height_buckets.get(sector_lookup, False):
+            tools.heuristic_inserter(
+                sector_height_buckets[sector_lookup], ((sector_x, sector_y), -point[2])
+            )
+        else:
+            sector_height_buckets[sector_lookup] = [((sector_x, sector_y), -point[2])]
+
+    for sorted_heights in sector_height_buckets.values():
+
+        floor = -sorted_heights[0][1] - sector_minimum_track_depth
+
+        ceiling = floor + sector_minimum_wall_height - sector_minimum_track_clearance
+
+        for id in range(1, len(sorted_heights)):
+            height = -sorted_heights[id][1]
+
+            if height <= ceiling:
+                continue
+
+            prev_height = -sorted_heights[id - 1][1]
+
+            if (height - prev_height) > (
+                sector_minimum_track_clearance + sector_minimum_track_depth
+            ):
+                new_sector(
+                    x=sorted_heights[0][0][0],
+                    y=sorted_heights[0][0][1],
+                    floor=math.floor(floor / sector_snap_grid),
+                    ceiling=math.floor(
+                        ((height - sector_minimum_track_depth) / sector_snap_grid) - 2
+                    ),
+                )
+
+                floor = height - sector_minimum_track_depth
+                ceiling = (
+                    floor + sector_minimum_wall_height - sector_minimum_track_clearance
+                )
+
+            else:
+
+                ceiling = height
+
+        new_sector(
+            x=sorted_heights[0][0][0],
+            y=sorted_heights[0][0][1],
+            floor=math.floor(floor / sector_snap_grid),
+            ceiling=math.floor(
+                (ceiling + sector_minimum_track_clearance) / sector_snap_grid
+            ),
+        )
+
+
+def get_all():
     return Sectors
-
-
-"""def build_blocks_square(xmin=-4, xmax=3, ymin=-4, ymax=3, bottom=0, top=514):
-
-    # idiot insurance
-    floor = min(bottom, top)
-    ceiling = max(bottom, top)
-
-    grid = [
-        [x, y, floor, ceiling]
-        for x in range(xmin, xmax + 1)
-        for y in range(ymin, ymax + 1)
-    ]
-    return grid
-"""

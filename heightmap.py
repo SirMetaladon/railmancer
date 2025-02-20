@@ -5,9 +5,11 @@ import random, itertools, math, time
 import lines, sectors, tools, terrain, entities
 
 
-def build_heightmap_base(Sector_Size, Noise_Size, SectorsPerGrid):
+def build_heightmap_base():
 
     global biome_maps
+
+    import cfg
 
     """Extents = [0, 0, 0, 0]
     # x min, x max, y min, y max
@@ -19,10 +21,10 @@ def build_heightmap_base(Sector_Size, Noise_Size, SectorsPerGrid):
         Extents[3] = max(Extents[3], block[1])"""
 
     biome_maps = {
-        "sector_span_physical": Sector_Size,
-        "sector_span_noise": Noise_Size,
-        # "sector_shift": Sector_Size * ((SectorsPerGrid / 2) - 1),
-        "overall_span_noise": Noise_Size * SectorsPerGrid,
+        "sector_span_physical": cfg.get("sector_size"),
+        "sector_span_noise": cfg.get("Noise_Size"),
+        # "sector_shift": sector_size * ((SectorsPerGrid / 2) - 1),
+        "overall_span_noise": cfg.get("Noise_Size") * cfg.get("sectors_per_map"),
     }
 
 
@@ -227,9 +229,9 @@ def convert_real_to_noise_pos(real_x, real_y, sector_data):
     return noise_x, noise_y
 
 
-def generate_sector_heightmaps(Sectors):
+def generate_sector_heightmaps():
 
-    for Sector in Sectors.items():
+    for Sector in sectors.get_all().items():
 
         sector_data = Sector[1][0]
 
@@ -332,9 +334,9 @@ def generate_heightmap_node(sector_object, noise_x, noise_y):
     sector_data["heightmap"][noise_x][noise_y] = int(result)
 
 
-def cut_and_fill_sector_heightmaps(Sectors):
+def cut_and_fill_sector_heightmaps():
 
-    for sector in Sectors.items():
+    for sector in sectors.get_all().items():
 
         sector_object = sector[1]
 
@@ -380,3 +382,19 @@ def sample_terrain(x, y, z):
         lacunarity=Terrain["noise_lacunarity"],
         base=Terrain["seed"],
     )
+
+
+def height_sample(real_x, real_y, samples, radius, sector):
+
+    SectorSize = 360 / samples
+    Heights = [query_height(real_x, real_y, sector)]
+    Arm = [radius, 0]
+
+    for Slice in range(samples):
+
+        offset = tools.rot_z(Arm, Slice * SectorSize)
+
+        Example = query_height(real_x + offset[0], real_y + offset[1], sector)
+        Heights += [Example]
+
+    return Heights

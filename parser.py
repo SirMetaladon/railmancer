@@ -51,11 +51,11 @@ def reprocess_raw_data(raw_entities):
 
                 StandPos1 = np.add(
                     Pos,
-                    tools.rot_z(np.array([-110, -75, -17.5]), StandAngle),
+                    tools.rot_z(np.array([-110, -100, -17.5]), StandAngle),
                 )
 
                 StandPos2 = np.add(
-                    Pos, tools.rot_z(np.array([-110, 75, -17.5]), StandAngle)
+                    Pos, tools.rot_z(np.array([-110, 100, -17.5]), StandAngle)
                 )
 
                 entities.add(
@@ -88,7 +88,7 @@ def reprocess_raw_data(raw_entities):
 
             for Subsection in Data:  # this is a rail that needs a line
 
-                lines.add_track(Pos, Subsection, Ang[1])
+                track.add_track(Pos, Subsection, Ang[1])
 
 
 def import_track(path):

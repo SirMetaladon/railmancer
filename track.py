@@ -283,11 +283,11 @@ def build_track_library(directory, extension):
                     "\\", "/"
                 )
 
-                Track_Data = process_file(model)
+                track_data = process_file(model)
 
-                if len(Track_Data) == 1:
+                if len(track_data) == 1:
                     # more than 1 is a switch, less than 1 is an invalid model
-                    track_model_library[model] = Track_Data[0]
+                    track_model_library[model] = track_data[0]
 
 
 def length_to_model_straight(length, direction, gradelevel):
@@ -318,10 +318,7 @@ def write_track(
 
     track_data = track_model_library[model]
 
-    if (
-        new_node[1] != track_data["EndDirection"]
-        and track_data["EndDirection"][:1] != "8"
-    ):
+    if new_node[3]:  # if it's reversed
         ModelPos = new_node[0]
         RotFix = 180
     else:
@@ -350,6 +347,7 @@ def updated_position(position, jump, heading):
     return np.round(np.add(position, tools.rot_z(jump, heading)))
 
 
+"""
 def add_connector(pathnode):
 
     import numpy as np
@@ -366,28 +364,43 @@ def add_connector(pathnode):
             pathnode[2],
         )
 
-        pathnode[0] = new_pos
+        pathnode[0] = new_pos"""
 
 
-def append_track(Model, Node):
+def append_track(Model, Node, ReverseStraight=False):
 
-    Position, Direction, Heading = Node
+    Position, Direction, Heading, _ = Node
 
-    Data = track_model_library[Model]
+    track_data = track_model_library[Model]
 
     NewDirection = (
-        Data["StartDirection"]
-        if Data["StartDirection"][:1] != Direction[:1]
-        else Data["EndDirection"]
+        track_data["StartDirection"]
+        if track_data["StartDirection"][:1] != Direction[:1]
+        else track_data["EndDirection"]
     )
 
     # this will use the new heading rotation if it's a 45, and the old one if it's a 90
     NewHand = (
-        Data["StartDirection"][1:]
-        if Data["StartDirection"][1:] != "fw"
-        else Data["EndDirection"][1:]
+        track_data["StartDirection"][1:]
+        if track_data["StartDirection"][1:] != "fw"
+        else track_data["EndDirection"][1:]
     )
     OldHand = Direction[1:]
+
+    IsReversed = (
+        NewDirection != track_data["EndDirection"]
+        and track_data["EndDirection"][:1] != "8"
+    ) or (
+        track_data["EndDirection"] == track_data["StartDirection"]
+        and ReverseStraight != False
+    )
+
+    move_x, move_y, move_z = track_data["Move"]
+
+    if IsReversed:
+        final_move = (move_x, move_y, -move_z)
+    else:
+        final_move = (move_x, move_y, move_z)
 
     NewHeading = Heading
     if Direction[:1] == "4" and (NewHand != OldHand):
@@ -399,7 +412,7 @@ def append_track(Model, Node):
             NewHeading = Heading - 90
         # else, if 0fw, do nothing (as the heading has not changed)
 
-    NewPosition = updated_position(Position, Data["Move"], NewHeading)
+    NewPosition = updated_position(Position, final_move, NewHeading)
 
     # this mechanism does so for 90 degree angles
 
@@ -411,7 +424,7 @@ def append_track(Model, Node):
     if NewDirection[:1] == "8":
         NewDirection = "0fw"
 
-    return NewPosition, NewDirection, NewHeading
+    return NewPosition, NewDirection, NewHeading, IsReversed
 
 
 def write_pathfinder_data(model_list, start_node):
@@ -451,7 +464,7 @@ def valid_next_tracks(Direction, MinimumRadiusLevel):
 
     for Track in list(track_model_library.items()):
 
-        """if Track[1]["GradeLevel"] != 0:
+        """if Track[1]["GradeLevel"] < -1:
         continue"""
 
         if Track[1]["Radius"] not in AllowedRadii:

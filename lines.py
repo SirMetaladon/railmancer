@@ -286,9 +286,9 @@ def generate_line(Line):
     return Beziers"""
 
 
-def encode_lines(LineFidelity):
+def encode_lines(line_maximum_poll_point_distance):
 
-    global LineDistanceTree, LineDistanceHeights
+    global LineDistanceTree, LineDistanceHeights, sampled_points
 
     from scipy.spatial import KDTree
 
@@ -300,7 +300,13 @@ def encode_lines(LineFidelity):
 
     for Subsegment in Beziers:
         ts = np.linspace(
-            0, 1, int(np.linalg.norm(Subsegment[0] - Subsegment[3]) / LineFidelity) + 1
+            0,
+            1,
+            int(
+                np.linalg.norm(Subsegment[0] - Subsegment[3])
+                / line_maximum_poll_point_distance
+            )
+            + 1,
         )
 
         sampled_points += [(bezier(t, Subsegment, 3)) for t in ts]
@@ -318,3 +324,11 @@ def distance_to_line(real_x, real_y):
     Height = LineDistanceHeights[idx]
 
     return Shortest, Height
+
+
+def get_sampled_points():
+
+    try:
+        return sampled_points
+    except:
+        return []

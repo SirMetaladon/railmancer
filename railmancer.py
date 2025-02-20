@@ -1,21 +1,5 @@
 import random, math
-import heightmap, lines, scatter, wayfinder, tools, vmfpy, parser, sectors, terrain, track, entities, trackhammer
-
-
-def height_sample(real_x, real_y, samples, radius, sector):
-
-    SectorSize = 360 / samples
-    Heights = [heightmap.query_height(real_x, real_y, sector)]
-    Arm = [radius, 0]
-
-    for Slice in range(samples):
-
-        offset = tools.rot_z(Arm, Slice * SectorSize)
-
-        Example = heightmap.query_height(real_x + offset[0], real_y + offset[1], sector)
-        Heights += [Example]
-
-    return Heights
+import heightmap, lines, scatter, wayfinder, tools, vmfpy, parser, sectors, terrain, track, entities, trackhammer, cfg
 
 
 def distribute(min_distance, TotalPoints, Sector):
@@ -55,7 +39,9 @@ def distribute(min_distance, TotalPoints, Sector):
 
             StumpSize = Model["base_radius"]
 
-            HeightSamples = height_sample(Point[0], Point[1], 5, StumpSize, Sector)
+            HeightSamples = heightmap.height_sample(
+                Point[0], Point[1], 5, StumpSize, Sector
+            )
 
             ModelSteepnessAllowed = Model.get("steepness", 999)
             LowestSteepnessAllowed = Model.get("min_steep", -999)
@@ -106,7 +92,7 @@ def query_alpha(real_x, real_y, Terrain, sector):
 
     dist, _ = lines.distance_to_line(real_x, real_y)
 
-    HeightSamples = height_sample(real_x, real_y, 6, 20, sector)
+    HeightSamples = heightmap.height_sample(real_x, real_y, 6, 20, sector)
 
     LocalSlope = (max(HeightSamples) - min(HeightSamples)) / (40)
     SlopeTarget = Terrain.get("alpha_steepness_cutoff", 0.75)
@@ -241,22 +227,19 @@ def main():
     directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
     track.build_track_library(directory, ".mdl")
 
-    CFG = terrain.configuration("config.json")
-    TrackBase = ""  # "scan/squamish.vmf"
+    CFG = cfg.initialize("config.json")
+    TrackBase = "scan/squamish.vmf"  # ""
 
     Path = []
-    Path += [[[2040, -32 - 6000, 500], "0fw", -90]]
-    Path += [
-        [[2040 + CFG["Sector_Size"], (CFG["Sector_Size"] * 3) - 32, 208], "0fw", -90]
-    ]
+    Path += [[[2040, -32 - 6000, 500], "0fw", -90, False]]
 
-    trackhammer.start(Path[0], 100)
+    trackhammer.start(Path[0], 0)
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.
     parser.import_track(TrackBase)
 
     # Step 2: Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
-    lines.encode_lines(CFG["LineFidelity"])
+    lines.encode_lines(CFG["line_maximum_poll_point_distance"])
     # these values are stored as global variables in the lines module.
 
     # Step 2.5: Since the KDTree has been generated, collapse some special decisionmaking for track entities
@@ -264,36 +247,33 @@ def main():
 
     # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are. Also contains a map for "what block is next to this one"
     # Sectors = sectors.build_sectors("sector_path_random", (0, 0, 1, 90, 0))
-    Sectors = sectors.build_sectors("sector_square", (-4, 3, -2, 3, 0, 214))
+    # sectors.build_manual("sector_square", (-4, 3, -4, 3, 0, 214))
+    sectors.initialize()
+    sectors.build_fit()
+    sectors.stitch()
 
     # Step 5: Builds the Extents and ContourMaps base from the sectors/blocks
     # the large number is the size of the Hammer grid
-    heightmap.build_heightmap_base(
-        CFG["Sector_Size"],
-        CFG["Noise_Size"],
-        math.floor(32768 / CFG["Sector_Size"]),
-    )
+    heightmap.build_heightmap_base()
 
     # lines.display_path(Beziers, Extents)
 
     elapsed = tools.display_time(tools.click("submodule"))
     print("Bezier generation complete in " + elapsed)
 
-    heightmap.generate_sector_heightmaps(Sectors)
+    heightmap.generate_sector_heightmaps()
 
     elapsed = tools.display_time(tools.click("submodule"))
     print("Sector Generation done in " + elapsed)
 
-    heightmap.cut_and_fill_sector_heightmaps(Sectors)
-
-    # Sectors["0x0x0"][0]["heightmap"] = [[0, 0, 0], [1000, 0, 0], [0, 1000, 0]]
+    heightmap.cut_and_fill_sector_heightmaps()
 
     elapsed = tools.display_time(tools.click("submodule"))
     print("Contours done in " + elapsed)
 
     Brushes = []
 
-    for sector in Sectors.items():
+    for sector in sectors.get_all().items():
 
         sector_data = sector[1]
         x, y, z = sector_data[0]["x"], sector_data[0]["y"], sector_data[0]["floor"]
@@ -304,9 +284,7 @@ def main():
             y,
             z,
             CFG["Disps_Per_Sector"],
-            CFG["Biomes"]["hl2_white_forest"]["terrain"].get(
-                "ground_texture", "dev/dev_blendmeasure"
-            ),
+            terrain.get().get("ground_texture", "dev/dev_blendmeasure"),
         )
         for Entry in Disps:
             Entry += [displacement_build(Entry, sector_data)]
@@ -315,12 +293,12 @@ def main():
     elapsed = tools.display_time(tools.click("submodule"))
     print("Brushes and Displacements done in " + elapsed)
 
-    Terrain = CFG["Biomes"]["hl2_white_forest"]["terrain"]
+    # Terrain = CFG["Biomes"]["hl2_white_forest"]["terrain"]
 
     """Entities += distribute(
         (
-            (Extents[0] * CFG["Sector_Size"], (Extents[1] + 1) * CFG["Sector_Size"]),
-            (Extents[2] * CFG["Sector_Size"], (Extents[3] + 1) * CFG["Sector_Size"]),
+            (Extents[0] * CFG["sector_size"], (Extents[1] + 1) * CFG["sector_size"]),
+            (Extents[2] * CFG["sector_size"], (Extents[3] + 1) * CFG["sector_size"]),
         ),
         Terrain.get("model_minimum_distance", 110),
         Terrain.get("models_per_sector", 125),  # count
