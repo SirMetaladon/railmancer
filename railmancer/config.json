@@ -6,8 +6,8 @@
   "sector_snap_grid": 16,
   "sector_minimum_wall_height": 1824,
   "sector_minimum_track_depth": 200,
-  "sector_minimum_track_clearance": 600,
-  "sector_minimum_track_to_edge_distance": 512,
+  "sector_minimum_vertical_track_clearance": 600,
+  "sector_minimum_track_to_edge_distance": 700,
   "Biomes": {
     "tf2_alpine_snow": {
       "models": {

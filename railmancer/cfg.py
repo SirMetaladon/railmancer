@@ -26,7 +26,7 @@ def initialize(path: str):
         ["sector_snap_grid", 16, 1, 128],
         ["sector_minimum_wall_height", 1824, 0, max_mapsize],
         ["sector_minimum_track_depth", 128, 0, max_mapsize],
-        ["sector_minimum_track_clearance", 512, 0, max_mapsize],
+        ["sector_minimum_vertical_track_clearance", 512, 0, max_mapsize],
     ]
 
     # need a mechanism in here for double checking the following:
@@ -44,7 +44,8 @@ def initialize(path: str):
     # this must be an even number for alignment to work
     CFG["sectors_per_map"] = int(max_mapsize / CFG["sector_size"])
     CFG["sector_minimum_cube_gap"] = (
-        CFG["sector_minimum_track_clearance"] + CFG["sector_minimum_track_depth"]
+        CFG["sector_minimum_vertical_track_clearance"]
+        + CFG["sector_minimum_track_depth"]
     ) / CFG["sector_snap_grid"]
 
     return CFG

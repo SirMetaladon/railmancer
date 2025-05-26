@@ -243,15 +243,17 @@ def main():
     track.build_track_library(directory, ".mdl")
 
     CFG = cfg.initialize("railmancer/config.json")
-    TrackBase = ""  # "vmf inputs/squamish.vmf"
+    TrackBase = "vmf inputs/giantspiral.vmf"  # "vmf inputs/squamish.vmf"
 
     Path = []
     Path += [[[2040, -32 - 6000, 500], "0fw", -90, False]]
 
-    trackhammer.start(Path[0], 5)
+    trackhammer.start(Path[0], 0)
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.
     parser.import_track(TrackBase)
+
+    tools.click("submodule", "Base line data completed")
 
     # Step 2: Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
     lines.encode_lines(CFG["line_maximum_poll_point_distance"])
@@ -260,19 +262,18 @@ def main():
     # Step 2.5: Since the KDTree has been generated, collapse some special decisionmaking for track entities
     entities.collapse_quantum_switchstands()
 
+    tools.click("submodule", "Encoding and collapse done")
+
     # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are. Also contains a map for "what block is next to this one"
     sectors.initialize()
     sectors.build_fit()
     sectors.stitch()
 
+    tools.click("submodule", "Sector framework completed")
+
     # Step 5: Builds the Extents and ContourMaps base from the sectors/blocks
     # the large number is the size of the Hammer grid
     heightmap.build_heightmap_base()
-
-    # lines.display_path(Beziers, Extents)
-
-    tools.click("submodule", "Bezier generation complete")
-
     heightmap.generate_sector_heightmaps()
 
     tools.click("submodule", "Sector Generation done")

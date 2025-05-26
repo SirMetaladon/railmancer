@@ -75,6 +75,8 @@ def new_sector(x, y, floor, ceiling):
             "y": y,
             "floor": floor_real,
             "ceiling": ceiling_real,
+            "local_lines": [],
+            "relevant_lines": [],
             "minmap": [],
             "maxmap": [],
             "heightmap": [],
@@ -182,7 +184,9 @@ def build_fit():
 
     sector_minimum_wall_height = cfg.get("sector_minimum_wall_height")
     sector_minimum_track_depth = cfg.get("sector_minimum_track_depth")
-    sector_minimum_track_clearance = cfg.get("sector_minimum_track_clearance")
+    sector_minimum_vertical_track_clearance = cfg.get(
+        "sector_minimum_vertical_track_clearance"
+    )
     sector_snap_grid = cfg.get("sector_snap_grid")
     sector_size = cfg.get("sector_size")
     sectors_per_map = cfg.get("sectors_per_map")
@@ -255,7 +259,9 @@ def build_fit():
 
         floor = -sorted_heights[0][1] - sector_minimum_track_depth
 
-        ceiling = floor + sector_minimum_wall_height - sector_minimum_track_clearance
+        ceiling = (
+            floor + sector_minimum_wall_height - sector_minimum_vertical_track_clearance
+        )
 
         for id in range(1, len(sorted_heights)):
             height = -sorted_heights[id][1]
@@ -266,7 +272,7 @@ def build_fit():
             prev_height = -sorted_heights[id - 1][1]
 
             if (height - prev_height) > (
-                sector_minimum_track_clearance + sector_minimum_track_depth
+                sector_minimum_vertical_track_clearance + sector_minimum_track_depth
             ):
                 new_sector(
                     x=sorted_heights[0][0][0],
@@ -279,7 +285,9 @@ def build_fit():
 
                 floor = height - sector_minimum_track_depth
                 ceiling = (
-                    floor + sector_minimum_wall_height - sector_minimum_track_clearance
+                    floor
+                    + sector_minimum_wall_height
+                    - sector_minimum_vertical_track_clearance
                 )
 
             else:
@@ -291,7 +299,7 @@ def build_fit():
             y=sorted_heights[0][0][1],
             floor=math.floor(floor / sector_snap_grid),
             ceiling=math.floor(
-                (ceiling + sector_minimum_track_clearance) / sector_snap_grid
+                (ceiling + sector_minimum_vertical_track_clearance) / sector_snap_grid
             ),
         )
 
