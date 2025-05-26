@@ -2,7 +2,16 @@ import time, math
 import numpy as np
 
 
-def click(name):
+def display_time(sec):
+    mins = sec // 60
+    sec = sec % 60
+    hours = mins // 60
+    mins = mins % 60
+
+    return "{0}:{1}:{2}".format(int(hours), int(mins), round(sec, 3))
+
+
+def click(name, blurb=""):
     global last_click
     try:
         last_click
@@ -17,17 +26,8 @@ def click(name):
 
         sec = time.time() - last_click[name]
         last_click[name] = time.time()
-
+        print(blurb + " in " + display_time(sec))
         return sec
-
-
-def display_time(sec):
-    mins = sec // 60
-    sec = sec % 60
-    hours = mins // 60
-    mins = mins % 60
-
-    return "{0}:{1}:{2}".format(int(hours), int(mins), round(sec, 3))
 
 
 def rot_z(Vector, Angle):

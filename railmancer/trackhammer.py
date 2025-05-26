@@ -9,7 +9,7 @@ after the fail counter gets higher than, like, 10, back up 1 more track and add 
 
 """
 
-import tools
+from railmancer import tools, track
 
 
 def sprinkle_selector(list, variance, count):
@@ -33,8 +33,6 @@ def sprinkle_selector(list, variance, count):
 
 
 def start(start_node, piece_count):
-
-    import track
 
     track_path_models = []
     exploration = [{} for _ in range(piece_count + 1)]

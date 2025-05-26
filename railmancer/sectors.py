@@ -1,4 +1,5 @@
-import random, tools, cfg, lines, math
+import math, random
+from railmancer import tools, cfg, lines
 
 
 def initialize():
@@ -153,7 +154,7 @@ def build_manual(build_method, data):
         sector_square(data)
 
 
-def stitch():
+def stitch():  # takes all sectors, finds nearby sectors, and adds them to existing sectors effectively allowing each sector to reference it's neighbors
 
     for Sector in Sectors.items():
 

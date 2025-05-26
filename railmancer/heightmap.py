@@ -2,14 +2,12 @@ import numpy as np
 from noise import pnoise3
 import matplotlib.pyplot as plt
 import random, itertools, math, time
-import lines, sectors, tools, terrain, entities
+from railmancer import lines, sectors, tools, terrain, entities, cfg
 
 
 def build_heightmap_base():
 
     global biome_maps
-
-    import cfg
 
     """Extents = [0, 0, 0, 0]
     # x min, x max, y min, y max
@@ -254,14 +252,22 @@ def generate_sector_heightmaps():
                 TopOfBlock = sector_data["ceiling"]
                 BottomOfBlock = sector_data["floor"]
 
-                Top_of_Terrain = (TopOfBlock * 16) - Terrain["minimum_tree_height"]
+                Top_of_Terrain = (TopOfBlock * 16) - Terrain[
+                    "height_terrain_minimum_to_ceiling"
+                ]
+
+                Dist_Terrain_Slope = (
+                    distance - Terrain["height_terrain_flat_in_radius_around_track"]
+                )
+
+                Dist_Terrain_Slope_Start = max(
+                    Dist_Terrain_Slope,
+                    0,
+                )
 
                 metric = min(
-                    max(
-                        distance - Terrain["track_bias_base"],
-                        0,
-                    )
-                    * (Terrain["track_bias_slope"] / Top_of_Terrain),
+                    Dist_Terrain_Slope_Start
+                    / Terrain["height_terrain_transition_to_tracks_distance"],
                     1,
                 )
 
@@ -272,7 +278,7 @@ def generate_sector_heightmaps():
                 )
                 bottom = tools.linterp(
                     Terrain["track_min"] + height,
-                    (BottomOfBlock * 16),
+                    (BottomOfBlock * 16) + Terrain["height_terrain_minimum_to_floor"],
                     metric,
                 )
 
@@ -288,11 +294,10 @@ def rescale_terrain(sector_data, noise_x, noise_y, real_x, real_y, Terrain):
     Min = sector_data["minmap"][noise_x][noise_y]
     Max = sector_data["maxmap"][noise_x][noise_y]
 
-    return tools.linterp(
-        Min,
-        Max,
-        0.5 + (Terrain["noise_multiplier"] * sample_terrain(real_x, real_y, 10)),
-    )
+    NoiseSample = 0  # sample_realspace_noise(real_x, real_y, 10)
+    NoiseValue = Terrain["noise_deviation_multiplier"] * NoiseSample
+
+    return tools.linterp(Min, Max, 0.5 + NoiseValue)
 
 
 def carve_height(initial_height, intended_height, distance, Terrain):
@@ -327,9 +332,12 @@ def generate_heightmap_node(sector_object, noise_x, noise_y):
 
     distance, height = lines.distance_to_line(real_x, real_y)
 
-    result = carve_height(
-        scaled, height + Terrain["cut_base_height"], distance, Terrain
-    )
+    if False:  # if True, this is "virgin" terrain before cut and fill
+        result = carve_height(
+            scaled, height + Terrain["height_track_to_terrain"], distance, Terrain
+        )
+    else:
+        result = scaled + Terrain["height_track_to_terrain"]
 
     sector_data["heightmap"][noise_x][noise_y] = int(result)
 
@@ -343,8 +351,6 @@ def cut_and_fill_sector_heightmaps():
         # since it's guarenteed to be square, and all the same size
         heightmap = sector_object[0]["heightmap"]
         poll_values = range(len(heightmap))
-
-        # print(heightmap)
 
         # 2 gives 0, 1
         # 0, 1 needs to become 0,1 in the linear transform thingy
@@ -367,13 +373,29 @@ def query_height(real_x, real_y, sector_object):
     return height
 
 
-def sample_terrain(x, y, z):
+def curb_noise(v):
+    """if v < -curb_start:
+        residual = (v + curb_start) * (curb_width)
+        return -curb_start + residual
+
+    elif v > curb_start:
+        residual = (v - curb_start) * (curb_width)
+        return curb_start + residual
+    else:
+        return v"""
+    if v > 0.5 or v < -0.5:
+        return -v
+    else:
+        return v
+
+
+def sample_realspace_noise(x, y, z):
 
     Terrain = terrain.get()
 
     scale = biome_maps["overall_span_noise"] * Terrain["noise_hill_resolution"]
 
-    return pnoise3(
+    noise = pnoise3(
         x / scale,
         y / scale,
         z / scale,
@@ -382,6 +404,8 @@ def sample_terrain(x, y, z):
         lacunarity=Terrain["noise_lacunarity"],
         base=Terrain["seed"],
     )
+
+    return noise  # curb_noise(noise)
 
 
 def height_sample(real_x, real_y, samples, radius, sector):
@@ -398,3 +422,15 @@ def height_sample(real_x, real_y, samples, radius, sector):
         Heights += [Example]
 
     return Heights
+
+
+def smooth_min_max_maps():
+
+    # pseudocode:
+    #
+
+    # for every sector, run through all the main entries and smooth them to neighbors
+
+    for sector in sectors.get_all().values():
+        print(sector[0]["id"])
+        sector_interpolator(sector, 0, 0)

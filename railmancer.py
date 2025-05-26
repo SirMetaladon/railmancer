@@ -1,5 +1,18 @@
 import random, math
-import heightmap, lines, scatter, wayfinder, tools, vmfpy, parser, sectors, terrain, track, entities, trackhammer, cfg
+from railmancer import (
+    heightmap,
+    lines,
+    scatter,
+    tools,
+    vmfpy,
+    parser,
+    sectors,
+    terrain,
+    track,
+    entities,
+    trackhammer,
+    cfg,
+)
 
 
 def distribute(min_distance, TotalPoints, Sector):
@@ -108,8 +121,10 @@ def query_alpha(real_x, real_y, Terrain, sector):
         / Terrain.get("ballast_alpha_slope", 200)
     ) * 255
     SteepnessMetric = SlopeMetric * 255
-    NoiseMetric = random.uniform(-0.5, 0.5) * Terrain.get("alpha_noise_mult", 50)
-    TerrainMult = Terrain.get("disp_alpha_mult", 1)
+    NoiseMetric = random.uniform(-0.5, 0.5) * Terrain.get(
+        "alpha_from_noise_multiplier", 50
+    )
+    TerrainMult = Terrain.get("alpha_multiplier", 1)
 
     BaseAlpha = min(DistanceMetric, SteepnessMetric)
     AdjustedAlpha = tools.scale(BaseAlpha, TerrainMult, 255)
@@ -227,13 +242,13 @@ def main():
     directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
     track.build_track_library(directory, ".mdl")
 
-    CFG = cfg.initialize("config.json")
-    TrackBase = "scan/squamish.vmf"  # ""
+    CFG = cfg.initialize("railmancer/config.json")
+    TrackBase = ""  # "vmf inputs/squamish.vmf"
 
     Path = []
     Path += [[[2040, -32 - 6000, 500], "0fw", -90, False]]
 
-    trackhammer.start(Path[0], 0)
+    trackhammer.start(Path[0], 5)
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.
     parser.import_track(TrackBase)
@@ -246,8 +261,6 @@ def main():
     entities.collapse_quantum_switchstands()
 
     # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are. Also contains a map for "what block is next to this one"
-    # Sectors = sectors.build_sectors("sector_path_random", (0, 0, 1, 90, 0))
-    # sectors.build_manual("sector_square", (-4, 3, -4, 3, 0, 214))
     sectors.initialize()
     sectors.build_fit()
     sectors.stitch()
@@ -258,18 +271,19 @@ def main():
 
     # lines.display_path(Beziers, Extents)
 
-    elapsed = tools.display_time(tools.click("submodule"))
-    print("Bezier generation complete in " + elapsed)
+    tools.click("submodule", "Bezier generation complete")
 
     heightmap.generate_sector_heightmaps()
 
-    elapsed = tools.display_time(tools.click("submodule"))
-    print("Sector Generation done in " + elapsed)
+    tools.click("submodule", "Sector Generation done")
+
+    heightmap.smooth_min_max_maps()
+
+    tools.click("submodule", "Smoothed min-max maps done")
 
     heightmap.cut_and_fill_sector_heightmaps()
 
-    elapsed = tools.display_time(tools.click("submodule"))
-    print("Contours done in " + elapsed)
+    tools.click("submodule", "Contours done")
 
     Brushes = []
 
@@ -284,14 +298,13 @@ def main():
             y,
             z,
             CFG["Disps_Per_Sector"],
-            terrain.get().get("ground_texture", "dev/dev_blendmeasure"),
+            terrain.get().get("texture_ground", "dev/dev_blendmeasure"),
         )
         for Entry in Disps:
             Entry += [displacement_build(Entry, sector_data)]
         Brushes += Disps
 
-    elapsed = tools.display_time(tools.click("submodule"))
-    print("Brushes and Displacements done in " + elapsed)
+    tools.click("submodule", "Brushes and Displacements done")
 
     # Terrain = CFG["Biomes"]["hl2_white_forest"]["terrain"]
 
@@ -304,13 +317,11 @@ def main():
         Terrain.get("models_per_sector", 125),  # count
     )"""
 
-    elapsed = tools.display_time(tools.click("submodule"))
-    print("Scattering complete in " + elapsed)
+    tools.click("submodule", "Scattering complete")
 
     vmfpy.write_to_vmf(Brushes, f"{"railmancer"}_{random.randint(4000,4999)}{".vmf"}")
 
-    elapsed = tools.display_time(tools.click("total"))
-    print("Railmancer Finished in " + elapsed)
+    tools.click("total", "Railmancer Finished")
 
 
 if __name__ == "__main__":

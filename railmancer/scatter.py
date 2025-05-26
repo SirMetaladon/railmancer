@@ -1,7 +1,6 @@
-import numpy as np
 from scipy.spatial import KDTree
-import math
-import sectors
+import math, numpy as np
+from railmancer import sectors
 
 
 def point_generator(

@@ -1,8 +1,6 @@
-import turtle
-import math
-import numpy as np
+import turtle, math, numpy as np
 from scipy.optimize import minimize
-import tools
+from railmancer import tools
 
 
 def bezier(t, Bez, dimensions):

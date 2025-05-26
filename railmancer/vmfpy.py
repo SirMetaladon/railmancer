@@ -1,5 +1,5 @@
 import os, re
-import sectors, entities
+from railmancer import sectors, entities
 
 
 def re_id(original_string, replacement):

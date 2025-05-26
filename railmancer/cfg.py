@@ -1,4 +1,5 @@
-import tools, random
+from railmancer import tools
+import random
 
 
 def initialize(path: str):

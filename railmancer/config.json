@@ -59,28 +59,30 @@
         }
       },
       "terrain": {
-        "ground_texture":"nature/blendgroundtosnow001",
-        "track_bias_slope": 1,
-        "track_bias_base": 100,
+        "texture_ground":"nature/blendgroundtosnow001",
+        "height_terrain_transition_to_tracks_distance": 1000,
+        "height_terrain_flat_in_radius_around_track": 200,
         "cut_power": 2,
         "cut_scale": 150,
         "cut_basewidth": 250,
         "cut_slump": 0.9,
+        "height_track_to_terrain": -22,
         "terrain_max": 5000,
         "terrain_min": -2000,
         "track_max": 60,
         "track_min": -60,
         "too_steep_alpha": 0.75,
-        "disp_alpha_mult": 1,
+        "alpha_multiplier": 1,
         "ballast_alpha_distance": 400,
-        "cut_base_height": -45,
+        
         "models_per_sector": 125,
-        "noise_hill_resolution": 1.5,
+        "noise_hill_resolution": 10,
         "noise_persistence": 0.2,
         "noise_lacunarity": 4,
         "noise_octaves": 2,
-        "noise_multiplier": 3, 
-        "minimum_tree_height": 430
+        "noise_deviation_multiplier": 3, 
+        "height_terrain_minimum_to_ceiling": 430,
+        "height_terrain_minimum_to_floor": 15
       }
     },
     "hl2_white_forest": {
@@ -135,10 +137,10 @@
         }
       },
       "terrain": {
-        "ground_texture": "nature/blenddirtgrass005a",
-        "alpha_noise_mult": 200,
-        "track_bias_slope": 1.2,
-        "track_bias_base": 150,
+        "texture_ground": "nature/blenddirtgrass005a",
+        "alpha_from_noise_multiplier": 200,
+        "height_terrain_transition_to_tracks_distance": 1000,
+        "height_terrain_flat_in_radius_around_track": 150,
         "cut_power": 4,
         "cut_scale": 150,
         "cut_basewidth": 150,
@@ -151,14 +153,15 @@
         "alpha_steepness_transition": 0.2,
         "ballast_alpha_distance": 200,
         "ballast_alpha_slope": 50,
-        "cut_base_height": -35,
+        "height_track_to_terrain": -35,
         "models_per_sector": 250,
         "noise_hill_resolution": 40,
         "noise_persistence": 0.2,
         "noise_lacunarity": 4,
         "noise_octaves": 3,
-        "noise_multiplier": 1, 
-        "minimum_tree_height": 480,
+        "noise_deviation_multiplier": 1, 
+        "height_terrain_minimum_to_ceiling": 480,
+        "height_terrain_minimum_to_floor": 15,
         "model_minimum_distance": 100,
         "tree_fade_distance": 1000,
         "tree_hard_distance": 128
@@ -175,9 +178,9 @@
         }
       },
       "terrain": {
-        "ground_texture": "trakpak3_common/hammer/blendgrid_green_gray",
-        "track_bias_slope": 1,
-        "track_bias_base": 96,
+        "texture_ground": "trakpak3_common/hammer/blendgrid_green_gray",
+        "height_terrain_transition_to_tracks_distance": 1000,
+        "height_terrain_flat_in_radius_around_track": 96,
         "cut_power": 2,
         "cut_scale": 150,
         "cut_basewidth": 250,
@@ -188,14 +191,15 @@
         "track_min": -60,
         "too_steep_alpha": 0.75,
         "ballast_alpha_distance": 400,
-        "cut_base_height": -45,
+        "height_track_to_terrain": -35,
         "models_per_sector": 5,
         "noise_hill_resolution": 0.7,
         "noise_persistence": 0.2,
         "noise_lacunarity": 4,
         "noise_octaves": 2,
-        "noise_multiplier": 0,
-        "minimum_tree_height": 0
+        "noise_deviation_multiplier": 0,
+        "height_terrain_minimum_to_ceiling": 0,
+        "height_terrain_minimum_to_floor": 0
       }
     }
   }

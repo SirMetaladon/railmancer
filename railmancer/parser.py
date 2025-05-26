@@ -1,4 +1,4 @@
-import track, lines, tools, entities
+from railmancer import track, lines, tools, entities
 import numpy as np
 
 

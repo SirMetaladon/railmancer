@@ -1,6 +1,6 @@
 import os, math
 import numpy as np
-import lines, entities, tools
+from railmancer import lines, entities, tools
 
 
 def determine_real_grade(raw_grade):
@@ -464,8 +464,8 @@ def valid_next_tracks(Direction, MinimumRadiusLevel):
 
     for Track in list(track_model_library.items()):
 
-        """if Track[1]["GradeLevel"] < -1:
-        continue"""
+        if Track[1]["GradeLevel"] < -1:
+            continue
 
         if Track[1]["Radius"] not in AllowedRadii:
             continue

@@ -1,4 +1,4 @@
-import random, tools, cfg
+from railmancer import cfg
 
 # this will be retrofitted later into a tool for converting points in 2d/3d space into biome blend data
 

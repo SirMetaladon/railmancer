@@ -1,4 +1,4 @@
-import lines, vmfpy
+from railmancer import lines, vmfpy
 
 
 def collapse_quantum_switchstands():
