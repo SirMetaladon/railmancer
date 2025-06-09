@@ -26,38 +26,11 @@ def build_heightmap_base():
     }
 
 
-def unify(sector_object, LeftXCoord, RightXCoord, TopYCoord, BottomYCoord):
+def get_four_nearest_noise_values(
+    grid, LeftXCoord, RightXCoord, TopYCoord, BottomYCoord
+):
 
-    Size = len(sector_object[0]["heightmap"])
-
-    """if sector_object[0].get("unified", False) is not False:
-        Z = sector_object[0]["unified"]
-
-    else:
-
-        center = sector_object[0]["heightmap"]
-
-        othergrids = []
-        for x in range(4):
-            grid = sector_object[x + 1]
-
-            if grid is False:
-                othergrids += [blank_list_grid(2, Size, False)]
-            else:
-                othergrids += [grid["heightmap"]]
-
-        up, right, down, left = othergrids
-
-        Z = tools.merge_grids(center, left, right, up, down)
-        sector_object[0]["unified"] = Z
-    
-    BottomLeftCornerAlpha = Z[LeftXCoord + Size][BottomYCoord + Size]
-    TopLeftCornerAlpha = Z[LeftXCoord + Size][TopYCoord + Size]
-    BottomRightCornerAlpha = Z[RightXCoord + Size][BottomYCoord + Size]
-    TopRightCornerAlpha = Z[RightXCoord + Size][TopYCoord + Size]"""
-
-    Z = sector_object[0]["heightmap"]
-    Limit = len(Z)
+    Limit = len(grid)
 
     if LeftXCoord < 0 or LeftXCoord > Limit:
         return False
@@ -68,10 +41,10 @@ def unify(sector_object, LeftXCoord, RightXCoord, TopYCoord, BottomYCoord):
     if BottomYCoord < 0 or BottomYCoord > Limit:
         return False
 
-    BottomLeftCornerAlpha = Z[LeftXCoord][BottomYCoord]
-    TopLeftCornerAlpha = Z[LeftXCoord][TopYCoord]
-    BottomRightCornerAlpha = Z[RightXCoord][BottomYCoord]
-    TopRightCornerAlpha = Z[RightXCoord][TopYCoord]
+    BottomLeftCornerAlpha = grid[LeftXCoord][BottomYCoord]
+    TopLeftCornerAlpha = grid[LeftXCoord][TopYCoord]
+    BottomRightCornerAlpha = grid[RightXCoord][BottomYCoord]
+    TopRightCornerAlpha = grid[RightXCoord][TopYCoord]
 
     if BottomLeftCornerAlpha is False:
         return False
@@ -90,22 +63,22 @@ def unify(sector_object, LeftXCoord, RightXCoord, TopYCoord, BottomYCoord):
     )
 
 
-def sector_interpolator(sector_object, noise_x, noise_y):
+def sector_interpolator(sector_object, noise_x, noise_y, field):
 
     if sector_object is None:
-        return 1000
+        return False
 
-    Len = len(sector_object[0]["heightmap"])
-
-    LeftXCoord = min(int(noise_x), Len - 2)
-    BottomYCoord = min(int(noise_y), Len - 2)
+    LeftXCoord = noise_x
+    BottomYCoord = noise_y
 
     RightXCoord, TopYCoord = LeftXCoord + 1, BottomYCoord + 1
 
-    Corners = unify(sector_object, LeftXCoord, RightXCoord, TopYCoord, BottomYCoord)
+    Corners = get_four_nearest_noise_values(
+        sector_object["grid"][field], LeftXCoord, RightXCoord, TopYCoord, BottomYCoord
+    )
 
     if Corners == False:
-        return -1000
+        return False
 
     (
         BottomLeftCornerAlpha,
@@ -204,7 +177,10 @@ def convert_noise_to_real_pos(noise_x, noise_y, sector_data):
 
     sector_x, sector_y = sector_data["x"], sector_data["y"]
 
-    # virtual X and Y are 0-1 within the sector
+    # sector x/y are integers relative to the overall grid (-3 to 4)
+    # virtual x/y are floats fractions within the sector (0 to 1)
+    # noise x/y are integers related to points within the sector (0 to span-1)
+
     virtual_x = noise_x / (biome_maps["sector_span_noise"] - 1)
     virtual_y = noise_y / (biome_maps["sector_span_noise"] - 1)
 
@@ -218,6 +194,10 @@ def convert_real_to_noise_pos(real_x, real_y, sector_data):
 
     sector_x, sector_y = sector_data["x"], sector_data["y"]
 
+    # sector x/y are integers relative to the overall grid (-3 to 4)
+    # virtual x/y are floats fractions within the sector (0 to 1)
+    # noise x/y are integers related to points within the sector (0 to span-1)
+
     virtual_x = (real_x / biome_maps["sector_span_physical"]) - sector_x
     virtual_y = (real_y / biome_maps["sector_span_physical"]) - sector_y
 
@@ -229,9 +209,7 @@ def convert_real_to_noise_pos(real_x, real_y, sector_data):
 
 def generate_sector_heightmaps():
 
-    for Sector in sectors.get_all().items():
-
-        sector_data = Sector[1][0]
+    for sector_data in sectors.get_all().values():
 
         MinMap = blank_list_grid(2, biome_maps["sector_span_noise"])
         MaxMap = blank_list_grid(2, biome_maps["sector_span_noise"])
@@ -362,7 +340,7 @@ def cut_and_fill_sector_heightmaps():
                 generate_heightmap_node(sector_object, noise_x, noise_y)
 
 
-def query_height(real_x, real_y, sector_object):
+def query_field(real_x, real_y, sector_object):
 
     # 2048,2048 (middle of the square, should return noise x/y = 1,1
 
@@ -410,15 +388,17 @@ def sample_realspace_noise(x, y, z):
 
 def height_sample(real_x, real_y, samples, radius, sector):
 
+    # start with one in the center for good measure
+    Heights = [query_field(sector, "height", real_x, real_y)]
+
     SectorSize = 360 / samples
-    Heights = [query_height(real_x, real_y, sector)]
     Arm = [radius, 0]
 
     for Slice in range(samples):
 
         offset = tools.rot_z(Arm, Slice * SectorSize)
 
-        Example = query_height(real_x + offset[0], real_y + offset[1], sector)
+        Example = query_field(sector, "height", real_x + offset[0], real_y + offset[1])
         Heights += [Example]
 
     return Heights
@@ -432,5 +412,22 @@ def smooth_min_max_maps():
     # for every sector, run through all the main entries and smooth them to neighbors
 
     for sector in sectors.get_all().values():
-        print(sector[0]["id"])
-        sector_interpolator(sector, 0, 0)
+
+        print(query_field(sector, "height", 0, 0))
+
+    """for sector in sectors.get_all().items():
+
+        sector_object = sector[1]
+
+        # since it's guarenteed to be square, and all the same size
+        heightmap = sector_object[0]["heightmap"]
+        poll_values = range(len(heightmap))
+
+        # 2 gives 0, 1
+        # 0, 1 needs to become 0,1 in the linear transform thingy
+        # therefore, the divisor needs to be 1
+
+        for noise_x in poll_values:
+            for noise_y in poll_values:
+
+                generate_heightmap_node(sector_object, noise_x, noise_y)"""

@@ -267,7 +267,7 @@ def main():
     # Step 4: Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are. Also contains a map for "what block is next to this one"
     sectors.initialize()
     sectors.build_fit()
-    sectors.stitch()
+    sectors.link()
 
     tools.click("submodule", "Sector framework completed")
 

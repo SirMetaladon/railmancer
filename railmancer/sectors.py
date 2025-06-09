@@ -14,40 +14,27 @@ def initialize():
 
 def within_sector_height(sector_id, floor, ceiling):
 
-    floor_limit = max(floor, Sectors[sector_id][0]["floor"])
-    ceiling_limit = min(ceiling, Sectors[sector_id][0]["ceiling"])
+    floor_limit = max(floor, Sectors[sector_id]["floor"])
+    ceiling_limit = min(ceiling, Sectors[sector_id]["ceiling"])
 
     return (ceiling_limit - floor_limit) >= cfg.get("sector_minimum_cube_gap")
 
 
-def get_connected_sector_data(x, y, floor, ceiling):
+def get_sector_id_near_height(x, y, floor, ceiling):
 
     sector_list = sector_lookup_grid.get(f"{x}x{y}", False)
 
-    if sector_list == False:
+    if sector_list is False:
         return False
-
-    sector_id = ""
 
     for possible_sector in sector_list:
 
         if within_sector_height(possible_sector, floor, ceiling):
 
-            sector_id = possible_sector
-            break
+            return possible_sector
 
-    else:
-        return False
-
-    sector_data = Sectors[sector_id][0]
-
-    # if abs(height - sector_data["floor"]) <= 21:
-    # it may be prudent to add more checks here for more absurd (low-height) blocks, but it's low priority (just don't make blocks less than 21 high?)
-    # print(x, y, sector_data)
-    return sector_data
-
-    """else:
-        return False"""
+    # if no sectors found or none were within height range
+    return False
 
 
 def new_sector(x, y, floor, ceiling):
@@ -68,20 +55,15 @@ def new_sector(x, y, floor, ceiling):
     else:
         sector_lookup_grid[sector_lookup] = [sector_id]
 
-    Sectors[sector_id] = [
-        {
-            "id": sector_id,
-            "x": x,
-            "y": y,
-            "floor": floor_real,
-            "ceiling": ceiling_real,
-            "local_lines": [],
-            "relevant_lines": [],
-            "minmap": [],
-            "maxmap": [],
-            "heightmap": [],
-        }
-    ]
+    Sectors[sector_id] = {
+        "id": sector_id,
+        "x": x,
+        "y": y,
+        "floor": floor_real,
+        "ceiling": ceiling_real,
+        "grid": [],
+        "neighbors": [],
+    }
 
 
 def sector_square(data):
@@ -156,28 +138,40 @@ def build_manual(build_method, data):
         sector_square(data)
 
 
-def stitch():  # takes all sectors, finds nearby sectors, and adds them to existing sectors effectively allowing each sector to reference it's neighbors
+def link():  # takes all sectors, finds nearby sectors, and adds them to a list of neighbors, then checks those lists for consistiency
 
-    for Sector in Sectors.items():
+    # initially add neighbors
+    for Sector_Data in Sectors.values():
 
-        sector_id = Sector[0]
-        XCoord = Sector[1][0]["x"]
-        YCoord = Sector[1][0]["y"]
-        FloorHeight = Sector[1][0]["floor"]
-        CeilingHeight = Sector[1][0]["ceiling"]
+        print(Sector_Data)
 
-        Sectors[sector_id] += [
-            get_connected_sector_data(XCoord, YCoord + 1, FloorHeight, CeilingHeight)
+        XCoord = Sector_Data["x"]
+        YCoord = Sector_Data["y"]
+        FloorHeight = Sector_Data["floor"]
+        CeilingHeight = Sector_Data["ceiling"]
+
+        Sector_Data["neighbors"] += [
+            get_sector_id_near_height(XCoord, YCoord + 1, FloorHeight, CeilingHeight),
+            get_sector_id_near_height(XCoord + 1, YCoord, FloorHeight, CeilingHeight),
+            get_sector_id_near_height(XCoord, YCoord - 1, FloorHeight, CeilingHeight),
+            get_sector_id_near_height(XCoord - 1, YCoord, FloorHeight, CeilingHeight),
         ]
-        Sectors[sector_id] += [
-            get_connected_sector_data(XCoord + 1, YCoord, FloorHeight, CeilingHeight)
-        ]
-        Sectors[sector_id] += [
-            get_connected_sector_data(XCoord, YCoord - 1, FloorHeight, CeilingHeight)
-        ]
-        Sectors[sector_id] += [
-            get_connected_sector_data(XCoord - 1, YCoord, FloorHeight, CeilingHeight)
-        ]
+
+    # checks for connsistiency
+
+    for Sector_Data in Sectors.values():
+
+        for Direction_ID in range(4):  # cycling through Sector_Data["neighbors"]
+
+            Nearby_Sector = Sector_Data["neighbors"][Direction_ID]
+
+            if Nearby_Sector is False:
+                continue
+
+            # if this sector's ID is not in the other sector's list of neighbors (disagreement on linking)
+            if Sector_Data["id"] not in Sectors[Nearby_Sector]["neighbors"]:
+
+                Sector_Data["neighbors"][Direction_ID] = False
 
 
 def build_fit():
