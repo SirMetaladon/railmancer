@@ -19,8 +19,8 @@ def initialize(path: str):
 
     # this is the default CFG data, format label, default, min, max
     Expecting = [
-        ["sector_size", 4080, 16, max_mapsize],
-        ["Noise_Size", 25, 1, 1000],
+        ["sector_real_size", 4080, 16, max_mapsize],
+        ["noise_grid_per_sector", 25, 1, 1000],
         ["line_maximum_poll_point_distance", 25, 1, 1000],
         ["Disps_Per_Sector", 3, 1, 50],
         ["sector_snap_grid", 16, 1, 128],
@@ -42,7 +42,7 @@ def initialize(path: str):
         Biome["terrain"]["seed"] = random.randint(0, 100)
 
     # this must be an even number for alignment to work
-    CFG["sectors_per_map"] = int(max_mapsize / CFG["sector_size"])
+    CFG["sectors_per_map"] = int(max_mapsize / CFG["sector_real_size"])
     CFG["sector_minimum_cube_gap"] = (
         CFG["sector_minimum_vertical_track_clearance"]
         + CFG["sector_minimum_track_depth"]

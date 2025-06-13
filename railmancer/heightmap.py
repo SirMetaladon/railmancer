@@ -5,27 +5,6 @@ import random, itertools, math, time
 from railmancer import lines, sectors, tools, terrain, entities, cfg
 
 
-def build_heightmap_base():
-
-    global biome_maps
-
-    """Extents = [0, 0, 0, 0]
-    # x min, x max, y min, y max
-
-    for block in blocklist:
-        Extents[0] = min(Extents[0], block[0])
-        Extents[1] = max(Extents[1], block[0])
-        Extents[2] = min(Extents[2], block[1])
-        Extents[3] = max(Extents[3], block[1])"""
-
-    biome_maps = {
-        "sector_span_physical": cfg.get("sector_size"),
-        "sector_span_noise": cfg.get("Noise_Size"),
-        # "sector_shift": sector_size * ((SectorsPerGrid / 2) - 1),
-        "overall_span_noise": cfg.get("Noise_Size") * cfg.get("sectors_per_map"),
-    }
-
-
 def get_four_nearest_noise_values(
     grid, LeftXCoord, RightXCoord, TopYCoord, BottomYCoord
 ):
@@ -63,7 +42,7 @@ def get_four_nearest_noise_values(
     )
 
 
-def sector_interpolator(sector_object, noise_x, noise_y, field):
+def field_interpolator(sector_object, field, noise_x, noise_y):
 
     if sector_object is None:
         return False
@@ -181,28 +160,29 @@ def convert_noise_to_real_pos(noise_x, noise_y, sector_data):
     # virtual x/y are floats fractions within the sector (0 to 1)
     # noise x/y are integers related to points within the sector (0 to span-1)
 
-    virtual_x = noise_x / (biome_maps["sector_span_noise"] - 1)
-    virtual_y = noise_y / (biome_maps["sector_span_noise"] - 1)
+    virtual_x = noise_x / (cfg.get("noise_grid_per_sector") - 1)
+    virtual_y = noise_y / (cfg.get("noise_grid_per_sector") - 1)
 
-    real_x = (sector_x + virtual_x) * biome_maps["sector_span_physical"]
-    real_y = (sector_y + virtual_y) * biome_maps["sector_span_physical"]
+    real_x = (sector_x + virtual_x) * cfg.get("sector_real_size")
+    real_y = (sector_y + virtual_y) * cfg.get("sector_real_size")
 
     return real_x, real_y
 
 
-def convert_real_to_noise_pos(real_x, real_y, sector_data):
+def convert_real_to_noise_pos(position, sector_data):
 
     sector_x, sector_y = sector_data["x"], sector_data["y"]
+    real_x, real_y, _ = position
 
     # sector x/y are integers relative to the overall grid (-3 to 4)
     # virtual x/y are floats fractions within the sector (0 to 1)
     # noise x/y are integers related to points within the sector (0 to span-1)
 
-    virtual_x = (real_x / biome_maps["sector_span_physical"]) - sector_x
-    virtual_y = (real_y / biome_maps["sector_span_physical"]) - sector_y
+    virtual_x = (real_x / cfg.get("sector_real_size")) - sector_x
+    virtual_y = (real_y / cfg.get("sector_real_size")) - sector_y
 
-    noise_x = virtual_x * (biome_maps["sector_span_noise"] - 1)
-    noise_y = virtual_y * (biome_maps["sector_span_noise"] - 1)
+    noise_x = virtual_x * (cfg.get("noise_grid_per_sector") - 1)
+    noise_y = virtual_y * (cfg.get("noise_grid_per_sector") - 1)
 
     return noise_x, noise_y
 
@@ -211,12 +191,12 @@ def generate_sector_heightmaps():
 
     for sector_data in sectors.get_all().values():
 
-        MinMap = blank_list_grid(2, biome_maps["sector_span_noise"])
-        MaxMap = blank_list_grid(2, biome_maps["sector_span_noise"])
-        sector_data["heightmap"] = blank_list_grid(2, biome_maps["sector_span_noise"])
+        MinMap = blank_list_grid(2, cfg.get("noise_grid_per_sector"))
+        MaxMap = blank_list_grid(2, cfg.get("noise_grid_per_sector"))
+        sector_data["heightmap"] = blank_list_grid(2, cfg.get("noise_grid_per_sector"))
 
-        for noise_x in range(biome_maps["sector_span_noise"]):
-            for noise_y in range(biome_maps["sector_span_noise"]):
+        for noise_x in range(cfg.get("noise_grid_per_sector")):
+            for noise_y in range(cfg.get("noise_grid_per_sector")):
 
                 real_x, real_y = convert_noise_to_real_pos(
                     noise_x, noise_y, sector_data
@@ -340,13 +320,15 @@ def cut_and_fill_sector_heightmaps():
                 generate_heightmap_node(sector_object, noise_x, noise_y)
 
 
-def query_field(real_x, real_y, sector_object):
+def query_field(field, position, sector_data=None):
 
-    # 2048,2048 (middle of the square, should return noise x/y = 1,1
+    if sector_data is None:
 
-    noise_x, noise_y = convert_real_to_noise_pos(real_x, real_y, sector_object[0])
+        sector_data = sectors.get_sector_data_at_position(position)
 
-    height = sector_interpolator(sector_object, noise_x, noise_y)
+    noise_x, noise_y = convert_real_to_noise_pos(position, sector_data)
+
+    height = field_interpolator(sector_data, field, noise_x, noise_y)
 
     return height
 
@@ -371,7 +353,11 @@ def sample_realspace_noise(x, y, z):
 
     Terrain = terrain.get()
 
-    scale = biome_maps["overall_span_noise"] * Terrain["noise_hill_resolution"]
+    scale = (
+        cfg.get("noise_grid_per_sector")
+        * cfg.get("sectors_per_map")
+        * Terrain["noise_hill_resolution"]
+    )
 
     noise = pnoise3(
         x / scale,
@@ -413,7 +399,7 @@ def smooth_min_max_maps():
 
     for sector in sectors.get_all().values():
 
-        print(query_field(sector, "height", 0, 0))
+        print(query_field("height", [0, 0, 0], sector))
 
     """for sector in sectors.get_all().items():
 

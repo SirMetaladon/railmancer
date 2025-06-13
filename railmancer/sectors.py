@@ -12,7 +12,7 @@ def initialize():
         sector_lookup_grid = {}
 
 
-def within_sector_height(sector_id, floor, ceiling):
+def sectors_are_connected(sector_id, floor, ceiling):
 
     floor_limit = max(floor, Sectors[sector_id]["floor"])
     ceiling_limit = min(ceiling, Sectors[sector_id]["ceiling"])
@@ -20,7 +20,7 @@ def within_sector_height(sector_id, floor, ceiling):
     return (ceiling_limit - floor_limit) >= cfg.get("sector_minimum_cube_gap")
 
 
-def get_sector_id_near_height(x, y, floor, ceiling):
+def get_sector_id_near_height_connected(x, y, floor, ceiling):
 
     sector_list = sector_lookup_grid.get(f"{x}x{y}", False)
 
@@ -29,9 +29,46 @@ def get_sector_id_near_height(x, y, floor, ceiling):
 
     for possible_sector in sector_list:
 
-        if within_sector_height(possible_sector, floor, ceiling):
+        if sectors_are_connected(possible_sector, floor, ceiling):
 
             return possible_sector
+
+    # if no sectors found or none were within height range
+    return False
+
+
+def convert_real_to_sector_xy(position):
+
+    # sector x/y are integers relative to the overall grid (-3 to 4)
+    # virtual x/y are floats fractions within the sector (0 to 1)
+    # noise x/y are integers related to points within the sector (0 to span-1)
+
+    real_x, real_y, _ = position
+
+    sector_x = math.ceiling(real_x / cfg.get("sector_real_size"))
+    sector_y = math.ceiling(real_y / cfg.get("sector_real_size"))
+    return sector_x, sector_y
+
+
+def get_sector_data_at_position(position):
+
+    sector_x, sector_y = convert_real_to_sector_xy(position)
+
+    sector_list = sector_lookup_grid.get(f"{sector_x}x{sector_y}", False)
+
+    if sector_list is False:
+        return False
+
+    real_z = position[2]
+
+    for possible_sector_id in sector_list:
+
+        ceiling = Sectors[possible_sector_id]["ceiling"]
+        floor = ceiling = Sectors[possible_sector_id]["floor"]
+
+        if ceiling * 16 > real_z & floor * 16 < real_z:
+
+            return possible_sector_id
 
     # if no sectors found or none were within height range
     return False
@@ -61,7 +98,7 @@ def new_sector(x, y, floor, ceiling):
         "y": y,
         "floor": floor_real,
         "ceiling": ceiling_real,
-        "grid": [],
+        "grid": {},
         "neighbors": [],
     }
 
@@ -143,21 +180,19 @@ def link():  # takes all sectors, finds nearby sectors, and adds them to a list 
     # initially add neighbors
     for Sector_Data in Sectors.values():
 
-        print(Sector_Data)
-
-        XCoord = Sector_Data["x"]
-        YCoord = Sector_Data["y"]
-        FloorHeight = Sector_Data["floor"]
-        CeilingHeight = Sector_Data["ceiling"]
+        XGrid = Sector_Data["x"]
+        YGrid = Sector_Data["y"]
+        ZFloor = Sector_Data["floor"]
+        ZCeiling = Sector_Data["ceiling"]
 
         Sector_Data["neighbors"] += [
-            get_sector_id_near_height(XCoord, YCoord + 1, FloorHeight, CeilingHeight),
-            get_sector_id_near_height(XCoord + 1, YCoord, FloorHeight, CeilingHeight),
-            get_sector_id_near_height(XCoord, YCoord - 1, FloorHeight, CeilingHeight),
-            get_sector_id_near_height(XCoord - 1, YCoord, FloorHeight, CeilingHeight),
+            get_sector_id_near_height_connected(XGrid, YGrid + 1, ZFloor, ZCeiling),
+            get_sector_id_near_height_connected(XGrid + 1, YGrid, ZFloor, ZCeiling),
+            get_sector_id_near_height_connected(XGrid, YGrid - 1, ZFloor, ZCeiling),
+            get_sector_id_near_height_connected(XGrid - 1, YGrid, ZFloor, ZCeiling),
         ]
 
-    # checks for connsistiency
+    # checks for consistiency
 
     for Sector_Data in Sectors.values():
 
@@ -182,7 +217,7 @@ def build_fit():
         "sector_minimum_vertical_track_clearance"
     )
     sector_snap_grid = cfg.get("sector_snap_grid")
-    sector_size = cfg.get("sector_size")
+    sector_real_size = cfg.get("sector_real_size")
     sectors_per_map = cfg.get("sectors_per_map")
     sector_minimum_track_to_edge_distance = cfg.get(
         "sector_minimum_track_to_edge_distance"
@@ -231,8 +266,8 @@ def build_fit():
 
     for point in points:
 
-        sector_x = math.floor(point[0] / sector_size)
-        sector_y = math.floor(point[1] / sector_size)
+        sector_x = math.floor(point[0] / sector_real_size)
+        sector_y = math.floor(point[1] / sector_real_size)
 
         if abs(sector_x + 0.5) > (sectors_per_map / 2):
             continue

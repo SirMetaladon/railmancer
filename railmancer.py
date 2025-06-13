@@ -272,8 +272,6 @@ def main():
     tools.click("submodule", "Sector framework completed")
 
     # Step 5: Builds the Extents and ContourMaps base from the sectors/blocks
-    # the large number is the size of the Hammer grid
-    heightmap.build_heightmap_base()
     heightmap.generate_sector_heightmaps()
 
     tools.click("submodule", "Sector Generation done")
@@ -311,8 +309,8 @@ def main():
 
     """Entities += distribute(
         (
-            (Extents[0] * CFG["sector_size"], (Extents[1] + 1) * CFG["sector_size"]),
-            (Extents[2] * CFG["sector_size"], (Extents[3] + 1) * CFG["sector_size"]),
+            (Extents[0] * CFG["sector_real_size"], (Extents[1] + 1) * CFG["sector_real_size"]),
+            (Extents[2] * CFG["sector_real_size"], (Extents[3] + 1) * CFG["sector_real_size"]),
         ),
         Terrain.get("model_minimum_distance", 110),
         Terrain.get("models_per_sector", 125),  # count
