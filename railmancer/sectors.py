@@ -1,5 +1,7 @@
 import math, random
 from railmancer import tools, cfg, lines
+from scipy.spatial import KDTree
+import numpy as np
 
 
 def initialize():
@@ -50,7 +52,7 @@ def convert_real_to_sector_xy(position):
     return sector_x, sector_y
 
 
-def get_sector_data_at_position(position):
+def get_sector_id_at_position(position):
 
     sector_x, sector_y = convert_real_to_sector_xy(position)
 
@@ -208,6 +210,8 @@ def link():  # takes all sectors, finds nearby sectors, and adds them to a list 
 
                 Sector_Data["neighbors"][Direction_ID] = False
 
+    print(Sectors)
+
 
 def build_fit():
 
@@ -223,44 +227,21 @@ def build_fit():
         "sector_minimum_track_to_edge_distance"
     )
 
-    points = lines.get_sampled_points()
+    def get_expanded_points(startpoints, offset):
+        expanded_points = []
 
-    points_extended = []
+        for x, y, z in startpoints:
+            for dx in [-offset, offset]:
+                for dy in [-offset, offset]:
+                    expanded_points.append([x + dx, y + dy, z])
 
-    for point in points:
+        return startpoints + expanded_points
 
-        x, y, z = point
+    points = get_expanded_points(
+        lines.get_sampled_points(), sector_minimum_track_to_edge_distance
+    )
 
-        points_extended += [
-            [
-                x + sector_minimum_track_to_edge_distance,
-                y + sector_minimum_track_to_edge_distance,
-                z,
-            ]
-        ]
-        points_extended += [
-            [
-                x - sector_minimum_track_to_edge_distance,
-                y + sector_minimum_track_to_edge_distance,
-                z,
-            ]
-        ]
-        points_extended += [
-            [
-                x + sector_minimum_track_to_edge_distance,
-                y - sector_minimum_track_to_edge_distance,
-                z,
-            ]
-        ]
-        points_extended += [
-            [
-                x - sector_minimum_track_to_edge_distance,
-                y - sector_minimum_track_to_edge_distance,
-                z,
-            ]
-        ]
-
-    points += points_extended
+    print(points)
 
     sector_height_buckets = {}
 
@@ -335,3 +316,58 @@ def build_fit():
 
 def get_all():
     return Sectors
+
+
+def build_kdtree_for_sector(sector_data):
+    """
+    Builds and caches a KDTree (on x, y only) for the 'points' in a sector.
+    Attaches it to sector['kdtree'] and sector['kdtree_data'] for lookup.
+    """
+    if "points" not in sector_data or not sector_data["points"]:
+        sector_data["kdtree"] = None
+        sector_data["kdtree_data"] = None
+        return
+
+    # Build 2D KDTree using x, y only
+    points = sector_data["points"]
+    xy_coords = [(p[0], p[1]) for p in points]
+    tree = KDTree(xy_coords)
+
+    sector_data["kdtree"] = tree
+    sector_data["kdtree_data"] = points  # Keep original points to reference index
+
+
+def assign_points_to_sectors(points: list[tuple[float, float, float]]):
+    from collections import defaultdict
+
+    # Step 1: Map points to their specific sector via floor/ceiling lookup
+    sector_point_map = defaultdict(list)
+    for point in points:
+        sector_id = get_sector_id_at_position(point)
+        if not sector_id:
+            continue  # Shouldn't happen, but safety first
+        sector_point_map[sector_id].append(point)
+
+    # Step 2: For each sector, gather its own and neighbor points
+    for sector_id, sector_data in Sectors.items():
+        all_points = list(sector_point_map.get(sector_id, []))
+
+        for neighbor_id in sector_data.get("neighbors", []):
+            if neighbor_id and isinstance(neighbor_id, str):
+                all_points.extend(sector_point_map.get(neighbor_id, []))
+
+        sector_data["points"] = all_points
+
+        build_kdtree_for_sector(sector_data)
+
+
+def find_closest_point_2d(sector, x, y):
+    """
+    Returns the closest 3D point (x, y, z) in the sector to the input x, y.
+    Assumes the sector already has its KDTree built.
+    """
+    if "kdtree" not in sector or sector["kdtree"] is None:
+        return None  # No points to compare
+
+    dist, idx = sector["kdtree"].query((x, y))
+    return dist, sector["kdtree_data"][idx]

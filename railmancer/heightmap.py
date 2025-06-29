@@ -324,7 +324,7 @@ def query_field(field, position, sector_data=None):
 
     if sector_data is None:
 
-        sector_data = sectors.get_sector_data_at_position(position)
+        sector_data = sectors.get_sector_id_at_position(position)
 
     noise_x, noise_y = convert_real_to_noise_pos(position, sector_data)
 

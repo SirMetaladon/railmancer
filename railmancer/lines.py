@@ -286,7 +286,7 @@ def generate_line(Line):
 
 def encode_lines(line_maximum_poll_point_distance):
 
-    global LineDistanceTree, LineDistanceHeights, sampled_points
+    global sampled_points
 
     from scipy.spatial import KDTree
 
@@ -308,20 +308,6 @@ def encode_lines(line_maximum_poll_point_distance):
         )
 
         sampled_points += [(bezier(t, Subsegment, 3)) for t in ts]
-
-    points = [(x, y) for x, y, _ in sampled_points]
-
-    LineDistanceHeights, LineDistanceTree = [
-        val for _, _, val in sampled_points
-    ], KDTree(points)
-
-
-def distance_to_line(real_x, real_y):
-
-    Shortest, idx = LineDistanceTree.query([real_x, real_y])
-    Height = LineDistanceHeights[idx]
-
-    return Shortest, Height
 
 
 def get_sampled_points():

@@ -271,6 +271,8 @@ def main():
 
     tools.click("submodule", "Sector framework completed")
 
+    sectors.assign_points_to_sectors()
+
     # Step 5: Builds the Extents and ContourMaps base from the sectors/blocks
     heightmap.generate_sector_heightmaps()
 
