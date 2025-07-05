@@ -1,5 +1,5 @@
 import math, random
-from railmancer import tools, cfg, lines
+from railmancer import tools, cfg, lines, entities
 from scipy.spatial import KDTree
 import numpy as np
 
@@ -47,8 +47,8 @@ def convert_real_to_sector_xy(position):
 
     real_x, real_y, _ = position
 
-    sector_x = math.ceiling(real_x / cfg.get("sector_real_size"))
-    sector_y = math.ceiling(real_y / cfg.get("sector_real_size"))
+    sector_x = math.floor(real_x / cfg.get("sector_real_size"))
+    sector_y = math.floor(real_y / cfg.get("sector_real_size"))
     return sector_x, sector_y
 
 
@@ -66,9 +66,9 @@ def get_sector_id_at_position(position):
     for possible_sector_id in sector_list:
 
         ceiling = Sectors[possible_sector_id]["ceiling"]
-        floor = ceiling = Sectors[possible_sector_id]["floor"]
+        floor = Sectors[possible_sector_id]["floor"]
 
-        if ceiling * 16 > real_z & floor * 16 < real_z:
+        if (ceiling * 16 > real_z) and (floor * 16 < real_z):
 
             return possible_sector_id
 
@@ -210,8 +210,6 @@ def link():  # takes all sectors, finds nearby sectors, and adds them to a list 
 
                 Sector_Data["neighbors"][Direction_ID] = False
 
-    print(Sectors)
-
 
 def build_fit():
 
@@ -241,14 +239,11 @@ def build_fit():
         lines.get_sampled_points(), sector_minimum_track_to_edge_distance
     )
 
-    print(points)
-
     sector_height_buckets = {}
 
     for point in points:
 
-        sector_x = math.floor(point[0] / sector_real_size)
-        sector_y = math.floor(point[1] / sector_real_size)
+        sector_x, sector_y = convert_real_to_sector_xy(point)
 
         if abs(sector_x + 0.5) > (sectors_per_map / 2):
             continue
@@ -337,12 +332,14 @@ def build_kdtree_for_sector(sector_data):
     sector_data["kdtree_data"] = points  # Keep original points to reference index
 
 
-def assign_points_to_sectors(points: list[tuple[float, float, float]]):
+def assign_points_to_sectors():
     from collections import defaultdict
+
+    print(sector_lookup_grid.keys())
 
     # Step 1: Map points to their specific sector via floor/ceiling lookup
     sector_point_map = defaultdict(list)
-    for point in points:
+    for point in lines.get_sampled_points():
         sector_id = get_sector_id_at_position(point)
         if not sector_id:
             continue  # Shouldn't happen, but safety first
@@ -371,3 +368,7 @@ def find_closest_point_2d(sector, x, y):
 
     dist, idx = sector["kdtree"].query((x, y))
     return dist, sector["kdtree_data"][idx]
+
+
+def get(sector_id, default):
+    return Sectors.get(sector_id, default)

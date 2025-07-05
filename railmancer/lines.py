@@ -179,67 +179,76 @@ def write_bezier_points(start_position, end_position, start_direction, end_direc
     is_aligned_points = np.isclose(cross_points, 0)
 
     if is_collinear_directions and is_aligned_points:
-        # Control points the midpoint should work, right?
+        # make an attempt at a straight line
         p1 = p0 + d0 * np.linalg.norm(p3 - p0) / 2
         p2 = p1
+        Beziers += [
+            (
+                start_position,
+                np.array(start_position) * (2 / 3) + np.array(end_position) * (1 / 3),
+                np.array(start_position) * (1 / 3) + np.array(end_position) * (2 / 3),
+                end_position,
+            )
+        ]
+
+    else:
+
+        # Function to calculate the radius of curvature
+        def curvature_radius(p0, p1, p2, p3, t):
+            """Calculates the radius of curvature of a cubic Bezier curve at parameter t."""
+            # First derivative
+            d1 = 3 * (p1 - p0)
+            d2 = 3 * (p2 - p1)
+            d3 = 3 * (p3 - p2)
+
+            dP = (1 - t) ** 2 * d1 + 2 * (1 - t) * t * d2 + t**2 * d3
+
+            # Second derivative
+            ddP = 6 * ((1 - t) * (p2 - 2 * p1 + p0) + t * (p3 - 2 * p2 + p1))
+
+            # Radius of curvature formula
+            numerator = np.linalg.norm(dP) ** 3
+            denominator = np.abs(np.cross(dP, ddP))
+            if denominator == 0:  # To avoid division by zero
+                return np.inf
+            return numerator / denominator
+
+        # Objective function: Minimize the negative minimum radius of curvature (maximize radius)
+        def objective(params):
+            p1 = p0 + params[0] * d0
+            p2 = p3 + params[1] * d3
+            min_radius = np.inf
+
+            # Sample at multiple points along the curve to estimate the minimum radius
+            for t in np.linspace(0, 1, 20):
+                radius = curvature_radius(p0, p1, p2, p3, t)
+                if not (np.isnan(radius) or np.isinf(radius)):
+                    min_radius = min(min_radius, radius)
+                """else:
+                    print(
+                        f"Invalid radius at t={t}: {radius}, {start_position}, {end_position}"
+                    )"""
+
+            # Return negative to maximize radius
+            return -min_radius
+
+        # Initial guess for parameter multipliers
+        initial_guess = np.array([0.5, 0.5])  # Parameters for scaling d0 and d3
+
+        dist = math.dist(p0, p3)
+
+        # Bounds to prevent the control points from going too far
+        bounds = [(dist / 5, 30000), (dist / 5, 30000)]
+
+        # Perform optimization
+        result = minimize(objective, initial_guess, bounds=bounds, method="L-BFGS-B")
+
+        # Calculate control points based on optimized parameters
+        best_params = result.x
+        p1 = p0 + best_params[0] * d0
+        p2 = p3 + best_params[1] * d3
+
         Beziers += [(start_position, p1, p2, end_position)]
-
-    # Function to calculate the radius of curvature
-    def curvature_radius(p0, p1, p2, p3, t):
-        """Calculates the radius of curvature of a cubic Bezier curve at parameter t."""
-        # First derivative
-        d1 = 3 * (p1 - p0)
-        d2 = 3 * (p2 - p1)
-        d3 = 3 * (p3 - p2)
-
-        dP = (1 - t) ** 2 * d1 + 2 * (1 - t) * t * d2 + t**2 * d3
-
-        # Second derivative
-        ddP = 6 * ((1 - t) * (p2 - 2 * p1 + p0) + t * (p3 - 2 * p2 + p1))
-
-        # Radius of curvature formula
-        numerator = np.linalg.norm(dP) ** 3
-        denominator = np.abs(np.cross(dP, ddP))
-        if denominator == 0:  # To avoid division by zero
-            return np.inf
-        return numerator / denominator
-
-    # Objective function: Minimize the negative minimum radius of curvature (maximize radius)
-    def objective(params):
-        p1 = p0 + params[0] * d0
-        p2 = p3 + params[1] * d3
-        min_radius = np.inf
-
-        # Sample at multiple points along the curve to estimate the minimum radius
-        for t in np.linspace(0, 1, 20):
-            radius = curvature_radius(p0, p1, p2, p3, t)
-            if not (np.isnan(radius) or np.isinf(radius)):
-                min_radius = min(min_radius, radius)
-            """else:
-                print(
-                    f"Invalid radius at t={t}: {radius}, {start_position}, {end_position}"
-                )"""
-
-        # Return negative to maximize radius
-        return -min_radius
-
-    # Initial guess for parameter multipliers
-    initial_guess = np.array([0.5, 0.5])  # Parameters for scaling d0 and d3
-
-    dist = math.dist(p0, p3)
-
-    # Bounds to prevent the control points from going too far
-    bounds = [(dist / 5, 30000), (dist / 5, 30000)]
-
-    # Perform optimization
-    result = minimize(objective, initial_guess, bounds=bounds, method="L-BFGS-B")
-
-    # Calculate control points based on optimized parameters
-    best_params = result.x
-    p1 = p0 + best_params[0] * d0
-    p2 = p3 + best_params[1] * d3
-
-    Beziers += [(start_position, p1, p2, end_position)]
 
 
 def display_path(BezList: list, Extents):
@@ -288,8 +297,6 @@ def encode_lines(line_maximum_poll_point_distance):
 
     global sampled_points
 
-    from scipy.spatial import KDTree
-
     if not len(Beziers):
         # placeholder value for maps with no track
         sampled_points = [[100000, 100000, 100000]]
@@ -316,3 +323,14 @@ def get_sampled_points():
         return sampled_points
     except:
         return []
+
+
+def distance_to_line(real_x, real_y, sector_data):
+
+    KDTree = sector_data["kdtree"]
+    Points = sector_data["points"]
+
+    Shortest, idx = KDTree.query([real_x, real_y])
+    Pos = Points[idx]
+
+    return Shortest, Pos

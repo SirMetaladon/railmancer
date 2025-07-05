@@ -101,11 +101,11 @@ def row_encode(heights: list):
     return String
 
 
-def query_alpha(real_x, real_y, Terrain, sector):
+def query_alpha(real_x, real_y, Terrain, sector_data):
 
-    dist, _ = lines.distance_to_line(real_x, real_y)
+    dist, _ = lines.distance_to_line(real_x, real_y, sector_data)
 
-    HeightSamples = heightmap.height_sample(real_x, real_y, 6, 20, sector)
+    HeightSamples = heightmap.height_sample(real_x, real_y, 6, 20, sector_data)
 
     LocalSlope = (max(HeightSamples) - min(HeightSamples)) / (40)
     SlopeTarget = Terrain.get("alpha_steepness_cutoff", 0.75)
@@ -143,13 +143,13 @@ def displacement_build(Block, sector):
     shift_y = Y_End
 
     posgrid = [
-        [(x * scale_x + shift_x, y * scale_y + shift_y) for y in range(9)]
+        [(x * scale_x + shift_x, y * scale_y + shift_y, 0) for y in range(9)]
         for x in range(9)
     ]
 
     heights = [
         [
-            heightmap.query_height(position[0], position[1], sector) - Z_End
+            heightmap.query_field("height", position, sector) - Z_End
             for position in x_layer
         ]
         for x_layer in posgrid
@@ -243,12 +243,12 @@ def main():
     track.build_track_library(directory, ".mdl")
 
     CFG = cfg.initialize("railmancer/config.json")
-    TrackBase = "vmf inputs/giantspiral.vmf"  # "vmf inputs/squamish.vmf"
+    TrackBase = ""  # "vmf inputs/giantspiral.vmf"  # "vmf inputs/squamish.vmf"
 
     Path = []
     Path += [[[2040, -32 - 6000, 500], "0fw", -90, False]]
 
-    trackhammer.start(Path[0], 0)
+    trackhammer.start(Path[0], 100)
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.
     parser.import_track(TrackBase)
@@ -288,10 +288,9 @@ def main():
 
     Brushes = []
 
-    for sector in sectors.get_all().items():
+    for sector_data in sectors.get_all().values():
 
-        sector_data = sector[1]
-        x, y, z = sector_data[0]["x"], sector_data[0]["y"], sector_data[0]["floor"]
+        x, y, z = sector_data["x"], sector_data["y"], sector_data["floor"]
 
         Brushes += vmfpy.create_scenery_block(sector_data)
         Disps = vmfpy.displacements(

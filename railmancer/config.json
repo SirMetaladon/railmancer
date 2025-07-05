@@ -1,5 +1,5 @@
 {
-  "line_maximum_poll_point_distance": 25, 
+  "line_maximum_poll_point_distance": 80, 
   "sector_real_size": 4080,
   "noise_grid_per_sector": 25,
   "Disps_Per_Sector": 3,
@@ -61,7 +61,7 @@
       "terrain": {
         "texture_ground":"nature/blendgroundtosnow001",
         "height_terrain_transition_to_tracks_distance": 1000,
-        "height_terrain_flat_in_radius_around_track": 200,
+        "height_terrain_flat_in_radius_around_track": 175,
         "cut_power": 2,
         "cut_scale": 150,
         "cut_basewidth": 250,
@@ -70,17 +70,17 @@
         "terrain_max": 5000,
         "terrain_min": -2000,
         "track_max": 60,
-        "track_min": -60,
+        "track_min": -600,
         "too_steep_alpha": 0.75,
         "alpha_multiplier": 1,
-        "ballast_alpha_distance": 400,
+        "ballast_alpha_distance": 300,
         
         "models_per_sector": 125,
-        "noise_hill_resolution": 10,
+        "noise_hill_resolution": 25,
         "noise_persistence": 0.2,
         "noise_lacunarity": 4,
         "noise_octaves": 2,
-        "noise_deviation_multiplier": 3, 
+        "noise_deviation_multiplier": 1, 
         "height_terrain_minimum_to_ceiling": 430,
         "height_terrain_minimum_to_floor": 15
       }

@@ -432,10 +432,10 @@ def wall(block_x: int, block_y: int, block_z: int, height: int, dir: int, type="
 
 def create_scenery_block(sector):
     block_x, block_y, block_floor, block_ceiling = (
-        sector[0]["x"],
-        sector[0]["y"],
-        sector[0]["floor"],
-        sector[0]["ceiling"],
+        sector["x"],
+        sector["y"],
+        sector["floor"],
+        sector["ceiling"],
     )
 
     Brushes = [
@@ -448,8 +448,9 @@ def create_scenery_block(sector):
 
     for dir in range(4):
 
-        # the +1 is because [0] contains this sector's information
-        adjacent_sector = sector[dir + 1]
+        adjacent_sector_id = sector["neighbors"][dir]
+
+        adjacent_sector = sectors.get(adjacent_sector_id, False)
 
         if adjacent_sector is False:
             Brushes += [

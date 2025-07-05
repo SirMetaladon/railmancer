@@ -464,7 +464,7 @@ def valid_next_tracks(Direction, MinimumRadiusLevel):
 
     for Track in list(track_model_library.items()):
 
-        if Track[1]["GradeLevel"] < -1:
+        if Track[1]["GradeLevel"] < 1:
             continue
 
         if Track[1]["Radius"] not in AllowedRadii:
