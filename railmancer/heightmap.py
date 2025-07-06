@@ -20,10 +20,10 @@ def get_four_nearest_noise_values(
     if BottomYCoord < 0 or BottomYCoord > Limit:
         return False
 
-    BottomLeftCornerAlpha = grid[LeftXCoord][BottomYCoord]
-    TopLeftCornerAlpha = grid[LeftXCoord][TopYCoord]
-    BottomRightCornerAlpha = grid[RightXCoord][BottomYCoord]
-    TopRightCornerAlpha = grid[RightXCoord][TopYCoord]
+    BottomLeftCornerAlpha = grid[LeftXCoord][BottomYCoord][0]
+    TopLeftCornerAlpha = grid[LeftXCoord][TopYCoord][0]
+    BottomRightCornerAlpha = grid[RightXCoord][BottomYCoord][0]
+    TopRightCornerAlpha = grid[RightXCoord][TopYCoord][0]
 
     if BottomLeftCornerAlpha is False:
         return False
@@ -47,8 +47,8 @@ def field_interpolator(sector_object, field, noise_x, noise_y):
     if sector_object is None:
         return False
 
-    LeftXCoord = math.floor(noise_x)
-    BottomYCoord = math.floor(noise_y)
+    LeftXCoord = min(math.floor(noise_x), 23)
+    BottomYCoord = min(math.floor(noise_y), 23)
 
     RightXCoord, TopYCoord = LeftXCoord + 1, BottomYCoord + 1
 
@@ -138,18 +138,18 @@ def bleed(data, dir, strength=0.2, iterations=30, size=1):
     return data
 
 
-def blank_list_grid(dimensions, length, fill=0):
+def blank_list_grid(dimensions, length):
 
     size = range(length)
 
     if dimensions == 2:
 
-        return [[fill for _ in size] for _ in size]
+        return [[[0] for _ in size] for _ in size]
 
     if dimensions == 3:
 
         # 3-dimensional array of zeroes
-        return [[[fill for _ in size] for _ in size] for _ in size]
+        return [[[[0] for _ in size] for _ in size] for _ in size]
 
 
 def convert_noise_to_real_pos(noise_x, noise_y, sector_data):
@@ -160,8 +160,8 @@ def convert_noise_to_real_pos(noise_x, noise_y, sector_data):
     # virtual x/y are floats fractions within the sector (0 to 1)
     # noise x/y are integers related to points within the sector (0 to span-1)
 
-    virtual_x = min(noise_x / (cfg.get("noise_grid_per_sector") - 1), 0.99)
-    virtual_y = min(noise_y / (cfg.get("noise_grid_per_sector") - 1), 0.99)
+    virtual_x = noise_x / (cfg.get("noise_grid_per_sector") - 1)
+    virtual_y = noise_y / (cfg.get("noise_grid_per_sector") - 1)
 
     real_x = (sector_x + virtual_x) * cfg.get("sector_real_size")
     real_y = (sector_y + virtual_y) * cfg.get("sector_real_size")
@@ -178,8 +178,8 @@ def convert_real_to_noise_pos(position, sector_data):
     # virtual x/y are floats fractions within the sector (0 to 1)
     # noise x/y are integers related to points within the sector (0 to span-1)
 
-    virtual_x = max(0, min(0.999, (real_x / cfg.get("sector_real_size")) - sector_x))
-    virtual_y = max(0, min(0.999, (real_y / cfg.get("sector_real_size")) - sector_y))
+    virtual_x = (real_x / cfg.get("sector_real_size")) - sector_x
+    virtual_y = (real_y / cfg.get("sector_real_size")) - sector_y
 
     noise_x = virtual_x * (cfg.get("noise_grid_per_sector") - 1)
     noise_y = virtual_y * (cfg.get("noise_grid_per_sector") - 1)
@@ -191,8 +191,12 @@ def generate_sector_heightmaps():
 
     for sector_data in sectors.get_all().values():
 
-        MinMap = blank_list_grid(2, cfg.get("noise_grid_per_sector"))
-        MaxMap = blank_list_grid(2, cfg.get("noise_grid_per_sector"))
+        sector_data["grid"]["minmap"] = blank_list_grid(
+            2, cfg.get("noise_grid_per_sector")
+        )
+        sector_data["grid"]["maxmap"] = blank_list_grid(
+            2, cfg.get("noise_grid_per_sector")
+        )
         sector_data["grid"]["height"] = blank_list_grid(
             2, cfg.get("noise_grid_per_sector")
         )
@@ -240,28 +244,30 @@ def generate_sector_heightmaps():
                     metric,
                 )
                 bottom = tools.linterp(
-                    Terrain["track_min"] + pos[2],
+                    max(
+                        Terrain["track_min"] + pos[2],
+                        (BottomOfBlock * 16)
+                        + Terrain["height_terrain_minimum_to_floor"],
+                    ),
                     (BottomOfBlock * 16) + Terrain["height_terrain_minimum_to_floor"],
                     metric,
                 )
 
-                MinMap[noise_x][noise_y] = int(bottom)
-                MaxMap[noise_x][noise_y] = int(top)
-                # sector_data["grid"]["height"][noise_x][noise_y] = (bottom + top) / 2
-
-        sector_data["grid"]["maxmap"] = MaxMap
-        sector_data["grid"]["minmap"] = MinMap
+                sector_data["grid"]["minmap"][noise_x][noise_y][0] = int(bottom)
+                sector_data["grid"]["maxmap"][noise_x][noise_y][0] = int(top)
 
 
 def rescale_terrain(sector_data, noise_x, noise_y, position, Terrain):
 
-    Min = sector_data["grid"]["minmap"][noise_x][noise_y]
-    Max = sector_data["grid"]["maxmap"][noise_x][noise_y]
+    Min = sector_data["grid"]["minmap"][noise_x][noise_y][0]
+    Max = sector_data["grid"]["maxmap"][noise_x][noise_y][0]
 
     NoiseSample = sample_realspace_noise(position)
     NoiseValue = Terrain["noise_deviation_multiplier"] * NoiseSample
 
-    return tools.linterp(Min, Max, 0.5 + NoiseValue)
+    return sector_data["grid"]["minmap"][noise_x][noise_y][
+        0
+    ]  # tools.linterp(Min, Max, 0)  # max(0, min(1, 0.5 + NoiseValue)))
 
 
 def carve_height(initial_height, intended_height, distance, Terrain):
@@ -295,14 +301,14 @@ def generate_heightmap_node(sector_data, noise_x, noise_y):
 
     distance, pos = lines.distance_to_line(real_x, real_y, sector_data)
 
-    if True:  # if True, this is "virgin" terrain before cut and fill
+    if False:  # if False, this is "virgin" terrain before cut and fill
         result = carve_height(
             scaled, pos[2] + Terrain["height_track_to_terrain"], distance, Terrain
         )
     else:
         result = scaled + Terrain["height_track_to_terrain"]
 
-    sector_data["grid"]["height"][noise_x][noise_y] = int(result)
+    sector_data["grid"]["height"][noise_x][noise_y][0] = int(result)
 
 
 def cut_and_fill_sector_heightmaps():
@@ -395,17 +401,3 @@ def height_sample(real_x, real_y, samples, radius, sector):
         Heights += [Example]
 
     return Heights
-
-
-def smooth_min_max_maps():
-
-    # pseudocode:
-    #
-    print("didn't write this yet")
-
-    """
-    New code
-    First, go around the ring of all the neighbor connections and make the height maps on the connecting seams the same as each other for all relevant height maps. Use flood fill rules.
-    Then, go propagate the new values across the sector in a wave, NOT using flood fill rules. Average things and let the values drift, the next loop of edgework will rectify gaps.
-    Go back to step one, then repeat this loop of going through these two steps five times or so, and the terrain should have flowed evenly through multiple sectors. Make sure to end with the final first step to ensure edge alignment.
-    """

@@ -370,5 +370,146 @@ def find_closest_point_2d(sector, x, y):
     return dist, sector["kdtree_data"][idx]
 
 
-def get(sector_id, default):
+def get(sector_id, default=None):
     return Sectors.get(sector_id, default)
+
+
+def merge_edges():
+
+    # having agreed on link status, bind all the edges of the grids to each other
+
+    for sector_data in Sectors.values():
+
+        grids_to_unify = [
+            ["minmap", "highest"],
+            ["maxmap", "lowest"],
+            ["height", "highest"],
+        ]
+
+        for grid_to_unify in grids_to_unify:
+            grid = sector_data["grid"].get(grid_to_unify[0])
+
+            if grid is None:
+                print(sector_data, "nono")
+                continue  # Skip if maps are missing
+
+            size = len(grid)
+
+            for dir_key, idx in {"N": 0, "E": 1, "S": 2, "W": 3}.items():
+                neighbor_id = sector_data["neighbors"][idx]
+                if not neighbor_id or not isinstance(neighbor_id, str):
+                    continue
+
+                neighbor = Sectors.get(neighbor_id)
+                if not neighbor:
+                    print(neighbor_id, "popo")
+                    continue
+
+                neighbor_grid = neighbor["grid"].get(grid_to_unify[0])
+
+                if neighbor_grid is None:
+                    continue
+
+                l = [0]
+                hook = ()
+                if dir_key == "N":
+                    hook = (l, [0], l, [-1])
+
+                elif dir_key == "E":
+                    hook = ([0], l, [-1], l)
+
+                elif dir_key == "S":
+                    hook = (l, [-1], l, [0])
+
+                elif dir_key == "W":
+                    hook = ([-1], l, [0], l)
+
+                # -1 is the south side 0 is the north side
+
+                for x in range(size):
+
+                    l[0] = x
+
+                    A = neighbor_grid[hook[0][0]][hook[1][0]][0]
+                    B = grid[hook[2][0]][hook[3][0]][0]
+
+                    if grid_to_unify[1] == "highest":
+                        C = max(A, B)
+
+                    elif grid_to_unify[1] == "lowest":
+                        C = min(A, B)
+
+                    elif grid_to_unify[1] == "even":
+                        C = (A + B) / 2
+
+                    grid[hook[2][0]][hook[3][0]][0] = C
+                    neighbor_grid[hook[0][0]][hook[1][0]] = grid[hook[2][0]][hook[3][0]]
+
+
+def blur_grids():
+
+    for num in range(3):
+
+        for sector_data in Sectors.values():
+
+            grids_to_unify = [
+                ["minmap", "highest"],
+                ["maxmap", "lowest"],
+                # ["height", "even"],
+            ]
+
+            for grid_to_unify in grids_to_unify:
+                grid = sector_data["grid"].get(grid_to_unify[0])
+
+                if grid is None:
+                    print(sector_data, "nono")
+                    continue  # Skip if maps are missing
+
+                height = len(grid)
+
+                if grid_to_unify[1] == "even":
+
+                    for y in range(height):
+                        for x in range(height):
+                            total = 0.0
+                            count = 0
+
+                            for dy in [-1, 0, 1]:
+                                for dx in [-1, 0, 1]:
+                                    ny = y + dy
+                                    nx = x + dx
+                                    if 0 <= ny < height and 0 <= nx < height:
+                                        total += grid[ny][nx][0]
+                                        count += 1
+
+                            grid[y][x][0] = total / count if count else grid[y][x][0]
+
+                elif grid_to_unify[1] == "highest":
+
+                    for y in range(height):
+                        for x in range(height):
+                            highest = -10000000
+
+                            for dy in [-1, 0, 1]:
+                                for dx in [-1, 0, 1]:
+                                    ny = y + dy
+                                    nx = x + dx
+                                    if 0 <= ny < height and 0 <= nx < height:
+                                        highest = max(highest, grid[ny][nx][0])
+
+                            grid[y][x][0] = max(highest - 150, grid[y][x][0])
+
+                elif grid_to_unify[1] == "lowest":
+
+                    for y in range(height):
+                        for x in range(height):
+                            highest = 10000000
+
+                            for dy in [-1, 0, 1]:
+                                for dx in [-1, 0, 1]:
+                                    ny = y + dy
+                                    nx = x + dx
+                                    if 0 <= ny < height and 0 <= nx < height:
+                                        highest = min(highest, grid[ny][nx][0])
+
+                            grid[y][x][0] = min(highest + 150, grid[y][x][0])

@@ -243,12 +243,12 @@ def main():
     track.build_track_library(directory, ".mdl")
 
     CFG = cfg.initialize("railmancer/config.json")
-    TrackBase = ""  # "vmf inputs/giantspiral.vmf"  # "vmf inputs/squamish.vmf"
+    TrackBase = "vmf inputs/giantspiral.vmf"  # "vmf inputs/squamish.vmf"
 
     Path = []
     Path += [[[2040, -32 - 6000, 500], "0fw", -90, False]]
 
-    trackhammer.start(Path[0], 100)
+    trackhammer.start(Path[0], 0)
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.
     parser.import_track(TrackBase)
@@ -278,7 +278,8 @@ def main():
 
     tools.click("submodule", "Sector Generation done")
 
-    heightmap.smooth_min_max_maps()
+    sectors.merge_edges()
+    sectors.blur_grids()
 
     tools.click("submodule", "Smoothed min-max maps done")
 
