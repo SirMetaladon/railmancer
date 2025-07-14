@@ -214,7 +214,9 @@ def generate_sector_heightmaps():
                 if not sector_data["kdtree"]:
                     print(sector_data)
 
-                distance, pos = lines.distance_to_line(real_x, real_y, sector_data)
+                distance, pos = sectors.distance_to_line(
+                    [real_x, real_y, 0], sector_data
+                )
 
                 TopOfBlock = sector_data["ceiling"]
                 BottomOfBlock = sector_data["floor"]
@@ -265,9 +267,7 @@ def rescale_terrain(sector_data, noise_x, noise_y, position, Terrain):
     NoiseSample = sample_realspace_noise(position)
     NoiseValue = Terrain["noise_deviation_multiplier"] * NoiseSample
 
-    return sector_data["grid"]["minmap"][noise_x][noise_y][
-        0
-    ]  # tools.linterp(Min, Max, 0)  # max(0, min(1, 0.5 + NoiseValue)))
+    return tools.linterp(Min, Max, max(0, min(1, 0.5 + NoiseValue)))
 
 
 def carve_height(initial_height, intended_height, distance, Terrain):
@@ -299,16 +299,13 @@ def generate_heightmap_node(sector_data, noise_x, noise_y):
     # converts the normalized position into one rescaled by the height min/max
     scaled = rescale_terrain(sector_data, noise_x, noise_y, position, Terrain)
 
-    distance, pos = lines.distance_to_line(real_x, real_y, sector_data)
+    distance, pos = sectors.distance_to_line([real_x, real_y, 0], sector_data)
 
-    if False:  # if False, this is "virgin" terrain before cut and fill
-        result = carve_height(
-            scaled, pos[2] + Terrain["height_track_to_terrain"], distance, Terrain
-        )
-    else:
-        result = scaled + Terrain["height_track_to_terrain"]
+    result = carve_height(
+        scaled, pos[2] + Terrain["height_track_to_terrain"], distance, Terrain
+    )
 
-    sector_data["grid"]["height"][noise_x][noise_y][0] = int(result)
+    sector_data["grid"]["height"][noise_x][noise_y][0] = result
 
 
 def cut_and_fill_sector_heightmaps():
@@ -335,11 +332,16 @@ def query_field(field, position, sector_data=None):
 
         sector_data = sectors.get(sectors.get_sector_id_at_position(position))
 
-    noise_x, noise_y = convert_real_to_noise_pos(position, sector_data)
+    if sector_data is None:
+        return None
 
-    height = field_interpolator(sector_data, field, noise_x, noise_y)
+    else:
 
-    return height
+        noise_x, noise_y = convert_real_to_noise_pos(position, sector_data)
+
+        height = field_interpolator(sector_data, field, noise_x, noise_y)
+
+        return height
 
 
 def curb_noise(v):
@@ -385,8 +387,10 @@ def sample_realspace_noise(position):
 
 def height_sample(real_x, real_y, samples, radius, sector):
 
+    guess_z = query_field("height", (real_x, real_y, 0), sector)
+
     # start with one in the center for good measure
-    Heights = [query_field("height", (real_x, real_y, 0), sector)]
+    Heights = [guess_z]
 
     SectorSize = 360 / samples
     Arm = [radius, 0]
@@ -396,8 +400,10 @@ def height_sample(real_x, real_y, samples, radius, sector):
         offset = tools.rot_z(Arm, Slice * SectorSize)
 
         Example = query_field(
-            "height", (real_x + offset[0], real_y + offset[1], 0), sector
+            "height", (real_x + offset[0], real_y + offset[1], guess_z)
         )
-        Heights += [Example]
+
+        if Example is not None:
+            Heights += [Example]
 
     return Heights

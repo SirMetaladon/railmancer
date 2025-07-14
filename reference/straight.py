@@ -1,4 +1,14 @@
-import random, time, tools
+import random, time
+
+
+def heuristic_inserter(stack, to_add):
+
+    heuristic = to_add[1]
+    for index, (_, h) in enumerate(stack):
+        if heuristic > h:
+            stack.insert(index, to_add)
+            return
+    stack.append(to_add)
 
 
 def create_new_card(current_state, new_piece, target):
@@ -43,7 +53,7 @@ def decompose(target):
         for length in lengths:
             new_card = create_new_card(current_state[0], length, target)
 
-            tools.heuristic_inserter(cards, new_card)
+            heuristic_inserter(cards, new_card)
 
     if cards:
         random.shuffle(cards[0][0][1])
@@ -51,3 +61,7 @@ def decompose(target):
 
     else:
         return None
+
+
+while True:
+    print(decompose(int(input("Insert a length to calculate: "))))

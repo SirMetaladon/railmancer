@@ -323,14 +323,3 @@ def get_sampled_points():
         return sampled_points
     except:
         return []
-
-
-def distance_to_line(real_x, real_y, sector_data):
-
-    KDTree = sector_data["kdtree"]
-    Points = sector_data["points"]
-
-    Shortest, idx = KDTree.query([real_x, real_y])
-    Pos = Points[idx]
-
-    return Shortest, Pos

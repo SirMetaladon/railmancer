@@ -513,3 +513,44 @@ def blur_grids():
                                         highest = min(highest, grid[ny][nx][0])
 
                             grid[y][x][0] = min(highest + 150, grid[y][x][0])
+
+
+def distance_to_line(pos, sector_data=None):
+
+    if sector_data is None:
+        sector_data = Sectors[get_sector_id_at_position(pos)]
+
+    KDTree = sector_data["kdtree"]
+    Points = sector_data["points"]
+
+    Shortest, idx = KDTree.query([pos[0], pos[1]])
+    Pos = Points[idx]
+
+    return Shortest, Pos
+
+
+def collapse_quantum_switchstands():
+
+    Entities = entities.get()
+
+    for ID in range(len(Entities)):
+
+        Ent = Entities[ID]
+
+        try:
+            if Ent[0][0] == "collapse":
+                Collapse = 1
+            else:
+                Collapse = 0
+        except:
+            Collapse = 0
+
+        if Collapse:
+
+            FirstDistance, _ = distance_to_line(Ent[0][1])
+            SecondDistance, _ = distance_to_line(Ent[0][2])
+
+            if FirstDistance > SecondDistance:
+                Entities[ID] = Ent[1]
+            else:
+                Entities[ID] = Ent[2]

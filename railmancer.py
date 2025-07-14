@@ -36,7 +36,7 @@ def distribute(min_distance, TotalPoints, Sector):
             ModelPath = random.choices(Choices, Weights)[0]
             Model = ModelData[ModelPath]
 
-            realdist, _ = lines.distance_to_line(Point[0], Point[1])
+            realdist, _ = sectors.distance_to_line(Point)
             dist = realdist - Model["exclusion_radius"]
 
             Hardline = Terrain.get("tree_hard_distance", 128)
@@ -101,13 +101,18 @@ def row_encode(heights: list):
     return String
 
 
-def query_alpha(real_x, real_y, Terrain, sector_data):
+def query_alpha(position, Terrain, sector_data):
 
-    dist, _ = lines.distance_to_line(real_x, real_y, sector_data)
+    Radius = 20
 
-    HeightSamples = heightmap.height_sample(real_x, real_y, 6, 20, sector_data)
+    Distance_To_Line, _ = sectors.distance_to_line(position, sector_data)
 
-    LocalSlope = (max(HeightSamples) - min(HeightSamples)) / (40)
+    HeightSamples = heightmap.height_sample(
+        position[0], position[1], 6, Radius, sector_data
+    )
+
+    # remake this to calculate the slope between the 2 steepest entries
+    LocalSlope = (max(HeightSamples) - min(HeightSamples)) / (Radius * 2)
     SlopeTarget = Terrain.get("alpha_steepness_cutoff", 0.75)
     TransitionLength = Terrain.get("alpha_steepness_transition", 0.75)
 
@@ -117,7 +122,7 @@ def query_alpha(real_x, real_y, Terrain, sector_data):
         SlopeMetric = 0.5 + (LocalSlope - SlopeTarget) / TransitionLength
 
     DistanceMetric = (
-        max(dist - Terrain.get("ballast_alpha_distance", 96), 0)
+        max(Distance_To_Line - Terrain.get("ballast_alpha_distance", 96), 0)
         / Terrain.get("ballast_alpha_slope", 200)
     ) * 255
     SteepnessMetric = SlopeMetric * 255
@@ -156,10 +161,7 @@ def displacement_build(Block, sector):
     ]
     # reconfigure this later to check the specific sub-biome data for this exact position
     alphas = [
-        [
-            query_alpha(position[0], position[1], terrain.get(), sector)
-            for position in x_layer
-        ]
+        [query_alpha(position, terrain.get(), sector) for position in x_layer]
         for x_layer in posgrid
     ]
 
@@ -243,7 +245,7 @@ def main():
     track.build_track_library(directory, ".mdl")
 
     CFG = cfg.initialize("railmancer/config.json")
-    TrackBase = "vmf inputs/giantspiral.vmf"  # "vmf inputs/squamish.vmf"
+    TrackBase = "vmf inputs/squamish.vmf"
 
     Path = []
     Path += [[[2040, -32 - 6000, 500], "0fw", -90, False]]
@@ -258,9 +260,6 @@ def main():
     # Step 2: Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
     lines.encode_lines(CFG["line_maximum_poll_point_distance"])
     # these values are stored as global variables in the lines module.
-
-    # Step 2.5: Since the KDTree has been generated, collapse some special decisionmaking for track entities
-    entities.collapse_quantum_switchstands()
 
     tools.click("submodule", "Encoding and collapse done")
 
@@ -286,6 +285,9 @@ def main():
     heightmap.cut_and_fill_sector_heightmaps()
 
     tools.click("submodule", "Contours done")
+
+    # Step 2.5: Since the KDTree has been generated, collapse some special decisionmaking for track entities
+    sectors.collapse_quantum_switchstands()
 
     Brushes = []
 
