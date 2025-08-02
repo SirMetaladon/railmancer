@@ -22,7 +22,7 @@ def initialize(path: str):
         ["sector_real_size", 4080, 16, max_mapsize],
         ["noise_grid_per_sector", 25, 1, 1000],
         ["line_maximum_poll_point_distance", 25, 1, 1000],
-        ["Disps_Per_Sector", 3, 1, 50],
+        ["sector_displacement_subdivision_rate", 3, 1, 50],
         ["sector_snap_grid", 16, 1, 128],
         ["sector_minimum_wall_height", 1824, 0, max_mapsize],
         ["sector_minimum_track_depth", 128, 0, max_mapsize],
@@ -36,7 +36,7 @@ def initialize(path: str):
 
     for Entry in Expecting:
 
-        CFG[Entry[0]] = min(max(CFG.get(Entry[0], Entry[1]), Entry[2]), Entry[3])
+        CFG[Entry[0]] = int(min(max(CFG.get(Entry[0], Entry[1]), Entry[2]), Entry[3]))
 
     for Biome in CFG["Biomes"].values():
         Biome["terrain"]["seed"] = random.randint(0, 100)

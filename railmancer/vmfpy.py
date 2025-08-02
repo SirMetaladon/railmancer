@@ -1,5 +1,18 @@
 import os, re
-from railmancer import sectors, entities
+from railmancer import vmfpy
+
+
+def add_brush(Brush):
+
+    global Brushes
+
+    try:
+
+        Brushes += [Brush]
+
+    except:
+
+        Brushes = [Brush]
 
 
 def re_id(original_string, replacement):
@@ -213,18 +226,18 @@ def solid(Brush: list):
 
 def synthesize_entities(Entities):
 
-    Output = ""
+    EntityString = ""
     global ID
 
     for Ent in Entities:
 
         # if Ent.get("raw_entity", False):
 
-        # Output += re_id(Ent["raw_entity"], get_ID())
+        # EntityString += re_id(Ent["raw_entity"], get_ID())
 
         if Ent.get("classname", False) == "tp3_switch":
 
-            Output += f"""entity
+            EntityString += f"""entity
             {{
                 "id" "{get_ID()}"
                 "classname" "tp3_switch"
@@ -250,7 +263,7 @@ def synthesize_entities(Entities):
 
         elif Ent.get("classname", False) == "tp3_switch_lever_anim":
 
-            Output += f"""entity
+            EntityString += f"""entity
             {{
                 "id" "{get_ID()}"
                 "classname" "tp3_switch_lever_anim"
@@ -289,7 +302,7 @@ def synthesize_entities(Entities):
                 Shadows = '''"disableselfshadowing" "1"
 	                            "disableshadows" "1"'''
 
-            Output += f"""entity
+            EntityString += f"""entity
             {{
                 "id" "{get_ID()}"
                 "classname" "prop_static"
@@ -310,7 +323,7 @@ def synthesize_entities(Entities):
                 }}
             }}"""
 
-    Output += f"""entity
+    EntityString += f"""entity
 {{
 	"id" "{get_ID()}"
 	"classname" "light_environment"
@@ -334,64 +347,46 @@ def synthesize_entities(Entities):
 	}}
 }}"""
 
-    return Output
+    return EntityString
 
 
-def synthesize_brushes(Brushes):
+def synthesize_brushes():
 
-    global ID
-
-    Output = ""
+    BrushString = ""
     for Brush in Brushes:
-        Output += solid(Brush)
+        BrushString += solid(Brush)
 
-    Output += "}"
+    BrushString += "}"
 
-    return Output
+    return BrushString
 
 
 def floor(block_x: int, block_y: int, block_z: int):
-    return [
-        block_x * 16 * 255,
-        (block_x + 1) * 16 * 255,
-        block_y * 16 * 255,
-        (block_y + 1) * 16 * 255,
-        block_z * 16,
-        (block_z - 1) * 16,
-        "floor",
-    ]
+    add_brush(
+        [
+            block_x * 16 * 255,
+            (block_x + 1) * 16 * 255,
+            block_y * 16 * 255,
+            (block_y + 1) * 16 * 255,
+            block_z * 16,
+            (block_z - 1) * 16,
+            "floor",
+        ]
+    )
 
 
 def ceiling(block_x: int, block_y: int, block_z: int):
-    return [
-        block_x * 16 * 255,
-        (block_x + 1) * 16 * 255,
-        block_y * 16 * 255,
-        (block_y + 1) * 16 * 255,
-        (block_z) * 16,
-        (block_z + 1) * 16,
-        "ceiling",
-    ]
-
-
-def displacements(block_x: int, block_y: int, block_z: int, subdivision, texture):
-
-    Disps = [
+    add_brush(
         [
-            (block_x + x / subdivision) * 16 * 255,
-            (block_x + ((x + 1) / subdivision)) * 16 * 255,
-            (block_y + y / subdivision) * 16 * 255,
-            (block_y + ((y + 1) / subdivision)) * 16 * 255,
+            block_x * 16 * 255,
+            (block_x + 1) * 16 * 255,
+            block_y * 16 * 255,
+            (block_y + 1) * 16 * 255,
             (block_z) * 16,
             (block_z + 1) * 16,
-            "displacement",
-            texture,
+            "ceiling",
         ]
-        for y in range(subdivision)
-        for x in range(subdivision)
-    ]
-
-    return Disps
+    )
 
 
 def wall(block_x: int, block_y: int, block_z: int, height: int, dir: int, type="wall"):
@@ -419,64 +414,20 @@ def wall(block_x: int, block_y: int, block_z: int, height: int, dir: int, type="
         y_min = 0
         y_max = 1
 
-    return [
-        16 * (block_x * 255 + x_min),
-        16 * (block_x * 255 + x_max),
-        16 * (block_y * 255 + y_min),
-        16 * (block_y * 255 + y_max),
-        16 * block_z,
-        16 * height,
-        type,
-    ]
-
-
-def create_scenery_block(sector):
-    block_x, block_y, block_floor, block_ceiling = (
-        sector["x"],
-        sector["y"],
-        sector["floor"],
-        sector["ceiling"],
+    add_brush(
+        [
+            16 * (block_x * 255 + x_min),
+            16 * (block_x * 255 + x_max),
+            16 * (block_y * 255 + y_min),
+            16 * (block_y * 255 + y_max),
+            16 * block_z,
+            16 * height,
+            type,
+        ]
     )
 
-    Brushes = [
-        floor(block_x, block_y, block_floor),
-        ceiling(block_x, block_y, block_ceiling),
-    ]
 
-    # this entire mechanism will need to be replaced due to multiple layers
-    # logic should be "am I connected more than a certain number of units, and am I the majority connection in my own stack? or something"
-
-    for dir in range(4):
-
-        adjacent_sector_id = sector["neighbors"][dir]
-
-        adjacent_sector = sectors.get(adjacent_sector_id, False)
-
-        if adjacent_sector is False:
-            Brushes += [
-                wall(block_x, block_y, block_floor, block_ceiling, dir, "ceiling")
-            ]
-
-        else:
-            nearby_floor, nearby_ceiling = (
-                adjacent_sector["floor"],
-                adjacent_sector["ceiling"],
-            )
-
-            if nearby_floor > block_floor:
-                Brushes += [wall(block_x, block_y, nearby_floor, block_floor, dir)]
-
-            if nearby_ceiling < block_ceiling:
-                Brushes += [
-                    wall(
-                        block_x, block_y, nearby_ceiling, block_ceiling, dir, "ceiling"
-                    )
-                ]
-
-    return Brushes
-
-
-def write_to_vmf(Brushes: list, filename):
+def write_to_vmf(filename):
 
     global ID
     ID = 1000
@@ -590,8 +541,8 @@ def write_to_vmf(Brushes: list, filename):
         "active" "0"
     }"""
 
-    BrushString = synthesize_brushes(Brushes)
-    EntityString = synthesize_entities(entities.get())
+    BrushString = synthesize_brushes()
+    EntityString = synthesize_entities(vmfpy.get_entities())
 
     content = Start + BrushString + EntityString + End
 
@@ -606,3 +557,113 @@ def write_to_vmf(Brushes: list, filename):
         print(f"File saved successfully: {full_file_path}")
     except Exception as e:
         print(f"An error occurred: {e}")
+
+
+def data_to_dispinfo(raw_displacement, heights, alphas):
+
+    def row_encode(heights: list):
+
+        rot = [list(row) for row in zip(*heights)][::-1]
+
+        String = ""
+        for x in range(9):
+            Row = ""
+            for entry in rot[x]:
+                Row += str(round(entry, 3)) + " "
+
+            Row.strip()
+
+            String += '\n    				"row' + str(x) + '" "' + Row + '"'
+
+        return String
+
+    X_Start, X_End, Y_Start, Y_End, Z_Start, Z_End = raw_displacement[:6]
+
+    return f"""			dispinfo
+			{{
+				"power" "3"
+				"startposition" "[{min(X_Start,X_End)} {min(Y_Start,Y_End)} {0}]"
+				"flags" "0"
+				"elevation" "0"
+				"subdiv" "0"
+				normals
+				{{
+					"row0" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row1" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row2" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row3" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row4" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row5" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row6" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row7" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row8" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+				}}
+				distances
+				{{{row_encode(heights)}
+				}}
+				offsets
+				{{
+					"row0" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row1" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row2" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row3" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row4" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row5" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row6" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row7" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row8" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+				}}
+				offset_normals
+				{{
+					"row0" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row1" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row2" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row3" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row4" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row5" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row6" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row7" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+					"row8" "0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1 0 0 1"
+				}}
+				alphas
+				{{{row_encode(alphas)}
+				}}
+				triangle_tags
+				{{
+					"row0" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row1" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row2" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row3" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row4" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row5" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row6" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+					"row7" "0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+				}}
+				allowed_verts
+				{{
+					"10" "-1 -1 -1 -1 -1 -1 -1 -1 -1 -1"
+				}}
+			}}"""
+
+
+def add_entity(Ent):
+
+    global Entities
+
+    try:
+
+        Entities += [Ent]
+
+    except:
+
+        Entities = [Ent]
+
+
+def frog(pos, ang=[0, 0, 0]):
+
+    add_entity(blank_entity(pos, "models/props_2fort/frog.mdl", ang))
+
+
+def get_entities():
+
+    return Entities

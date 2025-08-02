@@ -1,5 +1,5 @@
 import math, random
-from railmancer import tools, cfg, lines, entities
+from railmancer import tools, cfg, lines, vmfpy, terrain
 from scipy.spatial import KDTree
 import numpy as np
 
@@ -523,6 +523,9 @@ def distance_to_line(pos, sector_data=None):
     KDTree = sector_data["kdtree"]
     Points = sector_data["points"]
 
+    if KDTree == None:
+        return 9999999999, [100000, 10000]
+
     Shortest, idx = KDTree.query([pos[0], pos[1]])
     Pos = Points[idx]
 
@@ -531,7 +534,7 @@ def distance_to_line(pos, sector_data=None):
 
 def collapse_quantum_switchstands():
 
-    Entities = entities.get()
+    Entities = vmfpy.get_entities()
 
     for ID in range(len(Entities)):
 

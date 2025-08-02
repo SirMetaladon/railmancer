@@ -2,7 +2,7 @@ import numpy as np
 from noise import pnoise3
 import matplotlib.pyplot as plt
 import random, itertools, math, time
-from railmancer import lines, sectors, tools, terrain, entities, cfg
+from railmancer import lines, sectors, tools, terrain, cfg
 
 
 def get_four_nearest_noise_values(
@@ -385,9 +385,9 @@ def sample_realspace_noise(position):
     return noise  # curb_noise(noise)
 
 
-def height_sample(real_x, real_y, samples, radius, sector):
+def height_sample(real_x, real_y, samples, radius, sector_data):
 
-    guess_z = query_field("height", (real_x, real_y, 0), sector)
+    guess_z = query_field("height", (real_x, real_y, 0), sector_data)
 
     # start with one in the center for good measure
     Heights = [guess_z]
@@ -407,3 +407,37 @@ def height_sample(real_x, real_y, samples, radius, sector):
             Heights += [Example]
 
     return Heights
+
+
+def query_alpha(position, Terrain, sector_data):
+
+    Radius = 20
+
+    Distance_To_Line, _ = sectors.distance_to_line(position, sector_data)
+
+    HeightSamples = height_sample(position[0], position[1], 6, Radius, sector_data)
+
+    # remake this to calculate the slope between the 2 steepest entries
+    LocalSlope = (max(HeightSamples) - min(HeightSamples)) / (Radius * 2)
+    SlopeTarget = Terrain.get("alpha_steepness_cutoff", 0.75)
+    TransitionLength = Terrain.get("alpha_steepness_transition", 0.75)
+
+    if TransitionLength == 0:
+        SlopeMetric = 1 if LocalSlope < SlopeTarget else 0
+    else:
+        SlopeMetric = 0.5 - (LocalSlope - SlopeTarget) / TransitionLength
+
+    DistanceMetric = (
+        max(Distance_To_Line - Terrain.get("ballast_alpha_distance", 96), 0)
+        / Terrain.get("ballast_alpha_slope", 200)
+    ) * 255
+    SteepnessMetric = SlopeMetric * 255
+    NoiseMetric = random.uniform(-0.5, 0.5) * Terrain.get(
+        "alpha_from_noise_multiplier", 50
+    )
+    TerrainMult = Terrain.get("alpha_multiplier", 1)
+
+    BaseAlpha = min(DistanceMetric, SteepnessMetric)
+    AdjustedAlpha = tools.scale(BaseAlpha, TerrainMult, 255)
+
+    return tools.clamped(AdjustedAlpha + NoiseMetric, 0, 255)

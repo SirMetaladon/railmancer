@@ -1,6 +1,6 @@
 import turtle, math, numpy as np
 from scipy.optimize import minimize
-from railmancer import tools
+from railmancer import tools, cfg
 
 
 def bezier(t, Bez, dimensions):
@@ -293,9 +293,10 @@ def generate_line(Line):
     return Beziers"""
 
 
-def encode_lines(line_maximum_poll_point_distance):
+def encode_lines():
 
     global sampled_points
+    line_maximum_poll_point_distance = cfg.get("line_maximum_poll_point_distance")
 
     if not len(Beziers):
         # placeholder value for maps with no track

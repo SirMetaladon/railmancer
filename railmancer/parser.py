@@ -1,4 +1,4 @@
-from railmancer import track, lines, tools, entities
+from railmancer import track, lines, tools, vmfpy
 import numpy as np
 
 
@@ -9,12 +9,10 @@ def get_lever():
     return f"switch_{Lever}"
 
 
-def reprocess_raw_data(raw_entities):
-
-    Beziers = []
+def reprocess_raw_data(raw_ents):
 
     # recompile
-    for raw_ent in raw_entities:
+    for raw_ent in raw_ents:
 
         Pos = [float(coord) for coord in raw_ent["origin"].split(" ")]
         Ang = [float(coord) for coord in raw_ent["angles"].split(" ")]
@@ -43,7 +41,7 @@ def reprocess_raw_data(raw_entities):
                 Entity["lever"] = Lever
                 Entity["classname"] = "tp3_switch"
 
-                entities.add(Entity)
+                vmfpy.add_entity(Entity)
 
                 StandAngle = Ang[1] + track.direction_to_angle(
                     Data[0]["StartDirection"]
@@ -58,7 +56,7 @@ def reprocess_raw_data(raw_entities):
                     Pos, tools.rot_z(np.array([-110, 100, -17.5]), StandAngle)
                 )
 
-                entities.add(
+                vmfpy.add_entity(
                     [
                         ["collapse", StandPos1, StandPos2],
                         {
@@ -84,7 +82,7 @@ def reprocess_raw_data(raw_entities):
 
             else:
 
-                entities.add(Entity)
+                vmfpy.add_entity(Entity)
 
             for Subsection in Data:  # this is a rail that needs a line
 
@@ -116,7 +114,7 @@ def import_track(path):
         r'"lever"\s*"([^"]+)"'
     )
 
-    entities = []
+    raw_ents = []
     for match in entity_pattern.finditer(content):
         entity_block = match.group(0)
         model_origin_matches = subdata_pattern.findall(entity_block)
@@ -128,7 +126,7 @@ def import_track(path):
         lever = next((l for _, _, _, _, _, l in model_origin_matches if l), None)
 
         if model and origin and angles and "trakpak3_rsg" in model:
-            entities.append(
+            raw_ents.append(
                 {
                     "model": model,
                     "origin": origin,
@@ -142,4 +140,4 @@ def import_track(path):
 
     print("Imported " + path)
 
-    return reprocess_raw_data(entities)
+    reprocess_raw_data(raw_ents)

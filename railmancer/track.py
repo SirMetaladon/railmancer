@@ -1,6 +1,6 @@
 import os, math
 import numpy as np
-from railmancer import lines, entities, tools
+from railmancer import lines, vmfpy, tools
 
 
 def determine_real_grade(raw_grade):
@@ -331,7 +331,7 @@ def write_track(
 
     add_track(ModelPos, track_data, ModelHeading + RotFix)
 
-    entities.add(
+    vmfpy.add_entity(
         {
             "pos-x": ModelPos[0],
             "pos-y": ModelPos[1],
@@ -464,7 +464,7 @@ def valid_next_tracks(Direction, MinimumRadiusLevel):
 
     for Track in list(track_model_library.items()):
 
-        if Track[1]["GradeLevel"] < 1:
+        if Track[1]["GradeLevel"] < 2:
             continue
 
         if Track[1]["Radius"] not in AllowedRadii:

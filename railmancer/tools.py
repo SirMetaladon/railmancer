@@ -11,7 +11,7 @@ def display_time(sec):
     return "{0}:{1}:{2}".format(int(hours), int(mins), round(sec, 3))
 
 
-def click(name, blurb=""):
+def stopwatch_click(name, blurb=""):
     global last_click
     try:
         last_click
