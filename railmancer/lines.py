@@ -276,23 +276,6 @@ def display_path(BezList: list, Extents):
         draw_bezier_curve(Plot)
 
 
-"""depreciated 1-11-25: line format is being removed in favor of beziers only, the interrim format was for input ease only
-def generate_line(Line):
-
-    Beziers = []
-
-    for NID in range(len(Line) - 1):
-
-        Node1 = Line[NID]
-        Node2 = Line[NID + 1]
-
-
-        write_bezier_points(Node1[0], Node2[0], Node1[1], reverse(Node2[1]))
-        
-
-    return Beziers"""
-
-
 def encode_lines():
 
     global sampled_points
@@ -318,9 +301,58 @@ def encode_lines():
         sampled_points += [(bezier(t, Subsegment, 3)) for t in ts]
 
 
-def get_sampled_points():
+def get_all_track_points():
 
     try:
         return sampled_points
     except:
         return []
+
+
+def get_terrain_track_points():  # does what get_all does but only returns non-bridge sections
+
+    from scipy.spatial import cKDTree
+
+    points_to_analyze = sampled_points[:]
+
+    """
+    Optimized separation of points into two lists using a cKDTree.
+    A: points that have another point in a 4/1 slope cone below them
+    B: points that do not
+    """
+    pts = np.array(points_to_analyze)  # shape (n, 3)
+    xy = pts[:, :2]  # (x, y)
+    all_points_z_values = pts[:, 2]  # z values
+
+    tree = cKDTree(xy)
+
+    non_bridge_points = []
+
+    for i, (x, y, current_point_height) in enumerate(pts):
+        # candidate points must be below in z
+        below_mask = all_points_z_values < current_point_height
+        if not np.any(below_mask):
+            non_bridge_points.append(tuple(pts[i]))
+            continue
+
+        # farthest possible radius we might need: 4 * (current_point_height - min(z_below))
+        max_vert_diff = current_point_height - np.min(all_points_z_values[below_mask])
+        search_radius = max_vert_diff / 1
+
+        # query candidates within this XY radius
+        idxs = tree.query_ball_point([x, y], search_radius)
+
+        found = False
+        for j in idxs:
+            if all_points_z_values[j] < current_point_height:
+                lateral_dist = np.hypot(x - pts[j, 0], y - pts[j, 1])
+                vertical_diff = current_point_height - all_points_z_values[j]
+                if (lateral_dist * 1) < vertical_diff:
+                    found = True
+                    break
+
+        if found is False:
+            non_bridge_points.append(tuple(pts[i]))
+
+    print(sampled_points[0], non_bridge_points[0])
+    return non_bridge_points

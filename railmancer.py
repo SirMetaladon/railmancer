@@ -57,7 +57,6 @@ def main():
 
     sectors.assign_points_to_sectors()
 
-    # Step 5: Builds the Extents and ContourMaps base from the sectors/blocks
     heightmap.generate_sector_heightmaps()
 
     tools.stopwatch_click("submodule", "Sector Generation done")
@@ -71,7 +70,6 @@ def main():
 
     tools.stopwatch_click("submodule", "Contours done")
 
-    # Step 2.5: Since the KDTree has been generated, collapse some special decisionmaking for track entities
     sectors.collapse_quantum_switchstands()
 
     compile.compile_sectors_to_brushes()

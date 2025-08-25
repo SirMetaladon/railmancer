@@ -189,6 +189,8 @@ def convert_real_to_noise_pos(position, sector_data):
 
 def generate_sector_heightmaps():
 
+    KDFlag = False
+
     for sector_data in sectors.get_all().values():
 
         sector_data["grid"]["minmap"] = blank_list_grid(
@@ -211,8 +213,9 @@ def generate_sector_heightmaps():
                 # replace with "get terrain at this point" feature
                 Terrain = terrain.get()
 
-                if not sector_data["kdtree"]:
-                    print(sector_data)
+                if not sector_data["kdtree"] and KDFlag is False:
+                    print("Failed sector due to KDTree!")
+                    KDFlag = True
 
                 distance, pos = sectors.distance_to_line(
                     [real_x, real_y, 0], sector_data
@@ -239,7 +242,6 @@ def generate_sector_heightmaps():
                     / Terrain["height_terrain_transition_to_tracks_distance"],
                     1,
                 )
-
                 top = tools.linterp(
                     Terrain["track_max"] + pos[2],
                     Top_of_Terrain,

@@ -236,7 +236,7 @@ def build_fit():
         return startpoints + expanded_points
 
     points = get_expanded_points(
-        lines.get_sampled_points(), sector_minimum_track_to_edge_distance
+        lines.get_all_track_points(), sector_minimum_track_to_edge_distance
     )
 
     sector_height_buckets = {}
@@ -335,11 +335,12 @@ def build_kdtree_for_sector(sector_data):
 def assign_points_to_sectors():
     from collections import defaultdict
 
-    print(sector_lookup_grid.keys())
-
     # Step 1: Map points to their specific sector via floor/ceiling lookup
     sector_point_map = defaultdict(list)
-    for point in lines.get_sampled_points():
+
+    points = lines.get_terrain_track_points()
+
+    for point in points:
         sector_id = get_sector_id_at_position(point)
         if not sector_id:
             continue  # Shouldn't happen, but safety first
@@ -524,7 +525,7 @@ def distance_to_line(pos, sector_data=None):
     Points = sector_data["points"]
 
     if KDTree == None:
-        return 9999999999, [100000, 10000]
+        return 9999999999, [100000, 10000, 100000]
 
     Shortest, idx = KDTree.query([pos[0], pos[1]])
     Pos = Points[idx]
