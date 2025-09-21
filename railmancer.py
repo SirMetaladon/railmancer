@@ -35,7 +35,7 @@ def main():
     Path = []
     Path += [[[2040, -32 - 6000, 500], "0fw", -90, False]]
 
-    trackhammer.start(Path[0], 40)
+    trackhammer.start(Path[0], 10)
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.
     parser.import_track(vmf_input_path)

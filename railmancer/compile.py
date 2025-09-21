@@ -52,11 +52,16 @@ def point_generator(
     sampled_points = np.column_stack((flat_x[sampled_indices], flat_y[sampled_indices]))
 
     # Enforce minimum distance constraint using KD-tree
-    dots = [[1000000, 1000000]]
-    kdtree = KDTree(dots)
+    dots = []
+    kdtree = False
+
     for x, y in sampled_points:
-        density = density_field(x, y, sector_data)
+        """density = density_field(x, y, sector_data)
         if density <= 0:
+            continue"""  # should not be needed - the density field is programmed to never go below 0
+
+        if x == 0 and y == 0:
+            print("Got one!", sector_data)
             continue
 
         if kdtree:
@@ -85,19 +90,20 @@ def density_field(x, y, sector_data):
         neighbors = sector_data["neighbors"]
 
         Value = 1
+        Coefficient = 4
 
-        # True = there is a wall in the +x direction, so if the co-ords are 0,0, the wall should start at 3060 and go up to 3x the normal height by the time we have reached 4080
-        if neighbors[0] is False:
-            Value += max(6 * ((x - (BaseX * 4080) - 3060) / 1020), 0)
-        # -y direction
+        # True = there is a wall in the +x direction, so if the co-ords are 0,0, the wall should start at 3060 and go up to Coefficient x the normal height by the time we have reached 4080
         if neighbors[1] is False:
-            Value += max(6 * ((-y + (BaseY * 4080) + 1020) / 1020), 0)
-        # -x direction
+            Value += max(Coefficient * ((x - (BaseX * 4080) - 3060) / 1020), 0)
+        # -y direction
         if neighbors[2] is False:
-            Value += max(6 * ((-x + (BaseX * 4080) + 1020) / 1020), 0)
-        # +y direction
+            Value += max(Coefficient * ((-y + (BaseY * 4080) + 1020) / 1020), 0)
+        # -x direction
         if neighbors[3] is False:
-            Value += max(6 * ((y - (BaseY * 4080) - 3060) / 1020), 0)
+            Value += max(Coefficient * ((-x + (BaseX * 4080) + 1020) / 1020), 0)
+        # +y direction
+        if neighbors[0] is False:
+            Value += max(Coefficient * ((y - (BaseY * 4080) - 3060) / 1020), 0)
 
     return max(Value, 0)
 
@@ -117,7 +123,6 @@ def scatter_placables():
 
 def distribute(min_distance, TotalPoints, sector_data):
 
-    EntsOut = []
     Points = point_generator(
         density_field, sector_data, int(TotalPoints * 2), min_distance
     )
