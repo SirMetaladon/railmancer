@@ -29,6 +29,7 @@ def reprocess_raw_data(raw_ents):
             "ang-pitch": Ang[0],
             "ang-yaw": Ang[1],
             "ang-roll": Ang[2],
+            "visgroup": "23",
         }
 
         Data = track.process_file(raw_ent["model"])
@@ -67,6 +68,7 @@ def reprocess_raw_data(raw_ents):
                             "ang-yaw": StandAngle,
                             "lever": Lever,
                             "classname": "tp3_switch_lever_anim",
+                            "visgroup": "23",
                         },
                         {
                             "pos-x": StandPos2[0],
@@ -76,6 +78,7 @@ def reprocess_raw_data(raw_ents):
                             "ang-yaw": 180 + StandAngle,
                             "lever": Lever,
                             "classname": "tp3_switch_lever_anim",
+                            "visgroup": "23",
                         },
                     ]
                 )

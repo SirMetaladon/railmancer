@@ -234,6 +234,10 @@ def synthesize_entities(Entities):
         # if Ent.get("raw_entity", False):
 
         # EntityString += re_id(Ent["raw_entity"], get_ID())
+        VisgroupData = ""
+        if Ent.get("visgroup"):
+
+            VisgroupData = f'\n                    "visgroupid" "{Ent.get("visgroup")}"'
 
         if Ent.get("classname", False) == "tp3_switch":
 
@@ -256,7 +260,7 @@ def synthesize_entities(Entities):
                 {{
                     "color" "220 30 220"
                     "visgroupshown" "1"
-                    "visgroupautoshown" "1"
+                    "visgroupautoshown" "1"{VisgroupData}
                     "logicalpos" "[0 0]"
                 }}
             }}"""
@@ -290,7 +294,7 @@ def synthesize_entities(Entities):
                 {{
                     "color" "220 30 220"
                     "visgroupshown" "1"
-                    "visgroupautoshown" "1"
+                    "visgroupautoshown" "1"{VisgroupData}
                     "logicalpos" "[0 0]"
                 }}
             }}"""
@@ -318,7 +322,7 @@ def synthesize_entities(Entities):
                 {{
                     "color" "200 200 150"
                     "visgroupshown" "1"
-                    "visgroupautoshown" "1"
+                    "visgroupautoshown" "1"{VisgroupData}
                     "logicalpos" "[0 0]"
                 }}
             }}"""
@@ -442,6 +446,18 @@ def write_to_vmf(filename):
     }
     visgroups
     {
+        visgroup
+        {
+            "name" "Scatter"
+            "visgroupid" "22"
+            "color" "234 131 192"
+        }
+        visgroup
+        {
+            "name" "Track"
+            "visgroupid" "23"
+            "color" "234 131 192"
+        }
     }
     viewsettings
     {

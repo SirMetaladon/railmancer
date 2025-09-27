@@ -56,6 +56,9 @@ def point_generator(
     kdtree = False
 
     for x, y in sampled_points:
+        dots.append((x, y))  # there's definitely a better way to do this
+    '''
+    for x, y in sampled_points:
         """density = density_field(x, y, sector_data)
         if density <= 0:
             continue"""  # should not be needed - the density field is programmed to never go below 0
@@ -71,7 +74,7 @@ def point_generator(
 
         # Accept the point
         dots.append((x, y))
-        kdtree = KDTree(dots)
+        kdtree = KDTree(dots)'''
 
     return np.array(dots)
 
@@ -183,6 +186,7 @@ def distribute(min_distance, TotalPoints, sector_data):
                     "ang-pitch": random.randrange(-4, 4),
                     "ang-roll": random.randrange(-4, 4),
                     "shadows": "noself",
+                    "visgroup": "22",
                 }
             )
 

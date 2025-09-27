@@ -338,6 +338,7 @@ def write_track(
             "pos-z": ModelPos[2],
             "mdl": model,
             "ang-yaw": ModelHeading + RotFix,
+            "visgroup": "23",
         }
     )
 

@@ -29,6 +29,7 @@ def write_track(Position, NextPosition, Direction, MDL, Heading):
             "pos-z": ModelPos[2],
             "mdl": MDL,
             "ang-yaw": Heading + RotFix,
+            "visgroup": "23",
         }
     ]
 
