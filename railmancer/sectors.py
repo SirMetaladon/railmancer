@@ -338,7 +338,7 @@ def assign_points_to_sectors():
     # Step 1: Map points to their specific sector via floor/ceiling lookup
     sector_point_map = defaultdict(list)
 
-    points = lines.get_terrain_track_points()
+    points = lines.get_all_track_points()
 
     for point in points:
         sector_id = get_sector_id_at_position(point)
@@ -354,7 +354,7 @@ def assign_points_to_sectors():
             if neighbor_id and isinstance(neighbor_id, str):
                 all_points.extend(sector_point_map.get(neighbor_id, []))
 
-        sector_data["points"] = all_points
+        sector_data["points"] = lines.get_terrain_points_from_sample(all_points)
 
         build_kdtree_for_sector(sector_data)
 
@@ -447,73 +447,110 @@ def merge_edges():
                     neighbor_grid[hook[0][0]][hook[1][0]] = grid[hook[2][0]][hook[3][0]]
 
 
-def blur_grids():
+def process_grid(oldgrid, algorithm, adjust):
+    gridsize = len(oldgrid)
+    new_grid = tools.blank_list_grid(2, gridsize, 0)
 
-    for num in range(3):
+    for y in range(gridsize):
+        for x in range(gridsize):
+            results = get_nearby_gridsquare_data(x, y, oldgrid, gridsize)
+            new_grid[y][x][0] = algorithm(oldgrid[y][x][0], results, adjust)
+
+    return new_grid
+
+
+def overwrite_grid(oldgrid, newgrid):
+
+    gridsize = len(oldgrid)
+
+    for y in range(gridsize):
+        for x in range(gridsize):
+            oldgrid[y][x][0] = newgrid[y][x][0]
+
+
+def get_nearby_gridsquare_data(x, y, grid, gridsize):
+
+    output = []
+
+    for dy in [-1, 0, 1]:
+        for dx in [-1, 0, 1]:
+            ny = y + dy
+            nx = x + dx
+            if 0 <= ny < gridsize and 0 <= nx < gridsize:
+                output += [grid[ny][nx][0]]
+
+    return output
+
+
+def blur_grid(grid_name, iterations, algorithm):
+    # adjust can be calculated from CFG "slope of terrain away from hard edges" + the size of a gridsquare.
+    # Slope is (Sector size / number of gridsquares) * CFG Slope (the quantity up/down)
+    # terrain rabbithole
+
+    # Nuts to that, let's hardcode it again. But smarter.
+    decay_slope = 1
+    # there is a universe where we want to change this based on terrain NIGHTMARE NIGHTMARE NIGHTMARE
+    adjust = decay_slope * (
+        cfg.get("sector_real_size") / cfg.get("noise_grid_per_sector")
+    )
+
+    # has to be in this order so changes propagate between sectors (they share edges)
+    for _ in range(iterations):
 
         for sector_data in Sectors.values():
 
-            grids_to_unify = [
-                ["minmap", "highest"],
-                ["maxmap", "lowest"],
-                # ["height", "even"],
-            ]
+            grid = sector_data["grid"].get(grid_name)
 
-            for grid_to_unify in grids_to_unify:
-                grid = sector_data["grid"].get(grid_to_unify[0])
+            if grid is None:
+                print(sector_data, "nono")
+                continue  # Skip if maps are missing
 
-                if grid is None:
-                    print(sector_data, "nono")
-                    continue  # Skip if maps are missing
+            # spits out a new (identical but processed) grid - does not edit original
+            new_grid = process_grid(grid, algorithm, adjust)
 
-                height = len(grid)
+            # this preserves the merged edges using Python pass-by-reference lists
+            overwrite_grid(grid, new_grid)
 
-                if grid_to_unify[1] == "even":
 
-                    for y in range(height):
-                        for x in range(height):
-                            total = 0.0
-                            count = 0
+def blur_min_max_grids():
 
-                            for dy in [-1, 0, 1]:
-                                for dx in [-1, 0, 1]:
-                                    ny = y + dy
-                                    nx = x + dx
-                                    if 0 <= ny < height and 0 <= nx < height:
-                                        total += grid[ny][nx][0]
-                                        count += 1
+    def raise_floor(base, list, adjust):
 
-                            grid[y][x][0] = total / count if count else grid[y][x][0]
+        # take all entries and find the highest
+        numpy_list = np.array(list)
+        highest = max(numpy_list)
 
-                elif grid_to_unify[1] == "highest":
+        return max(highest - adjust, base)
 
-                    for y in range(height):
-                        for x in range(height):
-                            highest = -10000000
+    blur_grid("minmap", 35, raise_floor)
 
-                            for dy in [-1, 0, 1]:
-                                for dx in [-1, 0, 1]:
-                                    ny = y + dy
-                                    nx = x + dx
-                                    if 0 <= ny < height and 0 <= nx < height:
-                                        highest = max(highest, grid[ny][nx][0])
+    def lower_ceiling(base, list, adjust):
 
-                            grid[y][x][0] = max(highest - 150, grid[y][x][0])
+        # take all entries and find the lowest
+        numpy_list = np.array(list)
+        highest = min(numpy_list)
 
-                elif grid_to_unify[1] == "lowest":
+        return min(highest + adjust, base)
 
-                    for y in range(height):
-                        for x in range(height):
-                            highest = 10000000
+    blur_grid("maxmap", 35, lower_ceiling)
 
-                            for dy in [-1, 0, 1]:
-                                for dx in [-1, 0, 1]:
-                                    ny = y + dy
-                                    nx = x + dx
-                                    if 0 <= ny < height and 0 <= nx < height:
-                                        highest = min(highest, grid[ny][nx][0])
 
-                            grid[y][x][0] = min(highest + 150, grid[y][x][0])
+def blur_heightmap_grid():
+
+    def cut_down_outliers(base, list, adjust):
+
+        weight = 3  # must be an integer greater than 0
+        total = base * weight
+
+        # means no division by 0 AND value is weighted towards the base
+        for entry in list:
+            total += entry
+
+        count = weight + len(list)
+
+        return total / count
+
+    blur_grid("height", 1, cut_down_outliers)
 
 
 def distance_to_line(pos, sector_data=None):
@@ -525,6 +562,7 @@ def distance_to_line(pos, sector_data=None):
     Points = sector_data["points"]
 
     if KDTree == None:
+        print("Bad KDTree!")
         return 9999999999, [100000, 10000, 100000]
 
     Shortest, idx = KDTree.query([pos[0], pos[1]])

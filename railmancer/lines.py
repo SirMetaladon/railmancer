@@ -250,6 +250,9 @@ def write_bezier_points(start_position, end_position, start_direction, end_direc
 
         Beziers += [(start_position, p1, p2, end_position)]
 
+    if len(Beziers) == 0:
+        print("NO TRACK!")
+
 
 def display_path(BezList: list, Extents):
 
@@ -309,11 +312,10 @@ def get_all_track_points():
         return []
 
 
-def get_terrain_track_points():  # does what get_all does but only returns non-bridge sections
+def get_terrain_points_from_sample(points_to_analyze):
+    # gets non-bridge from a list of points
 
     from scipy.spatial import cKDTree
-
-    points_to_analyze = sampled_points[:]
 
     """
     Optimized separation of points into two lists using a cKDTree.
@@ -321,8 +323,11 @@ def get_terrain_track_points():  # does what get_all does but only returns non-b
     B: points that do not
     """
     pts = np.array(points_to_analyze)  # shape (n, 3)
+    print(pts)
     xy = pts[:, :2]  # (x, y)
     all_points_z_values = pts[:, 2]  # z values
+
+    cone_slope = 1.5
 
     tree = cKDTree(xy)
 
@@ -331,13 +336,14 @@ def get_terrain_track_points():  # does what get_all does but only returns non-b
     for i, (x, y, current_point_height) in enumerate(pts):
         # candidate points must be below in z
         below_mask = all_points_z_values < current_point_height
+        # aha! It's needed because being the lowest point breaks the other system (division by 0?)
         if not np.any(below_mask):
             non_bridge_points.append(tuple(pts[i]))
             continue
 
-        # farthest possible radius we might need: 4 * (current_point_height - min(z_below))
+        # farthest possible radius we might need: cone_slope * (current_point_height - min(z_below))
         max_vert_diff = current_point_height - np.min(all_points_z_values[below_mask])
-        search_radius = max_vert_diff / 1
+        search_radius = max_vert_diff / cone_slope
 
         # query candidates within this XY radius
         idxs = tree.query_ball_point([x, y], search_radius)
@@ -347,12 +353,11 @@ def get_terrain_track_points():  # does what get_all does but only returns non-b
             if all_points_z_values[j] < current_point_height:
                 lateral_dist = np.hypot(x - pts[j, 0], y - pts[j, 1])
                 vertical_diff = current_point_height - all_points_z_values[j]
-                if (lateral_dist * 1) < vertical_diff:
+                if (lateral_dist * cone_slope) < vertical_diff:
                     found = True
                     break
 
         if found is False:
             non_bridge_points.append(tuple(pts[i]))
 
-    print(sampled_points[0], non_bridge_points[0])
     return non_bridge_points

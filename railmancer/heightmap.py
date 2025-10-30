@@ -138,20 +138,6 @@ def bleed(data, dir, strength=0.2, iterations=30, size=1):
     return data
 
 
-def blank_list_grid(dimensions, length):
-
-    size = range(length)
-
-    if dimensions == 2:
-
-        return [[[0] for _ in size] for _ in size]
-
-    if dimensions == 3:
-
-        # 3-dimensional array of zeroes
-        return [[[[0] for _ in size] for _ in size] for _ in size]
-
-
 def convert_noise_to_real_pos(noise_x, noise_y, sector_data):
 
     sector_x, sector_y = sector_data["x"], sector_data["y"]
@@ -193,14 +179,14 @@ def generate_sector_heightmaps():
 
     for sector_data in sectors.get_all().values():
 
-        sector_data["grid"]["minmap"] = blank_list_grid(
-            2, cfg.get("noise_grid_per_sector")
+        sector_data["grid"]["minmap"] = tools.blank_list_grid(
+            2, cfg.get("noise_grid_per_sector"), 0
         )
-        sector_data["grid"]["maxmap"] = blank_list_grid(
-            2, cfg.get("noise_grid_per_sector")
+        sector_data["grid"]["maxmap"] = tools.blank_list_grid(
+            2, cfg.get("noise_grid_per_sector"), 0
         )
-        sector_data["grid"]["height"] = blank_list_grid(
-            2, cfg.get("noise_grid_per_sector")
+        sector_data["grid"]["height"] = tools.blank_list_grid(
+            2, cfg.get("noise_grid_per_sector"), 0
         )
 
         for noise_x in range(cfg.get("noise_grid_per_sector")):

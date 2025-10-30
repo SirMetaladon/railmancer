@@ -201,6 +201,62 @@
         "height_terrain_minimum_to_ceiling": 0,
         "height_terrain_minimum_to_floor": 0
       }
+    },
+    "tf2_desert_flat": {
+      "models": {
+        "models/props_foliage/cactus01.mdl": {
+          "weight": 1,
+          "exclusion_radius": 100,
+          "base_radius": 15,
+          "steepness": 3,
+          "height_offset": 8
+        },
+        "models/props_foliage/shrub_03a.mdl": {
+          "weight": 1,
+          "exclusion_radius": 30,
+          "base_radius": 15,
+          "steepness": 3,
+          "height_offset": -4
+        },"models/props_foliage/shrub_03b.mdl": {
+          "weight": 1,
+          "exclusion_radius": 30,
+          "base_radius": 15,
+          "steepness": 3,
+          "height_offset": -4
+        },"models/props_foliage/shrub_03c.mdl": {
+          "weight": 1,
+          "exclusion_radius": 30,
+          "base_radius": 15,
+          "steepness": 3,
+          "height_offset": -4
+        }
+      },
+      "terrain": {
+        "texture_ground": "nature/blendgroundtograss004",
+        "height_terrain_transition_to_tracks_distance": 2000,
+        "height_terrain_flat_in_radius_around_track": 96,
+        "cut_power": 1.5,
+        "cut_scale": 65,
+        "cut_basewidth": 220,
+        "cut_slump": 0.9,
+        "terrain_max": 5000,
+        "terrain_min": -2000,
+        "track_max": 50,
+        "track_min": 0,
+        "alpha_steepness_cutoff": 0.1,
+        "alpha_steepness_transition": 0.2,
+        "alpha_multiplier": 1,
+        "ballast_alpha_distance": 150,
+        "height_track_to_terrain": -30,
+        "maximum_models_per_sector": 50,
+        "noise_hill_resolution": 25,
+        "noise_persistence": 0.2,
+        "noise_lacunarity": 4,
+        "noise_octaves": 2,
+        "noise_deviation_multiplier": 1,
+        "height_terrain_minimum_to_ceiling": 430,
+        "height_terrain_minimum_to_floor": 15
+      }
     }
   }
 }

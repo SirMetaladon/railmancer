@@ -8,7 +8,7 @@ def point_generator(
     sector_data,
     num_dots,
     minimum_spacing,
-    resolution=1000,
+    resolution=25,  # processing time goes up exponentially with this fyi
 ):
 
     sector_size = cfg.get("sector_real_size")

@@ -1,4 +1,4 @@
-import random, math
+import random, math, cProfile, pstats
 from railmancer import (
     heightmap,
     lines,
@@ -17,7 +17,7 @@ from railmancer import (
 def main():
 
     trackpack_directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
-    vmf_input_path = ""  # "vmf inputs/squamish.vmf"
+    vmf_input_path = "vmf inputs/gm_northward.vmf"
 
     # Starts a few stopwatches for showing time progression.
     tools.stopwatch_click("total", "Start!")
@@ -35,7 +35,7 @@ def main():
     Path = []
     Path += [[[2040, -32 - 6000, 500], "0fw", -90, False]]
 
-    trackhammer.start(Path[0], 5)
+    trackhammer.start(Path[0], 0)
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.
     parser.import_track(vmf_input_path)
@@ -62,13 +62,20 @@ def main():
     tools.stopwatch_click("submodule", "Sector Generation done")
 
     sectors.merge_edges()
-    sectors.blur_grids()
-
-    tools.stopwatch_click("submodule", "Smoothed min-max maps done")
+    sectors.blur_min_max_grids()
+    tools.stopwatch_click("submodule", "Merge and blur min-max done")
 
     heightmap.cut_and_fill_sector_heightmaps()
 
     tools.stopwatch_click("submodule", "Contours done")
+
+    sectors.blur_heightmap_grid()
+
+    tools.stopwatch_click("submodule", "Smoothed heightmap")
+
+    heightmap.cut_and_fill_sector_heightmaps()
+
+    tools.stopwatch_click("submodule", "Second pass Contours done")
 
     sectors.collapse_quantum_switchstands()
 
@@ -76,9 +83,26 @@ def main():
 
     tools.stopwatch_click("submodule", "Brushes and Displacements done")
 
+    """profiler = cProfile.Profile()
+    profiler.enable()"""
+
     compile.scatter_placables()
 
+    """profiler.disable()
+
+    stats = pstats.Stats(profiler)
+    stats.sort_stats(
+        "cumtime"
+    )  # 'cumtime' = total time spent in function (including subcalls)
+    stats.print_stats(30)"""
+
     tools.stopwatch_click("submodule", "Scattering complete")
+
+    """points = lines.get_all_track_points()
+    for entry in points:
+        vmfpy.frog(entry)
+
+    tools.stopwatch_click("submodule", "Frogging the Track, done")"""
 
     vmfpy.write_to_vmf(f"{"railmancer"}_{random.randint(4000,4999)}{".vmf"}")
 

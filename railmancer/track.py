@@ -1,4 +1,4 @@
-import os, math
+import os, math, re
 import numpy as np
 from railmancer import lines, vmfpy, tools
 
@@ -43,6 +43,7 @@ def get_heading(raw_direction):
         return (-4, 2)
     elif raw_direction == "2lt":
         return (-4, -2)
+
     elif raw_direction == "4rt":
         return (-4, 4)
     elif raw_direction == "4lt":
@@ -51,6 +52,17 @@ def get_heading(raw_direction):
         return (0, 4)
     elif raw_direction == "8lt":
         return (0, -4)
+
+    elif raw_direction == "6rt":
+        return (-2, 4)
+    elif raw_direction == "6lt":
+        return (2, -4)
+    elif raw_direction == "7rt":
+        return (-1, 4)
+    elif raw_direction == "7lt":
+        return (1, -4)
+    else:
+        print(raw_direction)
 
 
 def direction_to_angle(Direction):
@@ -68,6 +80,13 @@ def direction_to_angle(Direction):
         return 45 * Handedness
     elif Test == "8":
         return 90 * Handedness
+    elif Test == "6":
+        return 90 - 26.6 * Handedness
+    elif Test == "7":
+        return 90 - 14 * Handedness
+
+    else:
+        print(Direction)
 
 
 def determine_length(StartDirection, EndDirection, Radius):
@@ -80,10 +99,14 @@ def determine_length(StartDirection, EndDirection, Radius):
     return round(Radius * math.pi * Degrees / 180, 2)
 
 
+def extract_digits(s: str) -> str:
+    return re.sub(r"\D", "", s)
+
+
 def process_arc(path):
 
     folder = path[-2]
-    Radius = int(folder[1:])
+    Radius = int(extract_digits(folder))
 
     filename = path[-1]
     data = list(filename.split("_"))
