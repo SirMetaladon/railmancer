@@ -5,9 +5,9 @@ from railmancer import cfg
 
 def get():
 
-    return cfg.get("Biomes")["tf2_desert_flat"]["terrain"]
+    return cfg.get("Biomes")["tf2_alpine_snow"]["terrain"]
 
 
 def biome():
 
-    return cfg.get("Biomes")["tf2_desert_flat"]
+    return cfg.get("Biomes")["tf2_alpine_snow"]

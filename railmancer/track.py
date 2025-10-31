@@ -91,12 +91,17 @@ def direction_to_angle(Direction):
 
 def determine_length(StartDirection, EndDirection, Radius):
 
-    StartAngle = abs(direction_to_angle(StartDirection))
-    EndAngle = abs(direction_to_angle(EndDirection))
+    StartAngle = direction_to_angle(StartDirection)
+    EndAngle = direction_to_angle(EndDirection)
 
-    Degrees = EndAngle - StartAngle
+    Degrees = abs(EndAngle - StartAngle)
 
-    return round(Radius * math.pi * Degrees / 180, 2)
+    Length = round(Radius * math.pi * Degrees / 180, 2)
+
+    if Length == 0:
+        print(StartDirection, EndDirection, Radius)
+
+    return Length
 
 
 def extract_digits(s: str) -> str:
@@ -104,6 +109,8 @@ def extract_digits(s: str) -> str:
 
 
 def process_arc(path):
+
+    # example input: models/trakpak3_rsg/arcs/r6144s/a0fw_8lt_left_236pg_+6144x-6144x+228up.mdl
 
     folder = path[-2]
     Radius = int(extract_digits(folder))
@@ -119,6 +126,44 @@ def process_arc(path):
     Length = determine_length(StartDirection, EndDirection, Radius)
 
     data2 = data[4].split("x")
+    ChangeX = int(data2[0])
+    ChangeY = int(data2[1])
+    ChangeZ = int(data2[2][:4])
+
+    ApproxGrade = round((ChangeZ / Length) * 100, 2)
+
+    return [
+        {
+            "Length": Length,
+            "Radius": Radius,
+            "StartDirection": StartDirection,
+            "EndDirection": EndDirection,
+            "GradeLevel": GradeLevel,
+            "Move": [-ChangeX, ChangeY, ChangeZ],
+            "ApproxGrade": ApproxGrade,
+            "RealGrade": RealGrade,
+        }
+    ]
+
+
+def process_banked(path):
+
+    # example input: models/trakpak3_rsg/banked/r4480/ab4lt_4rt_right_227pg_4h_48s_0f12_12f0_+6336x00000x+160up.mdl
+
+    folder = path[-2]
+    Radius = int(extract_digits(folder))
+
+    filename = path[-1]
+    data = list(filename.split("_"))
+
+    StartDirection = data[0][2:]
+    EndDirection = data[1]
+    RealGrade = determine_real_grade(data[3])
+    GradeLevel = determine_grade_level(RealGrade)
+
+    Length = determine_length(StartDirection, EndDirection, Radius)
+
+    data2 = data[-1].split("x")
     ChangeX = int(data2[0])
     ChangeY = int(data2[1])
     ChangeZ = int(data2[2][:4])
@@ -275,6 +320,10 @@ def process_file(model):
 
         return process_arc(path)
 
+    elif path[2] == "banked":
+
+        return process_banked(path)
+
     elif path[-2] == "straights":
 
         return process_straight(path, model)
@@ -302,6 +351,7 @@ def build_track_library(directory, extension):
         for file in files:
             if file.endswith(extension):
 
+                # why did I do it like this? dunno, it works
                 model = "models" + ((root + "/" + file).split("models")[1]).replace(
                     "\\", "/"
                 )

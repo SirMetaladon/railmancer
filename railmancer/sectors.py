@@ -488,7 +488,7 @@ def blur_grid(grid_name, iterations, algorithm):
     # terrain rabbithole
 
     # Nuts to that, let's hardcode it again. But smarter.
-    decay_slope = 1
+    decay_slope = 2
     # there is a universe where we want to change this based on terrain NIGHTMARE NIGHTMARE NIGHTMARE
     adjust = decay_slope * (
         cfg.get("sector_real_size") / cfg.get("noise_grid_per_sector")

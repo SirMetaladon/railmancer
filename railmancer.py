@@ -17,7 +17,7 @@ from railmancer import (
 def main():
 
     trackpack_directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
-    vmf_input_path = "vmf inputs/gm_northward.vmf"
+    vmf_input_path = "vmf inputs/north_part.vmf"
 
     # Starts a few stopwatches for showing time progression.
     tools.stopwatch_click("total", "Start!")
