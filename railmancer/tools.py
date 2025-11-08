@@ -1,6 +1,8 @@
 import time, math
 import numpy as np
 
+# Pile of generic functions that have no dependencies.
+
 
 def display_time(sec):
     mins = sec // 60

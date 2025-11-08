@@ -1,6 +1,8 @@
 from railmancer import track, lines, tools, vmfpy
 import numpy as np
 
+# Subsystem for taking raw VMFs and converting them into usable dictionaries of data.
+
 
 def get_lever():
     global Lever

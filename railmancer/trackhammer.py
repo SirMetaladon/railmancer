@@ -11,6 +11,8 @@ after the fail counter gets higher than, like, 10, back up 1 more track and add 
 
 from railmancer import tools, track
 
+# This is an algoritm for pathing a mainline through the playable area without bumping into itself. Last part pending.
+
 
 def sprinkle_selector(list, variance, count):
 

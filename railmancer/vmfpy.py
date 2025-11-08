@@ -1,6 +1,8 @@
 import os, re
 from railmancer import vmfpy
 
+# Interface between VMFs as a file type and the system of blocks, entities, etc. Intended to be generic.
+
 
 def add_brush(Brush):
 

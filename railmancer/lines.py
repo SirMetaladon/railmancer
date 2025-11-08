@@ -2,6 +2,8 @@ import turtle, math, numpy as np
 from scipy.optimize import minimize
 from railmancer import tools, cfg
 
+# Handles extraction of line and point data from given lists of track-objects. Handles everything related to said lists of points.
+
 
 def bezier(t, Bez, dimensions):
 

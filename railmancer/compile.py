@@ -2,6 +2,8 @@ from scipy.spatial import KDTree
 import math, numpy as np, random
 from railmancer import sectors, terrain, tools, heightmap, cfg, vmfpy
 
+# A specialized file purposefully for handling the final steps of the Railmancer compiling process, mostly related to placing trees and gathering displacement info.
+
 
 def point_generator(
     density_field,

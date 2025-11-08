@@ -4,6 +4,8 @@ from sympy import simplify
 import lines, pathways
 from sympy import symbols, Eq, solve
 
+# Defunct system for using math to plot curves and fill in track to follow said curves.
+
 
 def preprocess_invariants(invariants, targets):
     """Subtract invariant contributions from targets."""

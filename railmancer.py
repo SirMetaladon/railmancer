@@ -13,6 +13,8 @@ from railmancer import (
     cfg,
 )
 
+# This is where it all comes together. Each step of the process accomplishes a major part of the overall product. Mostly for clarity of flow.
+
 
 def main():
 

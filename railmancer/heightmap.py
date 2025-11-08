@@ -4,6 +4,10 @@ import matplotlib.pyplot as plt
 import random, itertools, math, time
 from railmancer import lines, sectors, tools, terrain, cfg
 
+# This file handles "grid" objects, which are 2d grids of floats with a special feature: each float is contained in a list
+# an algorithm stitches the edges of connected sectors together to abuse pass-by-reference to make identical points refer to the same float
+# Importantly, this only handles grids as grids, not anything related to sectors. All of these processes are multi-grid blind.
+
 
 def get_four_nearest_noise_values(
     grid, LeftXCoord, RightXCoord, TopYCoord, BottomYCoord
@@ -113,6 +117,7 @@ def rescale_heightmap(arr, new_min, new_max):
 
 
 def bleed(data, dir, strength=0.2, iterations=30, size=1):
+    # I forgot I made this! Correlary in sectors.py that concerns the same process.
 
     data = np.array(data, dtype=float)  # Convert to float for incremental changes
     rows, cols = data.shape

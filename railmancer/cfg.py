@@ -1,6 +1,8 @@
 from railmancer import tools
 import random
 
+# This file handles all interactions between Railmancer and the Configuration file, sets defaults, and interpets information.
+
 
 def initialize(path: str):
 
@@ -27,6 +29,7 @@ def initialize(path: str):
         ["sector_minimum_wall_height", 1824, 0, max_mapsize],
         ["sector_minimum_track_depth", 128, 0, max_mapsize],
         ["sector_minimum_vertical_track_clearance", 512, 0, max_mapsize],
+        ["noise_floor_ceiling_spillover_slope", 2, 0, 100],
     ]
 
     # need a mechanism in here for double checking the following:
@@ -48,6 +51,16 @@ def initialize(path: str):
         + CFG["sector_minimum_track_depth"]
     ) / CFG["sector_snap_grid"]
 
+    # adjust can be calculated from CFG "slope of terrain away from hard edges" + the size of a gridsquare.
+    # Slope is (Sector size / number of gridsquares) * CFG Slope (the quantity up/down)
+    # terrain rabbithole
+
+    # Nuts to that, let's hardcode it again. But smarter.
+    decay_slope = 2
+    # there is a universe where we want to change this based on terrain NIGHTMARE NIGHTMARE NIGHTMARE
+    CFG["noise_grid_max_deviation_adjustment"] = CFG[
+        "noise_floor_ceiling_spillover_slope"
+    ] * (CFG["sector_real_size"] / CFG["noise_grid_per_sector"])
     return CFG
 
 

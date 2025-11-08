@@ -3,8 +3,12 @@ from railmancer import tools, cfg, lines, vmfpy, terrain
 from scipy.spatial import KDTree
 import numpy as np
 
+# Handles the creation and management of Sector objects, how they connect to each other, things related to stitching them together, and anything that takes sector objects instead of just raw grids.
+
 
 def initialize():
+
+    # Have to run this initially to get the Sectors dictionary up and running.
     global Sectors, sector_lookup_grid
 
     try:
@@ -14,32 +18,40 @@ def initialize():
         sector_lookup_grid = {}
 
 
-def sectors_are_connected(sector_id, floor, ceiling):
+def sectors_are_connected(first_sector, second_sector):
 
-    floor_limit = max(floor, Sectors[sector_id]["floor"])
-    ceiling_limit = min(ceiling, Sectors[sector_id]["ceiling"])
+    # this algorithm tells a sector if it is capable of connecting to another sector. Rules can be arbitrary.
+
+    floor_limit = max(first_sector["floor"], second_sector["floor"])
+    ceiling_limit = min(first_sector["ceiling"], second_sector["ceiling"])
+
+    # add a check in here for "is there a sector directly above me that is connected in a roundabout way"
 
     return (ceiling_limit - floor_limit) >= cfg.get("sector_minimum_cube_gap")
 
 
-def get_sector_id_near_height_connected(x, y, floor, ceiling):
+def get_sector_relative_to_this_sector(sector_data, nudge):
+
+    # special function that scans nearby connected and returns them (for a certain height)
 
     sector_list = sector_lookup_grid.get(f"{x}x{y}", False)
 
     if sector_list is False:
         return False
 
-    for possible_sector in sector_list:
+    for possible_sector_id in sector_list:
 
-        if sectors_are_connected(possible_sector, floor, ceiling):
+        if sectors_are_connected(sector_data, Sectors[possible_sector_id]):
 
-            return possible_sector
+            return possible_sector_id
 
     # if no sectors found or none were within height range
     return False
 
 
 def convert_real_to_sector_xy(position):
+
+    # magic math box that converts between real and sector-grid space
 
     # sector x/y are integers relative to the overall grid (-3 to 4)
     # virtual x/y are floats fractions within the sector (0 to 1)
@@ -53,6 +65,8 @@ def convert_real_to_sector_xy(position):
 
 
 def get_sector_id_at_position(position):
+
+    # simple conversion of 3d space point to "if within sector, this one, else no"
 
     sector_x, sector_y = convert_real_to_sector_xy(position)
 
@@ -77,6 +91,8 @@ def get_sector_id_at_position(position):
 
 
 def new_sector(x, y, floor, ceiling):
+
+    # creates a new sector object at the x,y sector-grid coordinates using the correct heights.
 
     floor_real = min(floor, ceiling)
     ceiling_real = max(floor, ceiling)
@@ -107,6 +123,8 @@ def new_sector(x, y, floor, ceiling):
 
 def sector_square(data):
 
+    # box of sectors for testing
+
     xmin, xmax, ymin, ymax, bottom, top = data
 
     for x in range(xmin, xmax + 1):
@@ -120,6 +138,8 @@ def sector_square(data):
 
 
 def sector_path_random(data):
+
+    # randomly moving path of sectors that cannot intersect itself
 
     x_current, y_current, count, block_height, step_height = data
 
@@ -168,6 +188,8 @@ def sector_path_random(data):
 
 def build_manual(build_method, data):
 
+    # wrapper for creating sectors not from linedata
+
     if build_method == "sector_path_random":
 
         sector_path_random(data)
@@ -177,21 +199,18 @@ def build_manual(build_method, data):
         sector_square(data)
 
 
-def link():  # takes all sectors, finds nearby sectors, and adds them to a list of neighbors, then checks those lists for consistiency
+def link():
+
+    # takes all sectors, finds nearby sectors, and adds them to a list of neighbors, then checks those lists for consistiency
 
     # initially add neighbors
     for Sector_Data in Sectors.values():
 
-        XGrid = Sector_Data["x"]
-        YGrid = Sector_Data["y"]
-        ZFloor = Sector_Data["floor"]
-        ZCeiling = Sector_Data["ceiling"]
-
         Sector_Data["neighbors"] += [
-            get_sector_id_near_height_connected(XGrid, YGrid + 1, ZFloor, ZCeiling),
-            get_sector_id_near_height_connected(XGrid + 1, YGrid, ZFloor, ZCeiling),
-            get_sector_id_near_height_connected(XGrid, YGrid - 1, ZFloor, ZCeiling),
-            get_sector_id_near_height_connected(XGrid - 1, YGrid, ZFloor, ZCeiling),
+            get_sector_relative_to_this_sector(Sector_Data, [0, 1]),  # north
+            get_sector_relative_to_this_sector(Sector_Data, [1, 0]),  # east
+            get_sector_relative_to_this_sector(Sector_Data, [0, -1]),  # south
+            get_sector_relative_to_this_sector(Sector_Data, [-1, 0]),  # west
         ]
 
     # checks for consistiency
@@ -212,6 +231,8 @@ def link():  # takes all sectors, finds nearby sectors, and adds them to a list 
 
 
 def build_fit():
+
+    # Takes all points, makes buckets representing new possible sectors, expands and creates sectors as needed.
 
     sector_minimum_wall_height = cfg.get("sector_minimum_wall_height")
     sector_minimum_track_depth = cfg.get("sector_minimum_track_depth")
@@ -333,6 +354,8 @@ def build_kdtree_for_sector(sector_data):
 
 
 def assign_points_to_sectors():
+
+    # gives each sector an internal lookup of points in itself + neighbors in a plus-sign shape (connected ones only)
     from collections import defaultdict
 
     # Step 1: Map points to their specific sector via floor/ceiling lookup
@@ -360,6 +383,8 @@ def assign_points_to_sectors():
 
 
 def find_closest_point_2d(sector, x, y):
+
+    # convert a sector and X/Y pair into the closest track-point in that sector by 2d distance
     """
     Returns the closest 3D point (x, y, z) in the sector to the input x, y.
     Assumes the sector already has its KDTree built.
@@ -378,6 +403,7 @@ def get(sector_id, default=None):
 def merge_edges():
 
     # having agreed on link status, bind all the edges of the grids to each other
+    # roughly, runs through every grid in the 3 different types of grids, seaches for ones that appear in the neighbor lookup, merges info along the shared edge
 
     for sector_data in Sectors.values():
 
@@ -447,7 +473,9 @@ def merge_edges():
                     neighbor_grid[hook[0][0]][hook[1][0]] = grid[hook[2][0]][hook[3][0]]
 
 
-def process_grid(oldgrid, algorithm, adjust):
+def apply_algorithm_to_grid(oldgrid, algorithm, adjust):
+    # applies an algorithm input to each square in a grid
+
     gridsize = len(oldgrid)
     new_grid = tools.blank_list_grid(2, gridsize, 0)
 
@@ -460,6 +488,7 @@ def process_grid(oldgrid, algorithm, adjust):
 
 
 def overwrite_grid(oldgrid, newgrid):
+    # Takes data from newgrid and carefully replaces data in oldgrid without disturbing the pass-by-reference
 
     gridsize = len(oldgrid)
 
@@ -470,6 +499,7 @@ def overwrite_grid(oldgrid, newgrid):
 
 def get_nearby_gridsquare_data(x, y, grid, gridsize):
 
+    # Gets a 3x3 grid of samples from nearby entries in the grid, excluding empty boxes.
     output = []
 
     for dy in [-1, 0, 1]:
@@ -483,16 +513,6 @@ def get_nearby_gridsquare_data(x, y, grid, gridsize):
 
 
 def blur_grid(grid_name, iterations, algorithm):
-    # adjust can be calculated from CFG "slope of terrain away from hard edges" + the size of a gridsquare.
-    # Slope is (Sector size / number of gridsquares) * CFG Slope (the quantity up/down)
-    # terrain rabbithole
-
-    # Nuts to that, let's hardcode it again. But smarter.
-    decay_slope = 2
-    # there is a universe where we want to change this based on terrain NIGHTMARE NIGHTMARE NIGHTMARE
-    adjust = decay_slope * (
-        cfg.get("sector_real_size") / cfg.get("noise_grid_per_sector")
-    )
 
     # has to be in this order so changes propagate between sectors (they share edges)
     for _ in range(iterations):
@@ -506,13 +526,17 @@ def blur_grid(grid_name, iterations, algorithm):
                 continue  # Skip if maps are missing
 
             # spits out a new (identical but processed) grid - does not edit original
-            new_grid = process_grid(grid, algorithm, adjust)
+            new_grid = apply_algorithm_to_grid(
+                grid, algorithm, cfg.get("noise_grid_max_deviation_adjustment")
+            )
 
             # this preserves the merged edges using Python pass-by-reference lists
             overwrite_grid(grid, new_grid)
 
 
 def blur_min_max_grids():
+
+    # Wrapper function for using blur_grid on the min and max grids to propagate ceilings and floors into adjacent sectors.
 
     def raise_floor(base, list, adjust):
 
@@ -537,6 +561,8 @@ def blur_min_max_grids():
 
 def blur_heightmap_grid():
 
+    # Wrapper function for using blur_grid on the heightmap.
+
     def cut_down_outliers(base, list, adjust):
 
         weight = 3  # must be an integer greater than 0
@@ -555,6 +581,8 @@ def blur_heightmap_grid():
 
 def distance_to_line(pos, sector_data=None):
 
+    # Takes a position and an optional sector (if you know what sector it is already) and spits out the distance to the nearest track-point.
+
     if sector_data is None:
         sector_data = Sectors[get_sector_id_at_position(pos)]
 
@@ -572,6 +600,9 @@ def distance_to_line(pos, sector_data=None):
 
 
 def collapse_quantum_switchstands():
+
+    # Roughly: takes the encoded 2-option switch stand entities and overwrites itself with whichever one is farthest from the rails.
+    # Good way of finding unobstructed stand locations.
 
     Entities = vmfpy.get_entities()
 

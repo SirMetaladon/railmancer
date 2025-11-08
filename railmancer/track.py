@@ -2,6 +2,8 @@ import os, math, re
 import numpy as np
 from railmancer import lines, vmfpy, tools
 
+# Contains everything to do with the Track Library, which is a dictionary of conversions between modelpaths and physical dimensions / extracted information.
+
 
 def determine_real_grade(raw_grade):
     if raw_grade == "0pg":
