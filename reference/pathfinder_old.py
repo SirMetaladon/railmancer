@@ -34,7 +34,7 @@ def write_track(Position, NextPosition, Direction, MDL, Heading):
     ]
 
 
-def append_track(Model, Position, Direction, Heading):
+def depreciatednodething(Model, Position, Direction, Heading):
 
     Data = Track_Library[Model]
 
@@ -79,7 +79,7 @@ def write_pathfinder_data(MDLList, StartPos, StartHeading):
 
     for Model in MDLList:
 
-        NewPosition, NewDirection, NewHeading, Reorient = append_track(
+        NewPosition, NewDirection, NewHeading, Reorient = depreciatednodething(
             Model, Position, Direction, Heading
         )
 
@@ -384,7 +384,7 @@ def recursive_track_explorer(PosIn, DirIn, HeadIn, SoFarIn):
             SoFar = Current[3].copy()
             Model = Track[0]
 
-            NewPosition, NewDirection, NewHeading, Reorient = append_track(
+            NewPosition, NewDirection, NewHeading, Reorient = depreciatednodething(
                 Model, Position, Direction, Heading
             )
 

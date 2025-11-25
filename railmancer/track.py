@@ -393,7 +393,7 @@ def write_track(
 
     track_data = track_model_library[model]
 
-    if new_node[3]:  # if it's reversed
+    if new_node[3]:  # if it's reversed AHA IT DOES DO SOMETHING
         ModelPos = new_node[0]
         RotFix = 180
     else:
@@ -443,9 +443,10 @@ def add_connector(pathnode):
         pathnode[0] = new_pos"""
 
 
-def append_track(Model, Node, ReverseStraight=False):
+def get_new_node_from_node_and_model(Model, Node, ReverseStraight=False):
 
-    Position, Direction, Heading, _ = Node
+    Position, Direction, Heading, _ = Node  # I don't even use it here what
+    # EDITORS NOTE THE 4th SLOT IS FOR MODEL REVERSING (does not effect the jump, only rotation of the model)
 
     track_data = track_model_library[Model]
 
@@ -509,7 +510,7 @@ def write_pathfinder_data(model_list, start_node):
 
     for model in model_list:
 
-        new_node = append_track(model, prev_node)
+        new_node = get_new_node_from_node_and_model(model, prev_node)
 
         # finalize track placement
         write_track(model, prev_node, new_node)
@@ -517,7 +518,9 @@ def write_pathfinder_data(model_list, start_node):
         prev_node = new_node
 
 
-def valid_next_tracks(Direction, MinimumRadiusLevel):
+def valid_next_tracks(
+    Direction, MinimumRadiusLevel=0, MinimumGradeLevel=False, MaximumGradeLevel=False
+):
 
     global valid_tracks_cache
 
@@ -526,7 +529,12 @@ def valid_next_tracks(Direction, MinimumRadiusLevel):
     except:
         valid_tracks_cache = {}
 
-    Index = Direction + str(MinimumRadiusLevel)
+    Index = (
+        Direction
+        + str(MinimumRadiusLevel)
+        + str(MinimumGradeLevel)
+        + str(MaximumGradeLevel)
+    )
 
     if valid_tracks_cache.get(Index, []):
 
@@ -540,7 +548,9 @@ def valid_next_tracks(Direction, MinimumRadiusLevel):
 
     for Track in list(track_model_library.items()):
 
-        if Track[1]["GradeLevel"] < 2:
+        if MinimumGradeLevel != False and Track[1]["GradeLevel"] < MinimumGradeLevel:
+            continue
+        if MaximumGradeLevel != False and Track[1]["GradeLevel"] > MaximumGradeLevel:
             continue
 
         if Track[1]["Radius"] not in AllowedRadii:
@@ -567,4 +577,10 @@ def valid_next_tracks(Direction, MinimumRadiusLevel):
     Output = [item[0] for item in Output]
     valid_tracks_cache[Index] = Output
 
+    print(Output)
     return Output
+
+
+def get_length(model):
+
+    return track_model_library[model]["Length"]

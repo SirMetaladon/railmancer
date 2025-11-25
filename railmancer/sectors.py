@@ -34,7 +34,9 @@ def get_sector_relative_to_this_sector(sector_data, nudge):
 
     # special function that scans nearby connected and returns them (for a certain height)
 
-    sector_list = sector_lookup_grid.get(f"{x}x{y}", False)
+    sector_list = sector_lookup_grid.get(
+        f"{sector_data["x"]+nudge[0]}x{sector_data["y"]+nudge[1]}", False
+    )
 
     if sector_list is False:
         return False

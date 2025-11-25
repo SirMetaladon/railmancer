@@ -17,7 +17,7 @@ def initialize(path: str):
         print("Unable to get Biomes from CFG!")
         print(Exception)
 
-    max_mapsize = 32768
+    max_mapsize = 32768  # hardcoded source limit
 
     # this is the default CFG data, format label, default, min, max
     Expecting = [
@@ -30,6 +30,7 @@ def initialize(path: str):
         ["sector_minimum_track_depth", 128, 0, max_mapsize],
         ["sector_minimum_vertical_track_clearance", 512, 0, max_mapsize],
         ["noise_floor_ceiling_spillover_slope", 2, 0, 100],
+        ["trackhammer_minimum_allowed_distance_from_edge_of_map", 1000, 0, max_mapsize],
     ]
 
     # need a mechanism in here for double checking the following:
@@ -43,6 +44,10 @@ def initialize(path: str):
 
     for Biome in CFG["Biomes"].values():
         Biome["terrain"]["seed"] = random.randint(0, 100)
+
+    CFG["trackhammer_boxsize"] = (
+        max_mapsize - CFG["trackhammer_minimum_allowed_distance_from_edge_of_map"]
+    )  # to make calculations easier
 
     # this must be an even number for alignment to work
     CFG["sectors_per_map"] = int(max_mapsize / CFG["sector_real_size"])

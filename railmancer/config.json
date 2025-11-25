@@ -8,6 +8,8 @@
   "sector_minimum_track_depth": 300,
   "sector_minimum_vertical_track_clearance": 800,
   "sector_minimum_track_to_edge_distance": 700,
+  "noise_floor_ceiling_spillover_slope": 2,
+  "trackhammer_minimum_allowed_distance_from_edge_of_map": 1000,
   "Biomes": {
     "tf2_alpine_snow": {
       "models": {
