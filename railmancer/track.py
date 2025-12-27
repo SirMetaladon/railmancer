@@ -574,11 +574,10 @@ def valid_next_tracks(
 
         tools.heuristic_inserter(Output, to_add)
 
-    Output = [item[0] for item in Output]
-    valid_tracks_cache[Index] = Output
+    Output2 = [item[0][0] for item in Output]
+    valid_tracks_cache[Index] = Output2
 
-    print(Output)
-    return Output
+    return Output2
 
 
 def get_length(model):

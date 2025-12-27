@@ -183,7 +183,6 @@ def round_to_multiple(value, snapto, mode):
 
 
 def within2d(tuple2d, range):
-
     return abs(tuple2d[0]) < range and abs(tuple2d[1]) < range
 
 

@@ -153,14 +153,9 @@ def bezier_curve(t, P0, P1, P2, P3):
     )
 
 
-def write_bezier_points(start_position, end_position, start_direction, end_direction):
-
-    global Beziers
-
-    try:
-        Beziers
-    except:
-        Beziers = []
+def convert_nodes_to_bezier(
+    start_position, end_position, start_direction, end_direction
+):
 
     # Convert to 2 dimensions, as the bezier pathing does not concern height (and it makes the math easier)
     p0 = np.array([start_position[0], start_position[1]])
@@ -184,7 +179,7 @@ def write_bezier_points(start_position, end_position, start_direction, end_direc
         # make an attempt at a straight line
         p1 = p0 + d0 * np.linalg.norm(p3 - p0) / 2
         p2 = p1
-        Beziers += [
+        return [
             (
                 start_position,
                 np.array(start_position) * (2 / 3) + np.array(end_position) * (1 / 3),
@@ -250,10 +245,21 @@ def write_bezier_points(start_position, end_position, start_direction, end_direc
         p1 = p0 + best_params[0] * d0
         p2 = p3 + best_params[1] * d3
 
-        Beziers += [(start_position, p1, p2, end_position)]
+        return [(start_position, p1, p2, end_position)]
 
-    if len(Beziers) == 0:
-        print("NO TRACK!")
+
+def write_bezier_points(start_position, end_position, start_direction, end_direction):
+
+    global Beziers
+
+    try:
+        Beziers
+    except:
+        Beziers = []
+
+    Beziers += convert_nodes_to_bezier(
+        start_position, end_position, start_direction, end_direction
+    )
 
 
 def display_path(BezList: list, Extents):
@@ -281,6 +287,17 @@ def display_path(BezList: list, Extents):
         draw_bezier_curve(Plot)
 
 
+def convert_bezier_to_points(Segment, line_maximum_poll_point_distance):
+    ts = np.linspace(
+        0,
+        1,
+        int(np.linalg.norm(Segment[0] - Segment[3]) / line_maximum_poll_point_distance)
+        + 1,
+    )
+
+    return [(bezier(t, Segment, 3)) for t in ts]
+
+
 def encode_lines():
 
     global sampled_points
@@ -292,18 +309,11 @@ def encode_lines():
     else:
         sampled_points = []
 
-    for Subsegment in Beziers:
-        ts = np.linspace(
-            0,
-            1,
-            int(
-                np.linalg.norm(Subsegment[0] - Subsegment[3])
-                / line_maximum_poll_point_distance
-            )
-            + 1,
-        )
+    for Segment in Beziers:
 
-        sampled_points += [(bezier(t, Subsegment, 3)) for t in ts]
+        sampled_points += convert_bezier_to_points(
+            Segment, line_maximum_poll_point_distance
+        )
 
 
 def get_all_track_points():
@@ -325,7 +335,6 @@ def get_terrain_points_from_sample(points_to_analyze):
     B: points that do not
     """
     pts = np.array(points_to_analyze)  # shape (n, 3)
-    print(pts)
     xy = pts[:, :2]  # (x, y)
     all_points_z_values = pts[:, 2]  # z values
 

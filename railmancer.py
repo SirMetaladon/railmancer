@@ -19,7 +19,7 @@ from railmancer import (
 def main():
 
     trackpack_directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
-    vmf_input_path = "vmf inputs/north_part.vmf"
+    vmf_input_path = ""  # "vmf inputs/north_part.vmf"
 
     # Starts a few stopwatches for showing time progression.
     tools.stopwatch_click("total", "Start!")
@@ -36,7 +36,7 @@ def main():
     # temporary start position for Trackhammer
     Start_Node = [[0, 0, 0], "0fw", 0, False]
 
-    trackhammer.generate_mainline(Start_Node, 3)
+    trackhammer.generate_mainline(Start_Node, 4)
     # 2nd number is distance in miles, will keep going until it's over this value
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.
