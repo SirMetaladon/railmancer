@@ -34,9 +34,9 @@ def main():
     tools.stopwatch_click("submodule", "Initialization complete")
 
     # temporary start position for Trackhammer
-    Start_Node = [[0, 0, 0], "0fw", 0, False]
+    Start_Node = [[0, 0, -15500], "0fw", 0, False]
 
-    trackhammer.generate_mainline(Start_Node, 4)
+    trackhammer.generate_mainline(Start_Node, 28)
     # 2nd number is distance in miles, will keep going until it's over this value
 
     # Step 1: Import line object from a VMF, as well as the track entities themselves.

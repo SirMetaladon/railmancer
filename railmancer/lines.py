@@ -335,6 +335,15 @@ def get_terrain_points_from_sample(points_to_analyze):
     B: points that do not
     """
     pts = np.array(points_to_analyze)  # shape (n, 3)
+
+    if not hasattr(pts, "ndim") or pts.ndim != 2:
+        print(
+            "DEBUG: pts has wrong shape",
+            type(pts),
+            getattr(pts, "shape", None),
+            repr(pts)[:500],
+        )
+
     xy = pts[:, :2]  # (x, y)
     all_points_z_values = pts[:, 2]  # z values
 

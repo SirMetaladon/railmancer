@@ -379,6 +379,9 @@ def assign_points_to_sectors():
             if neighbor_id and isinstance(neighbor_id, str):
                 all_points.extend(sector_point_map.get(neighbor_id, []))
 
+        if not all_points:
+            all_points = np.empty((0, 3))
+
         sector_data["points"] = lines.get_terrain_points_from_sample(all_points)
 
         build_kdtree_for_sector(sector_data)

@@ -45,8 +45,8 @@ def initialize(path: str):
     for Biome in CFG["Biomes"].values():
         Biome["terrain"]["seed"] = random.randint(0, 100)
 
-    CFG["trackhammer_boxsize"] = (
-        max_mapsize - CFG["trackhammer_minimum_allowed_distance_from_edge_of_map"]
+    CFG["trackhammer_border"] = (
+        max_mapsize / 2 - CFG["trackhammer_minimum_allowed_distance_from_edge_of_map"]
     )  # to make calculations easier
 
     # this must be an even number for alignment to work

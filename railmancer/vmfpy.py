@@ -98,12 +98,24 @@ def solid(Brush: list):
         Positive_Y_Texture = "TOOLS/TOOLSNODRAW"
         Negative_Y_Texture = "TOOLS/TOOLSNODRAW"
 
+    else:
+        Top_Texture = str(Brush[6])
+        Bottom_Texture = str(Brush[6])
+        Negative_X_Texture = str(Brush[6])
+        Positive_X_Texture = str(Brush[6])
+        Positive_Y_Texture = str(Brush[6])
+        Negative_Y_Texture = str(Brush[6])
+
     X_Start = str(Brush[0])
     X_End = str(Brush[1])
     Y_Start = str(Brush[2])
     Y_End = str(Brush[3])
     Z_Start = str(Brush[4])
     Z_End = str(Brush[5])
+
+    VisgroupData = ""
+    if len(Brush) > 9:
+        VisgroupData = f'\n                    "visgroupid" "{Brush[9]}"'
 
     return f"""
     solid
@@ -221,7 +233,7 @@ def solid(Brush: list):
         {{
             "color" "150 150 160"
             "visgroupshown" "1"
-            "visgroupautoshown" "1"
+            "visgroupautoshown" "1"{VisgroupData}
         }}
     }}"""
 
@@ -458,6 +470,12 @@ def write_to_vmf(filename):
         {
             "name" "Track"
             "visgroupid" "23"
+            "color" "234 131 192"
+        }
+        visgroup
+        {
+            "name" "Blocks"
+            "visgroupid" "24"
             "color" "234 131 192"
         }
     }
