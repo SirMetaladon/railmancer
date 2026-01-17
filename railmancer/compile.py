@@ -84,8 +84,8 @@ def point_generator(
 # Example usage
 def density_field(x, y, sector_data):
 
-    BaseX = math.floor(x / 4080)
-    BaseY = math.floor(y / 4080)
+    BaseX = math.floor(x / sector_real_size)
+    BaseY = math.floor(y / sector_real_size)
 
     if not sector_data:
         return 0
@@ -99,16 +99,52 @@ def density_field(x, y, sector_data):
 
         # True = there is a wall in the +x direction, so if the co-ords are 0,0, the wall should start at 3060 and go up to Coefficient x the normal height by the time we have reached 4080
         if neighbors[1] is False:
-            Value += max(Coefficient * ((x - (BaseX * 4080) - 3060) / 1020), 0)
+            Value += max(
+                Coefficient
+                * (
+                    (x - (BaseX * sector_real_size) - sector_real_size * 3 / 4)
+                    / sector_real_size
+                    * 1
+                    / 4
+                ),
+                0,
+            )
         # -y direction
         if neighbors[2] is False:
-            Value += max(Coefficient * ((-y + (BaseY * 4080) + 1020) / 1020), 0)
+            Value += max(
+                Coefficient
+                * (
+                    (-y + (BaseY * sector_real_size) + sector_real_size * 1 / 4)
+                    / sector_real_size
+                    * 1
+                    / 4
+                ),
+                0,
+            )
         # -x direction
         if neighbors[3] is False:
-            Value += max(Coefficient * ((-x + (BaseX * 4080) + 1020) / 1020), 0)
+            Value += max(
+                Coefficient
+                * (
+                    (-x + (BaseX * sector_real_size) + sector_real_size * 1 / 4)
+                    / sector_real_size
+                    * 1
+                    / 4
+                ),
+                0,
+            )
         # +y direction
         if neighbors[0] is False:
-            Value += max(Coefficient * ((y - (BaseY * 4080) - 3060) / 1020), 0)
+            Value += max(
+                Coefficient
+                * (
+                    (y - (BaseY * sector_real_size) - sector_real_size * 3 / 4)
+                    / sector_real_size
+                    * 1
+                    / 4
+                ),
+                0,
+            )
 
     return max(Value, 0)
 
@@ -250,6 +286,9 @@ def sector_coords_to_subdivided_displacements(
 
 
 def compile_sectors_to_brushes():
+
+    global sector_real_size
+    sector_real_size = cfg.get("sector_real_size")
 
     subdivisions = cfg.get("sector_displacement_subdivision_rate")
 

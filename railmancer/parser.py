@@ -143,6 +143,6 @@ def import_track(path):
                 }
             )
 
-    print("Imported " + path)
+    print(f"Imported {path}, {len(raw_ents)} entities.")
 
     reprocess_raw_data(raw_ents)

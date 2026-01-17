@@ -2,7 +2,7 @@
   "line_maximum_poll_point_distance": 80, 
   "sector_real_size": 4080,
   "noise_grid_per_sector": 25,
-  "sector_displacement_subdivision_rate": 3,
+  "sector_displacement_subdivision_rate": 4,
   "sector_snap_grid": 16,
   "sector_minimum_wall_height": 1824,
   "sector_minimum_track_depth": 300,
