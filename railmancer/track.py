@@ -548,9 +548,22 @@ def valid_next_tracks(
 
     for Track in list(track_model_library.items()):
 
-        if MinimumGradeLevel != False and Track[1]["GradeLevel"] < MinimumGradeLevel:
+        if Track[1]["StartDirection"] != Direction or (
+            Direction[:1] == "4" and Track[1]["StartDirection"][:1] == "4"
+        ):
+            Reversed = -1
+        else:
+            Reversed = 1
+
+        if (
+            MinimumGradeLevel != False
+            and (Track[1]["GradeLevel"] * Reversed) < MinimumGradeLevel
+        ):
             continue
-        if MaximumGradeLevel != False and Track[1]["GradeLevel"] > MaximumGradeLevel:
+        if (
+            MaximumGradeLevel != False
+            and (Track[1]["GradeLevel"] * Reversed) > MaximumGradeLevel
+        ):
             continue
 
         if Track[1]["Radius"] not in AllowedRadii:

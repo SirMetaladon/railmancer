@@ -143,7 +143,7 @@ def track_placement_is_valid(model, current_node):
 def generate_selection_of_possible_tracks(node, count):
 
     # takes direction, minumum radius level, minimum grade level, maximum grade level
-    possible_tracks = track.valid_next_tracks(node[1], 0, 2)
+    possible_tracks = track.valid_next_tracks(node[1], 1, 2)
 
     # rint(possible_tracks)  # gets evens  # upbound
     return sprinkle_selector(possible_tracks, count)

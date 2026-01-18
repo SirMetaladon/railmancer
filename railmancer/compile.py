@@ -9,11 +9,12 @@ def point_generator(
     density_field,
     sector_data,
     num_dots,
-    minimum_spacing,
-    resolution=25,  # processing time goes up exponentially with this fyi
+    minimum_spacing,  # processing time goes up exponentially with this fyi
 ):
 
     sector_size = cfg.get("sector_real_size")
+
+    resolution = int(sector_size / minimum_spacing)  # this might not work right
     """
     Generate dots distributed according to a density field, with improved apportioning.
 
@@ -30,8 +31,8 @@ def point_generator(
     y_min, y_max = sector_data["y"] * sector_size, (sector_data["y"] + 1) * sector_size
 
     # Create a grid over the plane
-    x_vals = np.linspace(x_min, x_max, resolution)
-    y_vals = np.linspace(y_min, y_max, resolution)
+    x_vals = np.linspace(x_min, x_max, resolution, False)
+    y_vals = np.linspace(y_min, y_max, resolution, False)
     xx, yy = np.meshgrid(x_vals, y_vals)
 
     # Compute density values on the grid
@@ -95,56 +96,59 @@ def density_field(x, y, sector_data):
         neighbors = sector_data["neighbors"]
 
         Value = 1
-        Coefficient = 4
+        Coefficient = 6
+        Transition = 1 / 3
+        EdgeCutoff = 1 / 32
+
+        x_local = x - (BaseX * sector_real_size)
+        y_local = y - (BaseY * sector_real_size)
+
+        x_interp = x_local / sector_real_size
+        y_interp = y_local / sector_real_size
 
         # True = there is a wall in the +x direction, so if the co-ords are 0,0, the wall should start at 3060 and go up to Coefficient x the normal height by the time we have reached 4080
         if neighbors[1] is False:
-            Value += max(
-                Coefficient
-                * (
-                    (x - (BaseX * sector_real_size) - sector_real_size * 3 / 4)
-                    / sector_real_size
-                    * 1
-                    / 4
-                ),
-                0,
-            )
+
+            if x_interp > (1 - EdgeCutoff):
+                return 0
+
+            part_a = x_interp - (1 - Transition)
+            part_b = 1 / (Transition)
+
+            Value += max(Coefficient * part_a * part_b, 0)
+
         # -y direction
         if neighbors[2] is False:
-            Value += max(
-                Coefficient
-                * (
-                    (-y + (BaseY * sector_real_size) + sector_real_size * 1 / 4)
-                    / sector_real_size
-                    * 1
-                    / 4
-                ),
-                0,
-            )
+
+            if y_interp < EdgeCutoff:
+                return 0
+
+            part_a = Transition - y_interp
+            part_b = 1 / (Transition)
+
+            Value += max(Coefficient * part_a * part_b, 0)
+
         # -x direction
         if neighbors[3] is False:
-            Value += max(
-                Coefficient
-                * (
-                    (-x + (BaseX * sector_real_size) + sector_real_size * 1 / 4)
-                    / sector_real_size
-                    * 1
-                    / 4
-                ),
-                0,
-            )
+
+            if x_interp < EdgeCutoff:
+                return 0
+
+            part_a = Transition - x_interp
+            part_b = 1 / (Transition)
+
+            Value += max(Coefficient * part_a * part_b, 0)
+
         # +y direction
         if neighbors[0] is False:
-            Value += max(
-                Coefficient
-                * (
-                    (y - (BaseY * sector_real_size) - sector_real_size * 3 / 4)
-                    / sector_real_size
-                    * 1
-                    / 4
-                ),
-                0,
-            )
+
+            if y_interp > (1 - EdgeCutoff):
+                return 0
+
+            part_a = y_interp - (1 - Transition)
+            part_b = 1 / (Transition)
+
+            Value += max(Coefficient * part_a * part_b, 0)
 
     return max(Value, 0)
 
@@ -225,6 +229,7 @@ def distribute(min_distance, TotalPoints, sector_data):
                     "ang-roll": random.randrange(-4, 4),
                     "shadows": "noself",
                     "visgroup": "22",
+                    "disablevertexlighting": "1",
                 }
             )
 
@@ -326,6 +331,7 @@ def create_scenery_block(sector_data):
 
     vmfpy.floor(block_x, block_y, block_floor),
     vmfpy.ceiling(block_x, block_y, block_ceiling),
+    vmfpy.viscluster(block_x, block_y, block_floor, block_ceiling, 128)  # standoff
 
     for dir in range(4):
 

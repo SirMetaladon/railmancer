@@ -63,6 +63,7 @@ def solid(Brush: list):
         Brush.pop(6)
 
     Displacement = ""
+    Class = ""
 
     if Brush[6] == "wall":
         Top_Texture = "TOOLS/TOOLSNODRAW"
@@ -98,6 +99,15 @@ def solid(Brush: list):
         Positive_Y_Texture = "TOOLS/TOOLSNODRAW"
         Negative_Y_Texture = "TOOLS/TOOLSNODRAW"
 
+    elif Brush[6] == "viscluster":
+        Top_Texture = "TOOLS/TOOLSTRIGGER"
+        Bottom_Texture = "TOOLS/TOOLSTRIGGER"
+        Negative_X_Texture = "TOOLS/TOOLSTRIGGER"
+        Positive_X_Texture = "TOOLS/TOOLSTRIGGER"
+        Positive_Y_Texture = "TOOLS/TOOLSTRIGGER"
+        Negative_Y_Texture = "TOOLS/TOOLSTRIGGER"
+        Class = '''"classname" "func_viscluster"'''
+
     else:
         Top_Texture = str(Brush[6])
         Bottom_Texture = str(Brush[6])
@@ -118,6 +128,7 @@ def solid(Brush: list):
         VisgroupData = f'\n                    "visgroupid" "{Brush[9]}"'
 
     return f"""
+    {Class}
     solid
     {{
         "id" "{get_ID()}"
@@ -136,7 +147,7 @@ def solid(Brush: list):
             "uaxis" "[1 0 0 -0] 0.25"
             "vaxis" "[0 -1 0 128] 0.25"
             "rotation" "0"
-            "lightmapscale" "16"
+            "lightmapscale" "128"
             "smoothing_groups" "0"{Displacement}
         }}
         side
@@ -154,7 +165,7 @@ def solid(Brush: list):
             "uaxis" "[-1 0 0 0] 0.25"
             "vaxis" "[0 -1 0 -0] 0.25"
             "rotation" "0"
-            "lightmapscale" "16"
+            "lightmapscale" "128"
             "smoothing_groups" "0"
         }}
         side
@@ -172,7 +183,7 @@ def solid(Brush: list):
             "uaxis" "[0 -1 0 -0] 0.25"
             "vaxis" "[0 0 -1 0] 0.25"
             "rotation" "0"
-            "lightmapscale" "16"
+            "lightmapscale" "128"
             "smoothing_groups" "0"
         }}
         side
@@ -190,7 +201,7 @@ def solid(Brush: list):
             "uaxis" "[0 1 0 0] 0.25"
             "vaxis" "[0 0 -1 0] 0.25"
             "rotation" "0"
-            "lightmapscale" "16"
+            "lightmapscale" "128"
             "smoothing_groups" "0"
         }}
         side
@@ -208,7 +219,7 @@ def solid(Brush: list):
             "uaxis" "[-1 0 0 0] 0.25"
             "vaxis" "[0 0 -1 0] 0.25"
             "rotation" "0"
-            "lightmapscale" "16"
+            "lightmapscale" "128"
             "smoothing_groups" "0"
         }}
         side
@@ -226,7 +237,7 @@ def solid(Brush: list):
             "uaxis" "[1 0 0 -0] 0.25"
             "vaxis" "[0 0 -1 0] 0.25"
             "rotation" "0"
-            "lightmapscale" "16"
+            "lightmapscale" "128"
             "smoothing_groups" "0"
         }}
         editor
@@ -332,6 +343,7 @@ def synthesize_entities(Entities):
                 "solid" "6"
                 "origin" "{Ent["pos-x"]} {Ent["pos-y"]} {Ent["pos-z"]}"
                 {Shadows}
+                "disablevertexlighting" "{Ent.get("disablevertexlighting",0)}"
                 editor
                 {{
                     "color" "200 200 150"
@@ -403,6 +415,20 @@ def ceiling(block_x: int, block_y: int, block_z: int):
             (block_z) * 16,
             (block_z + 1) * 16,
             "ceiling",
+        ]
+    )
+
+
+def viscluster(block_x: int, block_y: int, floor_z: int, ceiling_z: int, standoff: int):
+    add_brush(
+        [
+            block_x * 16 * 255 + standoff,
+            (block_x + 1) * 16 * 255 - standoff,
+            block_y * 16 * 255 + standoff,
+            (block_y + 1) * 16 * 255 - standoff,
+            (floor_z - 1) * 16 + standoff,
+            (ceiling_z + 1) * 16 - standoff,
+            "viscluster",
         ]
     )
 

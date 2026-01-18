@@ -47,7 +47,7 @@ def main():
 
     trackhammer.initialize()
     trackhammer.exclude_existing()
-    trackhammer.generate_mainline(Start_Node, 5)
+    trackhammer.generate_mainline(Start_Node, 0.5)
     # 2nd number is distance in miles, will keep going until it's over this value
 
     stats = pstats.Stats(profiler)
