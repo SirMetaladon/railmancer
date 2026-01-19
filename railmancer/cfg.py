@@ -1,5 +1,5 @@
 from railmancer import tools
-import random
+import random, math
 
 # This file handles all interactions between Railmancer and the Configuration file, sets defaults, and interpets information.
 
@@ -42,8 +42,14 @@ def initialize(path: str):
 
         CFG[Entry[0]] = int(min(max(CFG.get(Entry[0], Entry[1]), Entry[2]), Entry[3]))
 
+    CFG["sector_real_size"] = int(math.floor(CFG["sector_real_size"] / 16) * 16)
     for Biome in CFG["Biomes"].values():
         Biome["terrain"]["seed"] = random.randint(0, 100)
+
+        Biome["terrain"]["maximum_models_per_sector"] = int(
+            (Biome["terrain"]["maximum_models_per_1kx1k"] / (1000 * 1000))
+            * (CFG["sector_real_size"] * CFG["sector_real_size"])
+        )
 
     CFG["trackhammer_border"] = (
         max_mapsize / 2 - CFG["trackhammer_minimum_allowed_distance_from_edge_of_map"]

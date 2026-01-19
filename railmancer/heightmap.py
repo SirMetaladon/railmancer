@@ -405,6 +405,7 @@ def height_sample(real_x, real_y, samples, radius, sector_data):
 def query_alpha(position, Terrain, sector_data):
 
     Radius = 20
+    MaxAlpha = 255
 
     Distance_To_Line, _ = sectors.distance_to_line(position, sector_data)
 
@@ -423,14 +424,14 @@ def query_alpha(position, Terrain, sector_data):
     DistanceMetric = (
         max(Distance_To_Line - Terrain.get("ballast_alpha_distance", 96), 0)
         / Terrain.get("ballast_alpha_slope", 200)
-    ) * 255
-    SteepnessMetric = SlopeMetric * 255
+    ) * MaxAlpha
+    SteepnessMetric = SlopeMetric * MaxAlpha
     NoiseMetric = random.uniform(-0.5, 0.5) * Terrain.get(
         "alpha_from_noise_multiplier", 50
     )
     TerrainMult = Terrain.get("alpha_multiplier", 1)
 
     BaseAlpha = min(DistanceMetric, SteepnessMetric)
-    AdjustedAlpha = tools.scale(BaseAlpha, TerrainMult, 255)
+    AdjustedAlpha = tools.scale(BaseAlpha, TerrainMult, MaxAlpha)
 
-    return tools.clamped(AdjustedAlpha + NoiseMetric, 0, 255)
+    return tools.clamped(AdjustedAlpha + NoiseMetric, 0, MaxAlpha)

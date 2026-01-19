@@ -595,7 +595,7 @@ def distance_to_line(pos, sector_data=None):
     Points = sector_data["points"]
 
     if KDTree == None:
-        print("Bad KDTree!")
+        # rint("Bad KDTree!")
         return 9999999999, [100000, 10000, 100000]
 
     Shortest, idx = KDTree.query([pos[0], pos[1]])

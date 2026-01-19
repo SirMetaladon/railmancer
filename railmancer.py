@@ -1,5 +1,6 @@
-import random, math, cProfile, pstats
+import random
 from railmancer import (
+    profile,
     heightmap,
     lines,
     compile,
@@ -38,23 +39,18 @@ def main():
 
     tools.stopwatch_click("submodule", "Import complete")
 
-    profiler = cProfile.Profile()
-    profiler.enable()
-    # temporary start position for Trackhammer
-
-    lines.encode_lines()
-    Start_Node = [[-2352, 15072, 0], "0fw", 180, False]
+    lines.encode_lines()  # required for exclusion to work
+    Start_Node = [[7568, 3552, 1460], "0fw", -90, False]
 
     trackhammer.initialize()
     trackhammer.exclude_existing()
-    trackhammer.generate_mainline(Start_Node, 0.5)
+    trackhammer.generate_mainline(
+        Start_Node, 0.5, {"min_radius": 1, "min_grade": 1, "max_grade": 3}
+    )
     # 2nd number is distance in miles, will keep going until it's over this value
-
-    stats = pstats.Stats(profiler)
-    stats.sort_stats(
-        "cumtime"
-    )  # 'cumtime' = total time spent in function (including subcalls)
-    stats.print_stats(30)
+    # 3rd number is minumum radius, 1 = 3072
+    # 4th number is minimum grade level, in this case 0 is level
+    # 5th number is maximum grade level, in this case 2.5%
 
     # Step 2: Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
     lines.encode_lines()
@@ -79,7 +75,9 @@ def main():
 
     tools.stopwatch_click("submodule", "Merge edges complete")
 
+    profile.start()
     sectors.blur_min_max_grids()
+    profile.end()
 
     tools.stopwatch_click("submodule", "Blur min-max done")
 
@@ -97,22 +95,13 @@ def main():
 
     sectors.collapse_quantum_switchstands()
 
+    profile.start()
     compile.compile_sectors_to_brushes()
 
     tools.stopwatch_click("submodule", "Brushes and Displacements done")
-
-    """profiler = cProfile.Profile()
-    profiler.enable()"""
+    profile.end()
 
     compile.scatter_placables()
-
-    """profiler.disable()
-
-    stats = pstats.Stats(profiler)
-    stats.sort_stats(
-        "cumtime"
-    )  # 'cumtime' = total time spent in function (including subcalls)
-    stats.print_stats(30)"""
 
     tools.stopwatch_click("submodule", "Scattering complete")
 

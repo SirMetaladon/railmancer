@@ -140,10 +140,10 @@ def track_placement_is_valid(model, current_node):
 # start with a loop that keeps placing rails utilizing the trackhammer existing picker algorithm
 
 
-def generate_selection_of_possible_tracks(node, count):
+def generate_selection_of_possible_tracks(node, count, params={}):
 
     # takes direction, minumum radius level, minimum grade level, maximum grade level
-    possible_tracks = track.valid_next_tracks(node[1], 1, 2)
+    possible_tracks = track.valid_next_tracks(node[1], params)
 
     # rint(possible_tracks)  # gets evens  # upbound
     return sprinkle_selector(possible_tracks, count)
@@ -202,15 +202,15 @@ def initialize():
     global BlockVertical
     global boxes_separation_distance
 
-    BlockHorizontal = 1200
-    BlockVertical = 1200
+    BlockHorizontal = 1600
+    BlockVertical = 1000
     boxes_separation_distance = 3000
 
     global Boxes
     Boxes = {}
 
 
-def generate_mainline(start_node, length_target_mi):
+def generate_mainline(start_node, length_target_mi, params={}):
     # FYI: Nodes are defined as [[x, y, z], "string TP3 direction", base rotation in 90 increments, IsReversed (compile relevant only)]
 
     boxes_remove(get_box_ids(start_node[0]))
@@ -243,7 +243,7 @@ def generate_mainline(start_node, length_target_mi):
                         "node": start_node,
                         "length": existing_length,
                         "candidate_tracks": generate_selection_of_possible_tracks(
-                            start_node, candidates_to_generate
+                            start_node, candidates_to_generate, params
                         ),  # count of these remaining = your fail counter
                         "points": points,
                         "boxes_added": [],

@@ -17,6 +17,19 @@ def add_brush(Brush):
         Brushes = [Brush]
 
 
+def add_brush_entity(Object):
+
+    global Brush_Entites
+
+    try:
+
+        Brush_Entites += [Object]
+
+    except:
+
+        Brush_Entites = [Object]
+
+
 def re_id(original_string, replacement):
 
     # looking for "id" "00000" where the zeroes are any number
@@ -46,7 +59,7 @@ def get_ID():
     return str(ID)
 
 
-def solid(Brush: list):
+def brush(Brush: list):
 
     global ID
 
@@ -134,7 +147,7 @@ def solid(Brush: list):
         "id" "{get_ID()}"
         side
          {{
-            "id" "1"
+            "id" "{get_ID()}"
             "plane" "({X_Start} {Y_Start} {Z_Start}) ({X_End} {Y_Start} {Z_Start}) ({X_End} {Y_End} {Z_Start})"
             vertices_plus
             {{
@@ -384,88 +397,110 @@ def synthesize_brushes():
 
     BrushString = ""
     for Brush in Brushes:
-        BrushString += solid(Brush)
-
-    BrushString += "}"
+        BrushString += brush(Brush)
 
     return BrushString
 
 
-def floor(block_x: int, block_y: int, block_z: int):
+def synthesize_brush_entities():
+
+    BrushEntityString = ""
+    for Object in Brush_Entites:
+        BrushEntityString += f"""\nentity\n{{\n"id" "{get_ID()}"\n{brush(Object)}}}"""
+
+    return BrushEntityString
+
+
+def floor(block_x: int, block_y: int, block_z: int, sector_size: int):
     add_brush(
         [
-            block_x * 16 * 255,
-            (block_x + 1) * 16 * 255,
-            block_y * 16 * 255,
-            (block_y + 1) * 16 * 255,
-            block_z * 16,
-            (block_z - 1) * 16,
+            block_x,
+            (block_x + sector_size),
+            block_y,
+            (block_y + sector_size),
+            block_z,
+            (block_z - 16),
             "floor",
         ]
     )
 
 
-def ceiling(block_x: int, block_y: int, block_z: int):
+def ceiling(block_x: int, block_y: int, block_z: int, sector_size: int):
     add_brush(
         [
-            block_x * 16 * 255,
-            (block_x + 1) * 16 * 255,
-            block_y * 16 * 255,
-            (block_y + 1) * 16 * 255,
-            (block_z) * 16,
-            (block_z + 1) * 16,
+            block_x,
+            (block_x + sector_size),
+            block_y,
+            (block_y + sector_size),
+            (block_z),
+            (block_z + 16),
             "ceiling",
         ]
     )
 
 
-def viscluster(block_x: int, block_y: int, floor_z: int, ceiling_z: int, standoff: int):
-    add_brush(
+def viscluster(
+    block_x: int,
+    block_y: int,
+    floor_z: int,
+    ceiling_z: int,
+    sector_size: int,
+    standoff: int,
+):
+    add_brush_entity(
         [
-            block_x * 16 * 255 + standoff,
-            (block_x + 1) * 16 * 255 - standoff,
-            block_y * 16 * 255 + standoff,
-            (block_y + 1) * 16 * 255 - standoff,
-            (floor_z - 1) * 16 + standoff,
-            (ceiling_z + 1) * 16 - standoff,
+            block_x + standoff,
+            (block_x + sector_size) - standoff,
+            block_y + standoff,
+            (block_y + sector_size) - standoff,
+            (floor_z - 16) + standoff,
+            (ceiling_z + 16) - standoff,
             "viscluster",
         ]
     )
 
 
-def wall(block_x: int, block_y: int, block_z: int, height: int, dir: int, type="wall"):
+def wall(
+    block_x: int,
+    block_y: int,
+    block_z: int,
+    height: int,
+    dir: int,
+    sector_size: int,
+    type="wall",
+):
 
     dir = dir % 4
 
     if dir == 1:
-        x_min = 254
-        x_max = 255
+        x_min = sector_size - 16
+        x_max = sector_size
         y_min = 0
-        y_max = 255
+        y_max = sector_size
     elif dir == 0:
         x_min = 0
-        x_max = 255
-        y_min = 254
-        y_max = 255
+        x_max = sector_size
+        y_min = sector_size - 16
+        y_max = sector_size
     elif dir == 3:
         x_min = 0
-        x_max = 1
+        x_max = 16
         y_min = 0
-        y_max = 255
+        y_max = sector_size
     elif dir == 2:
         x_min = 0
-        x_max = 255
+        x_max = sector_size
         y_min = 0
-        y_max = 1
+        y_max = 16
 
     add_brush(
         [
-            16 * (block_x * 255 + x_min),
-            16 * (block_x * 255 + x_max),
-            16 * (block_y * 255 + y_min),
-            16 * (block_y * 255 + y_max),
-            16 * block_z,
-            16 * height,
+            block_x + x_min,
+            block_x + x_max,
+            block_y + y_min,
+            block_y + y_max,
+            block_z,
+            height,
             type,
         ]
     )
@@ -604,9 +639,10 @@ def write_to_vmf(filename):
     }"""
 
     BrushString = synthesize_brushes()
-    EntityString = synthesize_entities(vmfpy.get_entities())
+    EntityString = synthesize_entities(get_entities())
+    BrushEntityString = synthesize_brush_entities()
 
-    content = Start + BrushString + EntityString + End
+    content = Start + BrushString + "}" + EntityString + BrushEntityString + End
 
     directory = "C:/Users/Metaladon/Desktop/Model Data/VMFS/railmancer"
     full_file_path = os.path.join(directory, filename)

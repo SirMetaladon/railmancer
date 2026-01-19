@@ -163,7 +163,7 @@ def convert_nodes_to_bezier(
 
     # Normalize direction vectors
     d0 = start_direction / np.linalg.norm(start_direction)
-    d3 = end_direction / np.linalg.norm(end_direction)
+    d3 = -end_direction / np.linalg.norm(end_direction)
 
     # Check if the direction vectors are collinear
     cross_directions = np.cross(d0, d3)
@@ -190,60 +190,25 @@ def convert_nodes_to_bezier(
 
     else:
 
-        # Function to calculate the radius of curvature
-        def curvature_radius(p0, p1, p2, p3, t):
-            """Calculates the radius of curvature of a cubic Bezier curve at parameter t."""
-            # First derivative
-            d1 = 3 * (p1 - p0)
-            d2 = 3 * (p2 - p1)
-            d3 = 3 * (p3 - p2)
+        v = p3 - p0
+        L = np.linalg.norm(v)
 
-            dP = (1 - t) ** 2 * d1 + 2 * (1 - t) * t * d2 + t**2 * d3
+        # Angle between tangents
+        dot = np.clip(np.dot(d0, d3), -1.0, 1.0)
+        theta = np.arccos(dot)
 
-            # Second derivative
-            ddP = 6 * ((1 - t) * (p2 - 2 * p1 + p0) + t * (p3 - 2 * p2 + p1))
+        # Handle length for max-radius curve
+        if theta < 1e-3:
+            h = L / 2
+        else:
+            # this is a chatGPT component - I do not understand it.
+            h = (2 * L / 3) * (1 - np.cos(theta / 2)) / (np.sin(theta / 2) ** 2)
 
-            # Radius of curvature formula
-            numerator = np.linalg.norm(dP) ** 3
-            denominator = np.abs(np.cross(dP, ddP))
-            if denominator == 0:  # To avoid division by zero
-                return np.inf
-            return numerator / denominator
+        # Optional clamp (replaces optimizer bounds)
+        h = np.clip(h, L / 5, 30000)
 
-        # Objective function: Minimize the negative minimum radius of curvature (maximize radius)
-        def objective(params):
-            p1 = p0 + params[0] * d0
-            p2 = p3 + params[1] * d3
-            min_radius = np.inf
-
-            # Sample at multiple points along the curve to estimate the minimum radius
-            for t in np.linspace(0, 1, 20):
-                radius = curvature_radius(p0, p1, p2, p3, t)
-                if not (np.isnan(radius) or np.isinf(radius)):
-                    min_radius = min(min_radius, radius)
-                """else:
-                    print(
-                        f"Invalid radius at t={t}: {radius}, {start_position}, {end_position}"
-                    )"""
-
-            # Return negative to maximize radius
-            return -min_radius
-
-        # Initial guess for parameter multipliers
-        initial_guess = np.array([0.5, 0.5])  # Parameters for scaling d0 and d3
-
-        dist = math.dist(p0, p3)
-
-        # Bounds to prevent the control points from going too far
-        bounds = [(dist / 5, 30000), (dist / 5, 30000)]
-
-        # Perform optimization
-        result = minimize(objective, initial_guess, bounds=bounds, method="L-BFGS-B")
-
-        # Calculate control points based on optimized parameters
-        best_params = result.x
-        p1 = p0 + best_params[0] * d0
-        p2 = p3 + best_params[1] * d3
+        p1 = p0 + h * d0
+        p2 = p3 - h * d3
 
         return [(start_position, p1, p2, end_position)]
 

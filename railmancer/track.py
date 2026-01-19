@@ -518,9 +518,11 @@ def write_pathfinder_data(model_list, start_node):
         prev_node = new_node
 
 
-def valid_next_tracks(
-    Direction, MinimumRadiusLevel=0, MinimumGradeLevel=False, MaximumGradeLevel=False
-):
+def valid_next_tracks(Direction, params={}):
+
+    MinimumRadiusLevel = params.get("min_radius", 0)
+    MinimumGradeLevel = params.get("min_grade", False)
+    MaximumGradeLevel = params.get("max_grade", False)
 
     global valid_tracks_cache
 

@@ -274,10 +274,10 @@ def sector_coords_to_subdivided_displacements(
 
     Disps = [
         [
-            (block_x + x / subdivision) * 16 * 255,
-            (block_x + ((x + 1) / subdivision)) * 16 * 255,
-            (block_y + y / subdivision) * 16 * 255,
-            (block_y + ((y + 1) / subdivision)) * 16 * 255,
+            (block_x + x / subdivision) * 16 * sector_x16_size,
+            (block_x + ((x + 1) / subdivision)) * 16 * sector_x16_size,
+            (block_y + y / subdivision) * 16 * sector_x16_size,
+            (block_y + ((y + 1) / subdivision)) * 16 * sector_x16_size,
             (block_z) * 16,
             (block_z + 1) * 16,
             "displacement",
@@ -292,8 +292,9 @@ def sector_coords_to_subdivided_displacements(
 
 def compile_sectors_to_brushes():
 
-    global sector_real_size
+    global sector_real_size, sector_x16_size
     sector_real_size = cfg.get("sector_real_size")
+    sector_x16_size = int(sector_real_size / 16)
 
     subdivisions = cfg.get("sector_displacement_subdivision_rate")
 
@@ -329,9 +330,14 @@ def create_scenery_block(sector_data):
         sector_data["ceiling"],
     )
 
-    vmfpy.floor(block_x, block_y, block_floor),
-    vmfpy.ceiling(block_x, block_y, block_ceiling),
-    vmfpy.viscluster(block_x, block_y, block_floor, block_ceiling, 128)  # standoff
+    real_x = block_x * sector_real_size
+    real_y = block_y * sector_real_size
+    real_floor = block_floor * 16
+    real_ceiling = block_ceiling * 16
+
+    vmfpy.floor(real_x, real_y, real_floor, sector_real_size),
+    vmfpy.ceiling(real_x, real_y, real_ceiling, sector_real_size),
+    vmfpy.viscluster(real_x, real_y, real_floor, real_ceiling, sector_real_size, 128)
 
     for dir in range(4):
 
@@ -341,7 +347,15 @@ def create_scenery_block(sector_data):
 
         if adjacent_sector is False:
 
-            vmfpy.wall(block_x, block_y, block_floor, block_ceiling, dir, "ceiling")
+            vmfpy.wall(
+                real_x,
+                real_y,
+                real_floor,
+                real_ceiling,
+                dir,
+                sector_real_size,
+                "ceiling",
+            )
 
         else:
             nearby_floor, nearby_ceiling = (
@@ -349,12 +363,20 @@ def create_scenery_block(sector_data):
                 adjacent_sector["ceiling"],
             )
 
-            if nearby_floor > block_floor:
-
-                vmfpy.wall(block_x, block_y, nearby_floor, block_floor, dir)
-
-            if nearby_ceiling < block_ceiling:
+            if nearby_floor > real_floor:
 
                 vmfpy.wall(
-                    block_x, block_y, nearby_ceiling, block_ceiling, dir, "ceiling"
+                    real_x, real_y, nearby_floor, real_floor, dir, sector_real_size
+                )
+
+            if nearby_ceiling < real_ceiling:
+
+                vmfpy.wall(
+                    real_x,
+                    block_y,
+                    nearby_ceiling,
+                    real_ceiling,
+                    dir,
+                    sector_real_size,
+                    "ceiling",
                 )
