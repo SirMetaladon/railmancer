@@ -20,6 +20,6 @@ def end():
     stats.sort_stats(
         "cumtime"
     )  # 'cumtime' = total time spent in function (including subcalls)
-    stats.print_stats(30)
+    stats.print_stats(15)
 
     profiler.disable()

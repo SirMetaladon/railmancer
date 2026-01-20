@@ -202,8 +202,8 @@ def initialize():
     global BlockVertical
     global boxes_separation_distance
 
-    BlockHorizontal = 1600
-    BlockVertical = 1000
+    BlockHorizontal = 2000
+    BlockVertical = cfg.get("sector_minimum_height") * 1.1
     boxes_separation_distance = 3000
 
     global Boxes

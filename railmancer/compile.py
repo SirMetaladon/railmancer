@@ -95,10 +95,7 @@ def density_field(x, y, sector_data):
 
         neighbors = sector_data["neighbors"]
 
-        Value = 1
-        Coefficient = 6
-        Transition = 1 / 3
-        EdgeCutoff = 1 / 32
+        Value = 1  # baseline of 100%
 
         x_local = x - (BaseX * sector_real_size)
         y_local = y - (BaseY * sector_real_size)
@@ -106,49 +103,47 @@ def density_field(x, y, sector_data):
         x_interp = x_local / sector_real_size
         y_interp = y_local / sector_real_size
 
-        # True = there is a wall in the +x direction, so if the co-ords are 0,0, the wall should start at 3060 and go up to Coefficient x the normal height by the time we have reached 4080
+        coefficient = density_edge_multiplier / density_edge_transition_ratio
+
+        # True = there is a wall in the +x direction, so if the co-ords are 0,0, the wall should start at 3060 and go up to density_edge_multiplier x the normal height by the time we have reached 4080
         if neighbors[1] is False:
 
-            if x_interp > (1 - EdgeCutoff):
+            if x_interp > (1 - density_edge_cutoff_ratio):
                 return 0
 
-            part_a = x_interp - (1 - Transition)
-            part_b = 1 / (Transition)
+            part = x_interp - (1 - density_edge_transition_ratio)
 
-            Value += max(Coefficient * part_a * part_b, 0)
+            Value += max(part * coefficient, 0)
 
         # -y direction
         if neighbors[2] is False:
 
-            if y_interp < EdgeCutoff:
+            if y_interp < density_edge_cutoff_ratio:
                 return 0
 
-            part_a = Transition - y_interp
-            part_b = 1 / (Transition)
+            part = density_edge_transition_ratio - y_interp
 
-            Value += max(Coefficient * part_a * part_b, 0)
+            Value += max(part * coefficient, 0)
 
         # -x direction
         if neighbors[3] is False:
 
-            if x_interp < EdgeCutoff:
+            if x_interp < density_edge_cutoff_ratio:
                 return 0
 
-            part_a = Transition - x_interp
-            part_b = 1 / (Transition)
+            part = density_edge_transition_ratio - x_interp
 
-            Value += max(Coefficient * part_a * part_b, 0)
+            Value += max(part * coefficient, 0)
 
         # +y direction
         if neighbors[0] is False:
 
-            if y_interp > (1 - EdgeCutoff):
+            if y_interp > (1 - density_edge_cutoff_ratio):
                 return 0
 
-            part_a = y_interp - (1 - Transition)
-            part_b = 1 / (Transition)
+            part = y_interp - (1 - density_edge_transition_ratio)
 
-            Value += max(Coefficient * part_a * part_b, 0)
+            Value += max(part * coefficient, 0)
 
     return max(Value, 0)
 
@@ -160,13 +155,18 @@ def scatter_placables():
     for sector_data in sectors.get_all().values():
 
         distribute(
-            Terrain.get("model_minimum_distance", 110),
-            Terrain.get("maximum_models_per_sector", 125),
+            Terrain["model_minimum_distance"],
+            Terrain["maximum_models_per_sector"],
             sector_data,
         )
 
 
 def distribute(min_distance, TotalPoints, sector_data):
+
+    global density_edge_multiplier, density_edge_transition_ratio, density_edge_cutoff_ratio
+    density_edge_multiplier = 6
+    density_edge_transition_ratio = 1 / 3
+    density_edge_cutoff_ratio = 1 / 32
 
     Points = point_generator(
         density_field, sector_data, int(TotalPoints * 2), min_distance
@@ -358,10 +358,8 @@ def create_scenery_block(sector_data):
             )
 
         else:
-            nearby_floor, nearby_ceiling = (
-                adjacent_sector["floor"],
-                adjacent_sector["ceiling"],
-            )
+            nearby_floor = adjacent_sector["floor"] * 16
+            nearby_ceiling = adjacent_sector["ceiling"] * 16
 
             if nearby_floor > real_floor:
 
@@ -373,7 +371,7 @@ def create_scenery_block(sector_data):
 
                 vmfpy.wall(
                     real_x,
-                    block_y,
+                    real_y,
                     nearby_ceiling,
                     real_ceiling,
                     dir,

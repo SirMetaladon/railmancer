@@ -17,20 +17,26 @@ def initialize(path: str):
         print("Unable to get Biomes from CFG!")
         print(Exception)
 
-    max_mapsize = 32768  # hardcoded source limit
+    # hardcoded source limit
+    CFG["max_mapsize"] = 32768
 
     # this is the default CFG data, format label, default, min, max
     Expecting = [
-        ["sector_real_size", 4080, 16, max_mapsize],
+        ["sector_real_size", 4080, 16, CFG["max_mapsize"]],
         ["noise_grid_per_sector", 25, 1, 1000],
         ["line_maximum_poll_point_distance", 25, 1, 1000],
         ["sector_displacement_subdivision_rate", 3, 1, 50],
         ["sector_snap_grid", 16, 1, 128],
-        ["sector_minimum_wall_height", 1824, 0, max_mapsize],
-        ["sector_minimum_track_depth", 128, 0, max_mapsize],
-        ["sector_minimum_vertical_track_clearance", 512, 0, max_mapsize],
+        ["sector_minimum_height", 1824, 0, CFG["max_mapsize"]],
+        ["sector_maximum_height", 4000, 0, CFG["max_mapsize"]],
+        ["sector_minimum_track_depth", 128, 0, CFG["max_mapsize"]],
         ["noise_floor_ceiling_spillover_slope", 2, 0, 100],
-        ["trackhammer_minimum_allowed_distance_from_edge_of_map", 1000, 0, max_mapsize],
+        [
+            "trackhammer_minimum_allowed_distance_from_edge_of_map",
+            1000,
+            0,
+            CFG["max_mapsize"],
+        ],
     ]
 
     # need a mechanism in here for double checking the following:
@@ -51,16 +57,17 @@ def initialize(path: str):
             * (CFG["sector_real_size"] * CFG["sector_real_size"])
         )
 
+        Biome["terrain"]["model_minimum_distance"] = Biome["terrain"].get(
+            "model_minimum_distance", 110
+        )
+
     CFG["trackhammer_border"] = (
-        max_mapsize / 2 - CFG["trackhammer_minimum_allowed_distance_from_edge_of_map"]
+        CFG["max_mapsize"] / 2
+        - CFG["trackhammer_minimum_allowed_distance_from_edge_of_map"]
     )  # to make calculations easier
 
     # this must be an even number for alignment to work
-    CFG["sectors_per_map"] = int(max_mapsize / CFG["sector_real_size"])
-    CFG["sector_minimum_cube_gap"] = (
-        CFG["sector_minimum_vertical_track_clearance"]
-        + CFG["sector_minimum_track_depth"]
-    ) / CFG["sector_snap_grid"]
+    CFG["sectors_per_map"] = int(CFG["max_mapsize"] / CFG["sector_real_size"])
 
     # adjust can be calculated from CFG "slope of terrain away from hard edges" + the size of a gridsquare.
     # Slope is (Sector size / number of gridsquares) * CFG Slope (the quantity up/down)

@@ -27,7 +27,7 @@ def sectors_are_connected(first_sector, second_sector):
 
     # add a check in here for "is there a sector directly above me that is connected in a roundabout way"
 
-    return (ceiling_limit - floor_limit) >= cfg.get("sector_minimum_cube_gap")
+    return ((ceiling_limit - floor_limit) * 16) >= cfg.get("sector_minimum_height")
 
 
 def get_sector_relative_to_this_sector(sector_data, nudge):
@@ -95,13 +95,21 @@ def get_sector_id_at_position(position):
 def new_sector(x, y, floor, ceiling):
 
     # creates a new sector object at the x,y sector-grid coordinates using the correct heights.
+    bound = cfg.get("max_mapsize") / 2
+    minimum = cfg.get("sector_minimum_height") / 16
 
-    floor_real = min(floor, ceiling)
-    ceiling_real = max(floor, ceiling)
+    floor_real = math.floor(tools.clamped(min(floor, ceiling), -bound, bound - 64) / 16)
+    ceiling_real = math.floor(
+        tools.clamped(max(floor, ceiling), -bound, bound - 64) / 16
+    )
 
     sector_lookup = f"{x}x{y}"
 
     sector_id = f"{sector_lookup}x{floor_real}"
+
+    if (ceiling_real - floor_real) < minimum:
+        print("Sector squashed against the top or bottom of the level at " + sector_id)
+        return False
 
     if Sectors.get(sector_id, False) != False:
         print("Duplicate Block/floor combination detected! Ignoring: " + sector_id)
@@ -121,84 +129,6 @@ def new_sector(x, y, floor, ceiling):
         "grid": {},
         "neighbors": [],
     }
-
-
-def sector_square(data):
-
-    # box of sectors for testing
-
-    xmin, xmax, ymin, ymax, bottom, top = data
-
-    for x in range(xmin, xmax + 1):
-        for y in range(ymin, ymax + 1):
-            new_sector(
-                x=x,
-                y=y,
-                floor=top,
-                ceiling=bottom,
-            )
-
-
-def sector_path_random(data):
-
-    # randomly moving path of sectors that cannot intersect itself
-
-    x_current, y_current, count, block_height, step_height = data
-
-    def code(x, y):
-        return f"{x}|{y}"
-
-    encoding = {code(x_current, y_current): [0]}
-    new_sector(x=x_current, y=y_current, floor=0, ceiling=block_height)
-
-    for current_height in range(count):
-        block_move_options = tools.quadnudge((x_current, y_current), 1)
-        random.shuffle(block_move_options)
-
-        done = False
-
-        while block_move_options:
-            Pick = block_move_options.pop()
-            x_new, y_new = Pick
-
-            if x_new < -4 or x_new > 3 or y_new < -4 or y_new > 3:
-                continue
-
-            new_height = (current_height + 1) * step_height
-
-            Sector = code(x_new, y_new)
-            if encoding.get(Sector, [-block_height])[-1] + block_height > new_height:
-                continue
-
-            tools.blind_add(encoding, Sector, new_height)
-
-            new_sector(
-                x=x_new,
-                y=y_new,
-                floor=new_height,
-                ceiling=new_height + block_height,
-            )
-
-            x_current, y_current = x_new, y_new
-
-            done = True
-            break
-
-        if not done:
-            break
-
-
-def build_manual(build_method, data):
-
-    # wrapper for creating sectors not from linedata
-
-    if build_method == "sector_path_random":
-
-        sector_path_random(data)
-
-    elif build_method == "sector_square":
-
-        sector_square(data)
 
 
 def link():
@@ -232,35 +162,18 @@ def link():
                 Sector_Data["neighbors"][Direction_ID] = False
 
 
-def build_fit():
+def get_expanded_points(startpoints, offset):
+    expanded_points = []
 
-    # Takes all points, makes buckets representing new possible sectors, expands and creates sectors as needed.
+    for x, y, z in startpoints:
+        for dx in [-offset, offset]:
+            for dy in [-offset, offset]:
+                expanded_points.append([x + dx, y + dy, z])
 
-    sector_minimum_wall_height = cfg.get("sector_minimum_wall_height")
-    sector_minimum_track_depth = cfg.get("sector_minimum_track_depth")
-    sector_minimum_vertical_track_clearance = cfg.get(
-        "sector_minimum_vertical_track_clearance"
-    )
-    sector_snap_grid = cfg.get("sector_snap_grid")
-    sector_real_size = cfg.get("sector_real_size")
-    sectors_per_map = cfg.get("sectors_per_map")
-    sector_minimum_track_to_edge_distance = cfg.get(
-        "sector_minimum_track_to_edge_distance"
-    )
+    return startpoints + expanded_points
 
-    def get_expanded_points(startpoints, offset):
-        expanded_points = []
 
-        for x, y, z in startpoints:
-            for dx in [-offset, offset]:
-                for dy in [-offset, offset]:
-                    expanded_points.append([x + dx, y + dy, z])
-
-        return startpoints + expanded_points
-
-    points = get_expanded_points(
-        lines.get_all_track_points(), sector_minimum_track_to_edge_distance
-    )
+def sort_points_to_sector_grid_buckets(points, sectors_per_map):
 
     sector_height_buckets = {}
 
@@ -278,56 +191,106 @@ def build_fit():
 
         if sector_height_buckets.get(sector_lookup, False):
             tools.heuristic_inserter(
-                sector_height_buckets[sector_lookup], ((sector_x, sector_y), -point[2])
+                sector_height_buckets[sector_lookup],
+                ((sector_x, sector_y), -point[2]),
             )
         else:
             sector_height_buckets[sector_lookup] = [((sector_x, sector_y), -point[2])]
 
-    for sorted_heights in sector_height_buckets.values():
+    return sector_height_buckets
 
-        floor = -sorted_heights[0][1] - sector_minimum_track_depth
 
-        ceiling = (
-            floor + sector_minimum_wall_height - sector_minimum_vertical_track_clearance
+def build_fit():
+
+    # Takes all points, makes buckets representing new possible sectors, expands and creates sectors as needed.
+
+    sector_minimum_height = cfg.get("sector_minimum_height")
+    sector_maximum_height = cfg.get("sector_maximum_height")
+    sector_minimum_track_depth = cfg.get("sector_minimum_track_depth")
+    sector_snap_grid = cfg.get("sector_snap_grid")
+    sector_real_size = cfg.get("sector_real_size")
+    sectors_per_map = cfg.get("sectors_per_map")
+    sector_minimum_track_to_edge_distance = cfg.get(
+        "sector_minimum_track_to_edge_distance"
+    )
+
+    points = get_expanded_points(
+        lines.get_all_track_points(), sector_minimum_track_to_edge_distance
+    )
+
+    def set_current_bounds(point):
+        floor = tools.downtomult(
+            point - sector_minimum_track_depth,
+            sector_snap_grid,
         )
 
-        for id in range(1, len(sorted_heights)):
-            height = -sorted_heights[id][1]
+        ceiling = tools.downtomult(floor + sector_minimum_height, sector_snap_grid)
 
-            if height <= ceiling:
-                continue
+        return floor, ceiling
 
-            prev_height = -sorted_heights[id - 1][1]
+    sector_height_buckets = sort_points_to_sector_grid_buckets(points, sectors_per_map)
 
-            if (height - prev_height) > (
-                sector_minimum_vertical_track_clearance + sector_minimum_track_depth
+    for this_sector_heights_sorted in sector_height_buckets.values():
+
+        sector_x = this_sector_heights_sorted[0][0][0]
+        sector_y = this_sector_heights_sorted[0][0][1]
+        current_floor_height, current_ceiling_height = set_current_bounds(
+            -this_sector_heights_sorted[0][1]
+        )
+
+        for id in range(1, len(this_sector_heights_sorted)):
+            next_point_height = -this_sector_heights_sorted[id][1]
+
+            if next_point_height <= (
+                current_ceiling_height + sector_minimum_track_depth
             ):
-                new_sector(
-                    x=sorted_heights[0][0][0],
-                    y=sorted_heights[0][0][1],
-                    floor=math.floor(floor / sector_snap_grid),
-                    ceiling=math.floor(
-                        ((height - sector_minimum_track_depth) / sector_snap_grid) - 2
-                    ),
+                continue
+            else:
+                prev_height = -this_sector_heights_sorted[id - 1][1]
+
+            gap = next_point_height - prev_height
+
+            if (
+                gap > sector_minimum_height
+            ):  # err on the side of subdividing more, but this might not work out
+
+                under_next_sector_floor = math.floor(
+                    ((next_point_height - sector_minimum_track_depth))
+                    - sector_snap_grid * 2
+                )
+                maximum_height_from_current_floor = (
+                    current_ceiling_height + sector_maximum_height
                 )
 
-                floor = height - sector_minimum_track_depth
-                ceiling = (
-                    floor
-                    + sector_minimum_wall_height
-                    - sector_minimum_vertical_track_clearance
+                cap_height = tools.downtomult(
+                    min(under_next_sector_floor, maximum_height_from_current_floor),
+                    sector_snap_grid,
+                )
+
+                new_sector(
+                    sector_x,
+                    sector_y,
+                    current_floor_height,
+                    cap_height,
+                )
+
+                current_floor_height, current_ceiling_height = set_current_bounds(
+                    next_point_height
                 )
 
             else:
 
-                ceiling = height
+                current_ceiling_height = tools.downtomult(
+                    current_floor_height + sector_minimum_height, sector_snap_grid
+                )
 
+        # when there's no points left, make a topmost sector that encapsulates the remainder
         new_sector(
-            x=sorted_heights[0][0][0],
-            y=sorted_heights[0][0][1],
-            floor=math.floor(floor / sector_snap_grid),
-            ceiling=math.floor(
-                (ceiling + sector_minimum_vertical_track_clearance) / sector_snap_grid
+            sector_x,
+            sector_y,
+            current_floor_height,
+            tools.downtomult(
+                current_ceiling_height + sector_maximum_height, sector_snap_grid
             ),
         )
 
@@ -539,7 +502,7 @@ def blur_grid(grid_name, iterations, algorithm):
             overwrite_grid(grid, new_grid)
 
 
-def blur_min_max_grids():
+def blur_min_max_grids(iterations):
 
     # Wrapper function for using blur_grid on the min and max grids to propagate ceilings and floors into adjacent sectors.
 
@@ -551,7 +514,7 @@ def blur_min_max_grids():
 
         return max(highest - adjust, base)
 
-    blur_grid("minmap", 35, raise_floor)
+    blur_grid("minmap", iterations, raise_floor)
 
     def lower_ceiling(base, list, adjust):
 
@@ -561,7 +524,7 @@ def blur_min_max_grids():
 
         return min(highest + adjust, base)
 
-    blur_grid("maxmap", 35, lower_ceiling)
+    blur_grid("maxmap", iterations, lower_ceiling)
 
 
 def blur_heightmap_grid():
@@ -589,7 +552,12 @@ def distance_to_line(pos, sector_data=None):
     # Takes a position and an optional sector (if you know what sector it is already) and spits out the distance to the nearest track-point.
 
     if sector_data is None:
-        sector_data = Sectors[get_sector_id_at_position(pos)]
+        sector_id = get_sector_id_at_position(pos)
+        if sector_id in Sectors:
+            sector_data = Sectors[sector_id]
+        else:
+            print(pos, sector_id, "failed!")
+            return 9999999999, [100000, 10000, 100000]
 
     KDTree = sector_data["kdtree"]
     Points = sector_data["points"]

@@ -20,7 +20,7 @@ from railmancer import (
 def main():
 
     trackpack_directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
-    vmf_input_path = "vmf inputs/vancouver_cutoff_test.vmf"
+    vmf_input_path = "vmf inputs/combined v1.vmf"
 
     # Starts a few stopwatches for showing time progression.
     tools.stopwatch_click("total", "Start!")
@@ -40,12 +40,16 @@ def main():
     tools.stopwatch_click("submodule", "Import complete")
 
     lines.encode_lines()  # required for exclusion to work
-    Start_Node = [[7568, 3552, 1460], "0fw", -90, False]
+    Vancouver_Start = [[7568, 3552, -12540 - 1500], "0fw", -90, False]  #
+    Squamish_Start = [[7072, 3888, 512], "0fw", -90, False]  #
 
     trackhammer.initialize()
     trackhammer.exclude_existing()
     trackhammer.generate_mainline(
-        Start_Node, 0.5, {"min_radius": 1, "min_grade": 1, "max_grade": 3}
+        Vancouver_Start, 8, {"min_radius": 1, "min_grade": 2, "max_grade": 2}
+    )
+    trackhammer.generate_mainline(
+        Squamish_Start, 9.5, {"min_radius": 0, "min_grade": 2, "max_grade": 3}
     )
     # 2nd number is distance in miles, will keep going until it's over this value
     # 3rd number is minumum radius, 1 = 3072
@@ -76,7 +80,8 @@ def main():
     tools.stopwatch_click("submodule", "Merge edges complete")
 
     profile.start()
-    sectors.blur_min_max_grids()
+    sectors.blur_min_max_grids(15)
+    # iteration count
     profile.end()
 
     tools.stopwatch_click("submodule", "Blur min-max done")

@@ -195,3 +195,8 @@ def blank_list_grid(dimensions, length, contains=None):
 
     if dimensions == 3:
         return [[[[contains] for _ in size] for _ in size] for _ in size]
+
+
+def downtomult(number, modulus):
+
+    return int(math.floor(number / modulus) * modulus)
