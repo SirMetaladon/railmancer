@@ -363,6 +363,9 @@ def build_track_library(directory, extension):
                 if len(track_data) == 1:
                     # more than 1 is a switch, less than 1 is an invalid model
                     track_model_library[model] = track_data[0]
+                    
+    
+    tools.stopwatch_click("submodule", "Initialization complete")
 
 
 def length_to_model_straight(length, direction, gradelevel):
