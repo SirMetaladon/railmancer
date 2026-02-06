@@ -1,14 +1,3 @@
-"""
-rough outline:
-
-start at a position,direction, heading
-randomly pick another track to add
-if the endpoint lies outside the map, don't add the track and add 1 to the fail counter
-after the fail counter gets higher than, like, 10, back up 1 more track and add increment the previous piece's fail counter
-
-
-"""
-
 import random, math, time
 from railmancer import tools, track, cfg, lines, vmfpy
 from scipy.spatial import distance
@@ -16,7 +5,7 @@ import numpy as np
 
 # This is an algoritm for pathing a mainline through the playable area without bumping into itself. Last part pending.
 
-
+# From a list, pick random entries and transfer them to a second list until you either hit count or run out.
 def sprinkle_selector(list, count):
 
     import random
@@ -32,8 +21,8 @@ def sprinkle_selector(list, count):
 
     return output
 
-
-def get_box_ids(point):
+# From a set of real coordinates, get a block ID in exclusion block space and return a list of the nearest 2x2 of blocks in a list
+def get_block_ids(point):
 
     x, y, z = point
 
@@ -45,65 +34,57 @@ def get_box_ids(point):
     by = math.floor(fy)
     bz = math.floor(fz)
 
-    # Decide which side of the box center we're on
+    # Decide which side of the block center we're on
     xs = [bx, bx + 1] if fx - bx > 0.5 else [bx - 1, bx]
     ys = [by, by + 1] if fy - by > 0.5 else [by - 1, by]
     zs = [bz, bz + 1] if fz - bz > 0.5 else [bz - 1, bz]
 
     return [f"{x},{y},{z}" for x in xs for y in ys for z in zs]
 
+# From a list of points, find all blocks that are NOT already spoken for and reserve them, returning a list of valid newly reserved blocks.
+def blocks_new(list_of_points):
 
-def boxes_new(list_of_points):
-
-    new_boxes = []
+    new_blocks = []
 
     for point in list_of_points:
-        box_ids = get_box_ids(point)
+        block_ids = get_block_ids(point)
 
-        for box in box_ids:
-            if box not in Boxes:
-                new_boxes += [box]
-                Boxes[box] = True
+        for block in block_ids:
+            if block not in Blocks:
+                new_blocks += [block]
+                Blocks[block] = True
 
-    # rint("added", len(Boxes), new_boxes)
+    return new_blocks
 
-    return new_boxes
-
-
+# Patch function that takes all the imported points and prefills the Blocking system with them, ensuring future Trackhammers do not intersect with existing track.
 def exclude_existing():
 
     current_points = lines.get_all_track_points()
-    new_boxes = boxes_new(current_points)
-    print(f"Imported {len(current_points)} points, created {len(new_boxes)} boxes.")
+    new_blocks = blocks_new(current_points)
+    print(f"Imported {len(current_points)} points, created {len(new_blocks)} Blocks.")
 
-
+# For this specific point, does the 2x2 of closest blocks contain any reserved blocks? If so, this space is not legal.
 def are_points_blocked(list_of_points):
 
     for point in list_of_points:
-        box_ids = get_box_ids(point)
-        for box in box_ids:
-            if box in Boxes:
+        block_ids = get_block_ids(point)
+        for block in block_ids:
+            if block in Blocks:
                 return True
 
     return False
 
+# For a list of string block ID's, remove them from the currently reserved list of blocks
+def blocks_remove(list_of_block_ids):
 
-def boxes_remove(list_of_box_ids):
+    global Blocks
 
-    global Boxes
+    for entry in list_of_block_ids:
+        if entry in Blocks:
+            Blocks.pop(entry)
 
-    for entry in list_of_box_ids:
-        if entry in Boxes:
-            Boxes.pop(entry)
-
-    # rint("removed", len(Boxes), list_of_box_ids)
-
-
-def get_box_points_from_nodes(current_node, next_node):
-
-    # laceholder, will use beziers to scan points along the way in the future - maybe not needed
-    # TO IMPLEMENT
-    # list_of_points = lines.convert_bezier_to_points(lines.convert_nodes_to_bezier(current_node, next_node))
+# From a pair of track nodes reprensenting a piece of rail, guess at the intermediate shape and return a short list of points to check with the block occlusion algorithm.
+def get_block_points_from_nodes(current_node, next_node):
 
     extras = []
     cutoff = BlockHorizontal * 0.85  # horizontal block dist
@@ -119,11 +100,11 @@ def get_box_points_from_nodes(current_node, next_node):
 
     return [next_node[0]] + extras
 
-
+# From a model and a current node, return the resulting node, and whether the track is valid according to blocking and maximum border size.
 def track_placement_is_valid(model, current_node):
     test_node = track.get_new_node_from_node_and_model(model, current_node)
 
-    points = get_box_points_from_nodes(current_node, test_node)
+    points = get_block_points_from_nodes(current_node, test_node)
 
     end = (int(test_node[0][0]), int(test_node[0][1]))
     valid = tools.within2d(end, cfg.get("trackhammer_border"))
@@ -131,112 +112,103 @@ def track_placement_is_valid(model, current_node):
     if valid:
         valid = not are_points_blocked(points)
 
-    # if track-end is inside the box and
+    # if track-end is inside the block and
     return (test_node, valid, points)
 
-
-# NEW FUNCTION
-
-# start with a loop that keeps placing rails utilizing the trackhammer existing picker algorithm
-
-
+# Queries the track system to find valid tracks according to grade and curvature rules, then returns a randomized selection
 def generate_selection_of_possible_tracks(node, count, params={}):
 
     # takes direction, minumum radius level, minimum grade level, maximum grade level
     possible_tracks = track.valid_next_tracks(node[1], params)
-
-    # rint(possible_tracks)  # gets evens  # upbound
+    
     return sprinkle_selector(possible_tracks, count)
 
-
-def update_boxes(current_steps, boxes_step):
+# From the block queue, push up to the block that corresponds with the standoff length, forward or backward, then return the current step
+def update_blocks(current_steps, blocks_step):
 
     current_length = current_steps[-1]["length"]
 
-    # rint("updated boxes", len(current_steps), boxes_step)
-
-    if boxes_step >= len(current_steps):
+    if blocks_step >= len(current_steps):
 
         print("This should not be possible!")
-        return boxes_step
+        return blocks_step
 
     else:
 
-        distance_away = current_length - current_steps[boxes_step]["length"]
+        distance_away = current_length - current_steps[blocks_step]["length"]
         direction_to_go = (
-            "Forward" if distance_away > boxes_separation_distance else "Backward"
+            "Forward" if distance_away > Block_Standoff_Distance else "Backward"
         )
 
-    step_to_test = boxes_step
+    step_to_test = blocks_step
 
     if direction_to_go == "Forward":
         while (
             current_length - current_steps[step_to_test + 1]["length"]
-        ) > boxes_separation_distance:
+        ) > Block_Standoff_Distance:
 
-            boxes_added = boxes_new(current_steps[step_to_test]["points"])
+            blocks_added = blocks_new(current_steps[step_to_test]["points"])
 
-            current_steps[step_to_test]["boxes_added"] = boxes_added + current_steps[
-                step_to_test
-            ].get("boxes_added", [])
-            # rint("moved up", current_length, current_steps[step_to_test]["length"])
+            existing_blocks = current_steps[step_to_test].get("blocks_added", [])
+            current_steps[step_to_test]["blocks_added"] = existing_blocks + blocks_added
             step_to_test += 1
 
     if direction_to_go == "Backward":
         while (
             current_length - current_steps[step_to_test - 1]["length"]
-        ) <= boxes_separation_distance and step_to_test > 0:
+        ) <= Block_Standoff_Distance and step_to_test > 0:
 
-            boxes_remove(current_steps[step_to_test]["boxes_added"])
+            blocks_remove(current_steps[step_to_test]["blocks_added"])
 
-            current_steps[step_to_test]["boxes_added"] = []
-            # rint("moved down", current_length, current_steps[step_to_test]["length"])
+            current_steps[step_to_test]["blocks_added"] = []
             step_to_test -= 1
 
     return step_to_test
 
-
+# Initializes the Trackhammer with relevant global fields.
 def initialize():
 
     global BlockHorizontal
     global BlockVertical
-    global boxes_separation_distance
+    global Block_Standoff_Distance
 
-    BlockHorizontal = 2000
-    BlockVertical = cfg.get("sector_minimum_height") * 1.1
-    boxes_separation_distance = 3000
+    BlockHorizontal = cfg.get("trackhammer_block_size_horizontal")
+    BlockVertical = cfg.get("sector_minimum_height") * 1.05
+    Block_Standoff_Distance = cfg.get("trackhammer_block_standoff_distance")
 
-    global Boxes
-    Boxes = {}
+    global Blocks
+    Blocks = {}
 
-
+# Taking a node start and target length + parameters, generate a list of track models that coincides with grade, curvature, and block rules.
 def generate_mainline(start_node, length_target_mi, params={}):
     # FYI: Nodes are defined as [[x, y, z], "string TP3 direction", base rotation in 90 increments, IsReversed (compile relevant only)]
 
-    boxes_remove(get_box_ids(start_node[0]))
+    tools.stopwatch_click("trackhammer")
 
-    CountOverall = 10000000
-    CountInterval = 1000
-    backtrack_length = 6000
+    # Hollows out a little area near the start of the trackhammer, to prevent old rails from blocking the start of the mains
+    blocks_remove(get_block_ids(start_node[0]))
+
+    # debugging variables, tuning required sometimes to optimize behavior (magical numbers, boo!)
+    debug_maximum_count = 10000000
+    debug_reporting_interval = 1000
     length_target_in = length_target_mi * 5280 * 12
 
-    rollbacks = [6]
+    # system for testing multiple variations of rollbacks and candidates, currently semi-disabled
+    rollbacks = [6000]
     candidates = [40]
-
     random.shuffle(rollbacks)
     random.shuffle(candidates)
 
-    tools.stopwatch_click("trackhammer")
-
-    for Rollback in rollbacks:
+    for backtrack_distance in rollbacks:
 
         for candidates_to_generate in candidates:
 
-            ct = 0
-            boxes_step_index = 0
+            debug_overall_count = 0
+            blocks_current_step_index = 0
             logLength = 0
 
-            def new_step(start_node, existing_length, points=[], model=""):
+            # helper function that produces a prefilled "step" for moving forward
+            def new_step(start_node, existing_length = 0, points=[], model=""):
                 return [
                     {
                         "model": model,
@@ -246,24 +218,22 @@ def generate_mainline(start_node, length_target_mi, params={}):
                             start_node, candidates_to_generate, params
                         ),  # count of these remaining = your fail counter
                         "points": points,
-                        "boxes_added": [],
+                        "blocks_added": [],
                     }
                 ]
 
-            steps = new_step(start_node, 0)
+            steps = new_step(start_node)
 
-            while steps[-1]["length"] < length_target_in and ct < CountOverall:
+            while steps[-1]["length"] < length_target_in and debug_overall_count < debug_maximum_count:
                 # might include a break inside, but this is a failsafe
 
-                boxes_step_index = update_boxes(steps, boxes_step_index)
+                blocks_current_step_index = update_blocks(steps, blocks_current_step_index)
 
                 current_step = steps[-1]
 
                 while len(current_step["candidate_tracks"]):
 
                     track_to_test = current_step["candidate_tracks"][-1]
-
-                    # rint("examined " + track_to_test + " from node " + str(len(steps)))
 
                     result_node, valid, points = track_placement_is_valid(
                         track_to_test, current_step["node"]
@@ -274,15 +244,15 @@ def generate_mainline(start_node, length_target_mi, params={}):
                         new_length = current_step["length"] + track.get_length(
                             track_to_test
                         )
-                        if ct % CountInterval == 0:
+                        if debug_overall_count % debug_reporting_interval == 0:
                             logLength = max(logLength, round(new_length / 12 / 5218, 3))
                             print(
                                 len(steps),
                                 round(new_length / 12 / 5218, 3),
                                 len(current_step["candidate_tracks"]),
-                                len(Boxes),
+                                len(Blocks),
                             )
-                        ct += 1
+                        debug_overall_count += 1
 
                         steps += new_step(
                             result_node, new_length, points, track_to_test
@@ -292,25 +262,19 @@ def generate_mainline(start_node, length_target_mi, params={}):
                     else:
 
                         current_step["candidate_tracks"].remove(track_to_test)
-
+                
+                # If you ran out of attempts to place a track this step, roll back by the specified length
                 if len(current_step["candidate_tracks"]) == 0:
-
-                    """rint(
-                        "Rolled back "
-                        + str(min(math.floor(Rollback), len(steps) - 1))
-                        + ", length is now "
-                        + str(int(steps[-min(math.floor(Rollback), len(steps))]["length"]))
-                    )"""
-                    for _ in range(min(math.floor(Rollback), len(steps) - 1)):
-                        if boxes_step_index == len(steps) - 1:
-                            boxes_remove(steps[-1]["boxes_added"])
-                            """rint(
-                                "kicked back boxes due to rollback",
-                                boxes_step_index,
-                                len(steps),
-                            )"""
-                            boxes_step_index -= 1
-                        steps.pop(-1)  # temp
+                
+                    previous_length = current_step["length"]
+                    target_length = previous_length - backtrack_distance
+                    
+                    while blocks_current_step_index > 2 and (steps[-1]["length"] < target_length):
+                    
+                        blocks_remove(steps[-1]["blocks_added"])
+                        steps.pop(-1)
+                        
+                        blocks_current_step_index = min(blocks_current_step_index,len(steps)
 
             sec = tools.stopwatch_click(
                 "trackhammer", f"{Rollback}, {candidates_to_generate}, {logLength}"
@@ -318,18 +282,20 @@ def generate_mainline(start_node, length_target_mi, params={}):
 
             print(f"{logLength/sec}")
 
-    def box_id_to_coords(box_id):
+    # Converts a block to coordinates to create brushes with
+    def block_id_to_coords(block_id):
 
-        coords = box_id.split(",")
+        coords = block_id.split(",")
         x = int(coords[0])
         y = int(coords[1])
         z = int(coords[2])
 
         return x * BlockHorizontal, y * BlockHorizontal, z * BlockVertical
 
-    for box in Boxes:
+    # For debugging purposes - creates brushes that demonstrate where the block boundaries are
+    for block in Blocks:
 
-        x, y, z = box_id_to_coords(box)
+        x, y, z = block_id_to_coords(block)
 
         vmfpy.add_brush(
             [
@@ -345,8 +311,6 @@ def generate_mainline(start_node, length_target_mi, params={}):
                 "24",
             ]
         )
-
-    # rint(len(Boxes))
 
     tools.stopwatch_click("submodule", "Mainline generation complete")
 

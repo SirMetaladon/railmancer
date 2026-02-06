@@ -37,6 +37,8 @@ def initialize(path: str):
             0,
             CFG["max_mapsize"],
         ],
+        ["trackhammer_block_standoff_distance", 1 , 99999, 3000],
+        ["trackhammer_block_size_horizontal",1,6000,2000],
     ]
 
     # need a mechanism in here for double checking the following:
