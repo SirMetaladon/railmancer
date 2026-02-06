@@ -274,7 +274,7 @@ def generate_mainline(start_node, length_target_mi, params={}):
                         blocks_remove(steps[-1]["blocks_added"])
                         steps.pop(-1)
                         
-                        blocks_current_step_index = min(blocks_current_step_index,len(steps)
+                        blocks_current_step_index = min(blocks_current_step_index,len(steps)-1)
 
             sec = tools.stopwatch_click(
                 "trackhammer", f"{Rollback}, {candidates_to_generate}, {logLength}"
