@@ -18,10 +18,10 @@ from railmancer import (
 
 
 def main():
-    
+
     # Some input information. One contains the directory for building the Track Library, the other is the VMF for the importer.
     trackpack_directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
-    vmf_input_path = "vmf inputs/combined v1.vmf"
+    vmf_input_path = "vmf inputs/squamish exit.vmf"
 
     # Starts a few stopwatches for showing time progression.
     tools.stopwatch_click("total", "Start!")
@@ -29,6 +29,7 @@ def main():
 
     # Initializes CFG parameters for use elsewhere
     cfg.initialize("railmancer/config.json")
+    vmfpy.initialize()
 
     # Assembles a "library" of track pieces from a directory.
     track.build_track_library(trackpack_directory, ".mdl")
@@ -45,12 +46,22 @@ def main():
     # Starting from a node, procedurally move forward and place track, finding a path that fits the parameters.
     trackhammer.initialize()
     trackhammer.exclude_existing()
-    trackhammer.generate_mainline(
+    """trackhammer.generate_mainline(
         Vancouver_Start, 8, {"min_radius": 1, "min_grade": 2, "max_grade": 2}
     )
     trackhammer.generate_mainline(
         Squamish_Start, 9.5, {"min_radius": 0, "min_grade": 2, "max_grade": 3}
+    )"""
+
+    Start_Node = [[80, 2432, -96], "0fw", 0, False]  #
+    trackhammer.generate_mainline(
+        Start_Node, 2, {"min_radius": 1, "min_grade": -3, "max_grade": -3}
     )
+    Start_Node = [[3936, -6736, 416], "0fw", 180, False]  #
+    trackhammer.generate_mainline(
+        Start_Node, 2, {"min_radius": 0, "min_grade": 3, "max_grade": 3}
+    )
+
     # 2nd number is distance in miles, will keep going until it's over this value
     # 3rd number is minumum radius, 1 = 3072
     # 4th number is minimum grade level, in this case 0 is level
@@ -69,15 +80,15 @@ def main():
 
     # Takes points and puts them in buckets for sector processing.
     sectors.assign_points_to_sectors()
-    
-    # From the height-buckets, create sectors that adhere to CFG parameters. 
+
+    # From the height-buckets, create sectors that adhere to CFG parameters.
     heightmap.generate_sector_heightmaps()
     tools.stopwatch_click("submodule", "Sector Generation done")
 
     # From the sector-heightmaps, go through and apply the merging process that allows sectors to communicate.
     sectors.merge_edges()
     tools.stopwatch_click("submodule", "Merge edges complete")
-    
+
     # Blur heightmaps according to Gaussian blurring mechanisms, constraining min and max grids.
     profile.start()
     sectors.blur_min_max_grids(15)
@@ -107,7 +118,7 @@ def main():
     profile.end()
 
     # For each sector, apply the scattering algorithm that places trees, rocks, bushes, etc.
-    compile.scatter_placables()
+    # compile.scatter_placables()
     tools.stopwatch_click("submodule", "Scattering complete")
 
     """points = lines.get_all_track_points()

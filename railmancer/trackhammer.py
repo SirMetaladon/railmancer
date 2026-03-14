@@ -5,6 +5,7 @@ import numpy as np
 
 # This is an algoritm for pathing a mainline through the playable area without bumping into itself. Last part pending.
 
+
 # From a list, pick random entries and transfer them to a second list until you either hit count or run out.
 def sprinkle_selector(list, count):
 
@@ -20,6 +21,7 @@ def sprinkle_selector(list, count):
             break
 
     return output
+
 
 # From a set of real coordinates, get a block ID in exclusion block space and return a list of the nearest 2x2 of blocks in a list
 def get_block_ids(point):
@@ -41,6 +43,7 @@ def get_block_ids(point):
 
     return [f"{x},{y},{z}" for x in xs for y in ys for z in zs]
 
+
 # From a list of points, find all blocks that are NOT already spoken for and reserve them, returning a list of valid newly reserved blocks.
 def blocks_new(list_of_points):
 
@@ -56,12 +59,14 @@ def blocks_new(list_of_points):
 
     return new_blocks
 
+
 # Patch function that takes all the imported points and prefills the Blocking system with them, ensuring future Trackhammers do not intersect with existing track.
 def exclude_existing():
 
     current_points = lines.get_all_track_points()
     new_blocks = blocks_new(current_points)
     print(f"Imported {len(current_points)} points, created {len(new_blocks)} Blocks.")
+
 
 # For this specific point, does the 2x2 of closest blocks contain any reserved blocks? If so, this space is not legal.
 def are_points_blocked(list_of_points):
@@ -74,6 +79,7 @@ def are_points_blocked(list_of_points):
 
     return False
 
+
 # For a list of string block ID's, remove them from the currently reserved list of blocks
 def blocks_remove(list_of_block_ids):
 
@@ -82,6 +88,7 @@ def blocks_remove(list_of_block_ids):
     for entry in list_of_block_ids:
         if entry in Blocks:
             Blocks.pop(entry)
+
 
 # From a pair of track nodes reprensenting a piece of rail, guess at the intermediate shape and return a short list of points to check with the block occlusion algorithm.
 def get_block_points_from_nodes(current_node, next_node):
@@ -100,6 +107,7 @@ def get_block_points_from_nodes(current_node, next_node):
 
     return [next_node[0]] + extras
 
+
 # From a model and a current node, return the resulting node, and whether the track is valid according to blocking and maximum border size.
 def track_placement_is_valid(model, current_node):
     test_node = track.get_new_node_from_node_and_model(model, current_node)
@@ -115,13 +123,54 @@ def track_placement_is_valid(model, current_node):
     # if track-end is inside the block and
     return (test_node, valid, points)
 
+
 # Queries the track system to find valid tracks according to grade and curvature rules, then returns a randomized selection
 def generate_selection_of_possible_tracks(node, count, params={}):
 
     # takes direction, minumum radius level, minimum grade level, maximum grade level
     possible_tracks = track.valid_next_tracks(node[1], params)
-    
-    return sprinkle_selector(possible_tracks, count)
+    options = sprinkle_selector(possible_tracks, count)
+
+    if len(options) == 0:
+        print("Failed to find selection: ", node, count, params)
+
+    return options
+
+
+def display_blocks_in_vmf():
+
+    print("Added blocks to VMF.")
+
+    # Converts a block to coordinates to create brushes with
+    def block_id_to_coords(block_id):
+
+        coords = block_id.split(",")
+        x = int(coords[0])
+        y = int(coords[1])
+        z = int(coords[2])
+
+        return x * BlockHorizontal, y * BlockHorizontal, z * BlockVertical
+
+    # For debugging purposes - creates brushes that demonstrate where the block boundaries are
+    for block in Blocks:
+
+        x, y, z = block_id_to_coords(block)
+
+        vmfpy.add_brush(
+            [
+                x,
+                x + BlockHorizontal,
+                y,
+                y + BlockHorizontal,
+                z,
+                z + BlockVertical,
+                "dev/dev_measurewall01d",
+                0,
+                0,
+                "24",
+            ]
+        )
+
 
 # From the block queue, push up to the block that corresponds with the standoff length, forward or backward, then return the current step
 def update_blocks(current_steps, blocks_step):
@@ -165,6 +214,7 @@ def update_blocks(current_steps, blocks_step):
 
     return step_to_test
 
+
 # Initializes the Trackhammer with relevant global fields.
 def initialize():
 
@@ -179,6 +229,127 @@ def initialize():
     global Blocks
     Blocks = {}
 
+
+def generation_process(
+    start_node,
+    length_target_in,
+    backtrack_distance,
+    candidates_to_generate,
+    params,
+):
+
+    print("Started permutation: ", backtrack_distance, candidates_to_generate)
+    debug_overall_count = 0
+    blocks_current_step_index = 0
+    logLength = 0
+    longest_fail = []
+    longest_fail_length = 0
+
+    debug_reporting_interval = 100000
+    debug_maximum_count = debug_reporting_interval * 25
+
+    # helper function that produces a prefilled "step" for moving forward
+    def new_step(start_node, existing_length=0, points=[], model=""):
+        return [
+            {
+                "model": model,
+                "node": start_node,
+                "length": existing_length,
+                "candidate_tracks": generate_selection_of_possible_tracks(
+                    start_node, candidates_to_generate, params
+                ),  # count of these remaining = your fail counter
+                "points": points,
+                "blocks_added": [],
+            }
+        ]
+
+    steps = new_step(start_node)
+
+    while (
+        steps[-1]["length"] < length_target_in
+        and debug_overall_count < debug_maximum_count
+    ):
+        # might include a break inside, but this is a failsafe
+
+        blocks_current_step_index = update_blocks(steps, blocks_current_step_index)
+
+        current_step = steps[-1]
+
+        while len(current_step["candidate_tracks"]):
+
+            track_to_test = current_step["candidate_tracks"][-1]
+
+            result_node, valid, points = track_placement_is_valid(
+                track_to_test, current_step["node"]
+            )
+
+            new_length = current_step["length"] + track.get_length(track_to_test)
+
+            if new_length > longest_fail_length:
+
+                longest_fail_length = new_length
+                longest_fail = steps[:]
+                if len(steps) == 1:
+                    longest_fail += new_step(
+                        result_node, new_length, points, track_to_test
+                    )
+
+            if valid:
+
+                steps += new_step(result_node, new_length, points, track_to_test)
+                break
+
+            else:
+
+                current_step["candidate_tracks"].remove(track_to_test)
+
+            if debug_overall_count % debug_reporting_interval == 0:
+                logLength = max(logLength, round(new_length / 12 / 5218, 3))
+                print(
+                    len(steps),
+                    round(new_length / 12 / 5218, 3),
+                    len(current_step["candidate_tracks"]),
+                    len(Blocks),
+                    blocks_current_step_index,
+                )
+            debug_overall_count += 1
+
+        # if there's literally nothing left to do
+        if len(steps) == 1 & len(current_step["candidate_tracks"]) == 0:
+
+            print(steps)
+            print("Steps process has died! Exiting.")
+            return longest_fail
+
+        # If you ran out of attempts to place a track this step, roll back by the specified length
+        elif len(current_step["candidate_tracks"]) == 0:
+
+            existing_length = current_step["length"]
+            target_length = existing_length - backtrack_distance
+
+            # while the current end length is greater than the target, back up
+            while steps[-1]["length"] > target_length and len(steps) > 1:
+
+                blocks_remove(steps[-1]["blocks_added"])
+                steps.pop(-1)
+
+                blocks_current_step_index = min(
+                    blocks_current_step_index, len(steps) - 1
+                )
+
+    if debug_overall_count >= debug_maximum_count:
+        print("Longest fail used: ", round(longest_fail[-1]["length"] / 12 / 5218, 3))
+        return longest_fail
+
+    else:
+
+        sec = tools.stopwatch_click(
+            "trackhammer", f"{candidates_to_generate}, {logLength}"
+        )
+        print(f"{logLength/sec}")
+        return steps
+
+
 # Taking a node start and target length + parameters, generate a list of track models that coincides with grade, curvature, and block rules.
 def generate_mainline(start_node, length_target_mi, params={}):
     # FYI: Nodes are defined as [[x, y, z], "string TP3 direction", base rotation in 90 increments, IsReversed (compile relevant only)]
@@ -189,12 +360,14 @@ def generate_mainline(start_node, length_target_mi, params={}):
     blocks_remove(get_block_ids(start_node[0]))
 
     # debugging variables, tuning required sometimes to optimize behavior (magical numbers, boo!)
-    debug_maximum_count = 10000000
-    debug_reporting_interval = 1000
     length_target_in = length_target_mi * 5280 * 12
 
+    print(
+        "Began working on generating mainline :", start_node, length_target_mi, params
+    )
+
     # system for testing multiple variations of rollbacks and candidates, currently semi-disabled
-    rollbacks = [6000]
+    rollbacks = [16000]
     candidates = [40]
     random.shuffle(rollbacks)
     random.shuffle(candidates)
@@ -203,120 +376,20 @@ def generate_mainline(start_node, length_target_mi, params={}):
 
         for candidates_to_generate in candidates:
 
-            debug_overall_count = 0
-            blocks_current_step_index = 0
-            logLength = 0
-
-            # helper function that produces a prefilled "step" for moving forward
-            def new_step(start_node, existing_length = 0, points=[], model=""):
-                return [
-                    {
-                        "model": model,
-                        "node": start_node,
-                        "length": existing_length,
-                        "candidate_tracks": generate_selection_of_possible_tracks(
-                            start_node, candidates_to_generate, params
-                        ),  # count of these remaining = your fail counter
-                        "points": points,
-                        "blocks_added": [],
-                    }
-                ]
-
-            steps = new_step(start_node)
-
-            while steps[-1]["length"] < length_target_in and debug_overall_count < debug_maximum_count:
-                # might include a break inside, but this is a failsafe
-
-                blocks_current_step_index = update_blocks(steps, blocks_current_step_index)
-
-                current_step = steps[-1]
-
-                while len(current_step["candidate_tracks"]):
-
-                    track_to_test = current_step["candidate_tracks"][-1]
-
-                    result_node, valid, points = track_placement_is_valid(
-                        track_to_test, current_step["node"]
-                    )
-
-                    if valid:
-
-                        new_length = current_step["length"] + track.get_length(
-                            track_to_test
-                        )
-                        if debug_overall_count % debug_reporting_interval == 0:
-                            logLength = max(logLength, round(new_length / 12 / 5218, 3))
-                            print(
-                                len(steps),
-                                round(new_length / 12 / 5218, 3),
-                                len(current_step["candidate_tracks"]),
-                                len(Blocks),
-                            )
-                        debug_overall_count += 1
-
-                        steps += new_step(
-                            result_node, new_length, points, track_to_test
-                        )
-                        break
-
-                    else:
-
-                        current_step["candidate_tracks"].remove(track_to_test)
-                
-                # If you ran out of attempts to place a track this step, roll back by the specified length
-                if len(current_step["candidate_tracks"]) == 0:
-                
-                    previous_length = current_step["length"]
-                    target_length = previous_length - backtrack_distance
-                    
-                    while blocks_current_step_index > 2 and (steps[-1]["length"] < target_length):
-                    
-                        blocks_remove(steps[-1]["blocks_added"])
-                        steps.pop(-1)
-                        
-                        blocks_current_step_index = min(blocks_current_step_index,len(steps)-1)
-
-            sec = tools.stopwatch_click(
-                "trackhammer", f"{Rollback}, {candidates_to_generate}, {logLength}"
+            steps_found = generation_process(
+                start_node,
+                length_target_in,
+                backtrack_distance,
+                candidates_to_generate,
+                params,
             )
-
-            print(f"{logLength/sec}")
-
-    # Converts a block to coordinates to create brushes with
-    def block_id_to_coords(block_id):
-
-        coords = block_id.split(",")
-        x = int(coords[0])
-        y = int(coords[1])
-        z = int(coords[2])
-
-        return x * BlockHorizontal, y * BlockHorizontal, z * BlockVertical
-
-    # For debugging purposes - creates brushes that demonstrate where the block boundaries are
-    for block in Blocks:
-
-        x, y, z = block_id_to_coords(block)
-
-        vmfpy.add_brush(
-            [
-                x,
-                x + BlockHorizontal,
-                y,
-                y + BlockHorizontal,
-                z,
-                z + BlockVertical,
-                "dev/dev_measurewall01d",
-                0,
-                0,
-                "24",
-            ]
-        )
 
     tools.stopwatch_click("submodule", "Mainline generation complete")
 
+    display_blocks_in_vmf()
     ModelList = []
 
-    for Step in steps[1:]:
+    for Step in steps_found[1:]:
         ModelList += [Step["model"]]
 
     track.write_pathfinder_data(ModelList, start_node)

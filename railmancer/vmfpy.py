@@ -3,30 +3,27 @@ from railmancer import vmfpy
 
 # Interface between VMFs as a file type and the system of blocks, entities, etc. Intended to be generic.
 
+
+def initialize():
+    global Brushes, Brush_Entites, Entities
+
+    Brushes = []
+    Brush_Entites = []
+    Entities = []
+
+
 # Handler function that makes Brushes a global list.
 def add_brush(Brush):
 
     global Brushes
+    Brushes += [Brush]
 
-    try:
 
-        Brushes += [Brush]
-
-    except:
-
-        Brushes = [Brush]
-        
 def add_entity(Ent):
 
     global Entities
+    Entities += [Ent]
 
-    try:
-
-        Entities += [Ent]
-
-    except:
-
-        Entities = [Ent]
 
 # Handler function that makes Brush Entities a global list.
 def add_brush_entity(Object):
@@ -41,6 +38,7 @@ def add_brush_entity(Object):
 
         Brush_Entites = [Object]
 
+
 # I don't know if I used this? I think this was related to Regex that handled track VMF functions, but I think I didn't use it.
 def re_id(original_string, replacement):
 
@@ -50,7 +48,8 @@ def re_id(original_string, replacement):
     replacement_string = f'"id" "{replacement}"'
     return re.sub(pattern, replacement_string, original_string)
 
-# Returns a prefilled dictionary with position, model, angle.  
+
+# Returns a prefilled dictionary with position, model, angle.
 def blank_entity(Pos, MDL, Ang):
 
     return {
@@ -63,12 +62,14 @@ def blank_entity(Pos, MDL, Ang):
         "ang-roll": Ang[2],
     }
 
+
 # Iterator that returns an unused ID
 def get_ID():
 
     global ID
     ID += 1
     return str(ID)
+
 
 # From a list-brush object, compile all the information together to make a brush-string ready for assembly in to the final VMF.
 def brush(Brush: list):
@@ -276,11 +277,15 @@ def brush(Brush: list):
 
 # Turns the main list of Entity-list primitives into compiled strings ready for VMF assembly.
 def synthesize_entities(Entities):
-    
+
     EntityString = ""
     global ID
 
     for Ent in Entities:
+
+        if isinstance(Ent, list):
+            # throw out uncollapsed entities (from switch stands, in case of lack of compiling them)
+            continue
 
         # if Ent.get("raw_entity", False):
 
@@ -405,6 +410,7 @@ def synthesize_entities(Entities):
 
     return EntityString
 
+
 # Runs through the global list of brushes and returns the completed brush-string
 def synthesize_brushes():
 
@@ -414,6 +420,7 @@ def synthesize_brushes():
 
     return BrushString
 
+
 # Runs through the global list of brush-entities and returns the completed VMF string.
 def synthesize_brush_entities():
 
@@ -422,6 +429,7 @@ def synthesize_brush_entities():
         BrushEntityString += f"""\nentity\n{{\n"id" "{get_ID()}"\n{brush(Object)}}}"""
 
     return BrushEntityString
+
 
 # From a set of coordinates and a sector size hint, add the brushe for a floor.
 def floor(block_x: int, block_y: int, block_z: int, sector_size: int):
@@ -437,6 +445,7 @@ def floor(block_x: int, block_y: int, block_z: int, sector_size: int):
         ]
     )
 
+
 # From a set of coordinates and a sector size hint, add the brush for a ceiling.
 def ceiling(block_x: int, block_y: int, block_z: int, sector_size: int):
     add_brush(
@@ -451,7 +460,8 @@ def ceiling(block_x: int, block_y: int, block_z: int, sector_size: int):
         ]
     )
 
-# From a set of coordinates and a few parameters concerning visclusters specifically, create a brush entity. 
+
+# From a set of coordinates and a few parameters concerning visclusters specifically, create a brush entity.
 def viscluster(
     block_x: int,
     block_y: int,
@@ -471,6 +481,7 @@ def viscluster(
             "viscluster",
         ]
     )
+
 
 # From coordinates and a listed height and sector size, create a wall brush with the right handedness for the direction
 def wall(
@@ -517,6 +528,7 @@ def wall(
             type,
         ]
     )
+
 
 # Assemble the brushes, entities, and brush-entity strings along with header information and save to file.
 def write_to_vmf(filename):
@@ -669,6 +681,7 @@ def write_to_vmf(filename):
     except Exception as e:
         print(f"An error occurred: {e}")
 
+
 # Convert a "raw" displacement + alpha and heights (presampled) into a properly compiled grid of data ready to be inserted into a displacement-brush string
 def data_to_dispinfo(raw_displacement, heights, alphas):
 
@@ -756,10 +769,12 @@ def data_to_dispinfo(raw_displacement, heights, alphas):
 				}}
 			}}"""
 
+
 # Places a frog entity at the supplied location (and rotation if requested)
 def frog(pos, ang=[0, 0, 0]):
 
     add_entity(blank_entity(pos, "models/props_2fort/frog.mdl", ang))
+
 
 # Visibility function for other systems to see all the current entities.
 def get_entities():
