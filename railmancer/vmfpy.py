@@ -3,32 +3,28 @@ from railmancer import vmfpy
 
 # Interface between VMFs as a file type and the system of blocks, entities, etc. Intended to be generic.
 
-
-def initialize():
-    global Brushes, Brush_Entites, Entities
-
-    Brushes = []
-    Brush_Entites = []
-    Entities = []
+Brushes = []
+Brush_Entites = []
+Entities = []
 
 
 # Handler function that makes Brushes a global list.
 def add_brush(Brush):
 
-    global Brushes
+    Brushes: list = []
     Brushes += [Brush]
 
 
 def add_entity(Ent):
 
-    global Entities
+    Entities: list = []
     Entities += [Ent]
 
 
 # Handler function that makes Brush Entities a global list.
 def add_brush_entity(Object):
 
-    global Brush_Entites
+    Brush_Entites: list = []
 
     try:
 

@@ -3,12 +3,14 @@ import numpy as np
 
 # Subsystem for taking raw VMFs and converting them into usable dictionaries of data.
 
+lever_id_incrementor = 0
+
 
 def get_lever():
-    global Lever
 
-    Lever += 1
-    return f"switch_{Lever}"
+    lever_id_incrementor: int = 0
+    lever_id_incrementor += 1
+    return f"switch_{lever_id_incrementor}"
 
 
 def reprocess_raw_data(raw_ents):
@@ -40,8 +42,8 @@ def reprocess_raw_data(raw_ents):
 
             if "switches" in raw_ent["model"]:
 
-                Lever = get_lever()
-                Entity["lever"] = Lever
+                lever_id = get_lever()
+                Entity["lever"] = lever_id
                 Entity["classname"] = "tp3_switch"
 
                 vmfpy.add_entity(Entity)
@@ -68,7 +70,7 @@ def reprocess_raw_data(raw_ents):
                             "pos-z": StandPos1[2],
                             "mdl": "models/trakpak3_us/switchstands/racor_112e_right.mdl",
                             "ang-yaw": StandAngle,
-                            "lever": Lever,
+                            "lever": lever_id,
                             "classname": "tp3_switch_lever_anim",
                             "visgroup": "23",
                         },
@@ -78,7 +80,7 @@ def reprocess_raw_data(raw_ents):
                             "pos-z": StandPos2[2],
                             "mdl": "models/trakpak3_us/switchstands/racor_112e_right.mdl",
                             "ang-yaw": 180 + StandAngle,
-                            "lever": Lever,
+                            "lever": lever_id,
                             "classname": "tp3_switch_lever_anim",
                             "visgroup": "23",
                         },
@@ -100,11 +102,6 @@ def import_track(path):
         return [], []
 
     import re
-
-    global Lever
-
-    # initialize
-    Lever = 0
 
     with open(path, "r") as file:
         content = file.read()

@@ -319,14 +319,14 @@ def cut_and_fill_sector_heightmaps():
                 generate_heightmap_node(sector_data, noise_x, noise_y)
 
 
-def query_field(field, position, sector_data=None):
+def query_field(field, position, sector_data=None) -> float:
 
     if sector_data is None:
 
         sector_data = sectors.get(sectors.get_sector_id_at_position(position))
 
     if sector_data is None:
-        return None
+        return 8.8888  # special "this value does not exist" float
 
     else:
 
@@ -378,7 +378,7 @@ def sample_realspace_noise(position):
     return noise  # curb_noise(noise)
 
 
-def height_sample(real_x, real_y, samples, radius, sector_data):
+def height_sample(real_x, real_y, samples, radius, sector_data) -> list[float]:
 
     guess_z = query_field("height", (real_x, real_y, 0), sector_data)
 
@@ -396,7 +396,7 @@ def height_sample(real_x, real_y, samples, radius, sector_data):
             "height", (real_x + offset[0], real_y + offset[1], guess_z)
         )
 
-        if Example is not None:
+        if Example is not 8.8888:
             Heights += [Example]
 
     return Heights

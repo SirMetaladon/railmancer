@@ -4,6 +4,10 @@ from railmancer import lines, vmfpy, tools
 
 # Contains everything to do with the Track Library, which is a dictionary of conversions between modelpaths and physical dimensions / extracted information.
 
+track_model_library = {}
+valid_tracks_cache = {}
+track_straight_cache = {}
+
 
 def determine_real_grade(raw_grade):
     if raw_grade == "0pg":
@@ -67,7 +71,7 @@ def get_heading(raw_direction):
         print(raw_direction)
 
 
-def direction_to_angle(Direction):
+def direction_to_angle(Direction) -> float:
 
     Test = Direction[0]
     Handedness = 1 if "lt" in Direction else -1
@@ -89,6 +93,7 @@ def direction_to_angle(Direction):
 
     else:
         print(Direction)
+        return 0
 
 
 def determine_length(StartDirection, EndDirection, Radius):
@@ -189,11 +194,6 @@ def process_banked(path):
 def process_straight(path, model):
 
     global track_straight_cache
-
-    try:
-        track_straight_cache
-    except:
-        track_straight_cache = {}
 
     data = list(path[-1].split("_"))
     StartDirection = data[1]
@@ -345,11 +345,7 @@ def process_file(model):
 
 def build_track_library(directory, extension):
 
-    global track_model_library
-
-    track_model_library = {}
-
-    for root, dirs, files in os.walk(directory):
+    for root, _, files in os.walk(directory):
         for file in files:
             if file.endswith(extension):
 
@@ -363,8 +359,7 @@ def build_track_library(directory, extension):
                 if len(track_data) == 1:
                     # more than 1 is a switch, less than 1 is an invalid model
                     track_model_library[model] = track_data[0]
-                    
-    
+
     tools.stopwatch_click("submodule", "Initialization complete")
 
 
@@ -528,11 +523,6 @@ def valid_next_tracks(Direction, params={}):
     MaximumGradeLevel = params.get("max_grade", False)
 
     global valid_tracks_cache
-
-    try:
-        valid_tracks_cache
-    except:
-        valid_tracks_cache = {}
 
     Index = (
         Direction

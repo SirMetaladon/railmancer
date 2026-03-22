@@ -21,7 +21,7 @@ def main():
 
     # Some input information. One contains the directory for building the Track Library, the other is the VMF for the importer.
     trackpack_directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
-    vmf_input_path = "vmf inputs/squamish exit.vmf"
+    vmf_input_path = "vmf inputs/squamish test.vmf"
 
     # Starts a few stopwatches for showing time progression.
     tools.stopwatch_click("total", "Start!")
@@ -29,7 +29,6 @@ def main():
 
     # Initializes CFG parameters for use elsewhere
     cfg.initialize("railmancer/config.json")
-    vmfpy.initialize()
 
     # Assembles a "library" of track pieces from a directory.
     track.build_track_library(trackpack_directory, ".mdl")
@@ -40,27 +39,30 @@ def main():
 
     # Generate a mapping for finding the closest point relative to an existing point.
     lines.encode_lines()  # required for exclusion to work
-    Vancouver_Start = [[7568, 3552, -12540 - 1500], "0fw", -90, False]  #
-    Squamish_Start = [[7072, 3888, 512], "0fw", -90, False]  #
 
     # Starting from a node, procedurally move forward and place track, finding a path that fits the parameters.
     trackhammer.initialize()
     trackhammer.exclude_existing()
-    """trackhammer.generate_mainline(
+
+    """
+    Vancouver_Start = [[7568, 3552, -12540 - 1500], "0fw", -90, False]  #
+    trackhammer.generate_mainline(
         Vancouver_Start, 8, {"min_radius": 1, "min_grade": 2, "max_grade": 2}
     )
+
+    Squamish_Start = [[7072, 3888, 512], "0fw", -90, False]  #
     trackhammer.generate_mainline(
         Squamish_Start, 9.5, {"min_radius": 0, "min_grade": 2, "max_grade": 3}
     )"""
 
-    Start_Node = [[80, 2432, -96], "0fw", 0, False]  #
+    """Start_Node = [[80, 2432, -96], "0fw", 0, False]  #
     trackhammer.generate_mainline(
         Start_Node, 2, {"min_radius": 1, "min_grade": -3, "max_grade": -3}
     )
     Start_Node = [[3936, -6736, 416], "0fw", 180, False]  #
     trackhammer.generate_mainline(
         Start_Node, 2, {"min_radius": 0, "min_grade": 3, "max_grade": 3}
-    )
+    )"""
 
     # 2nd number is distance in miles, will keep going until it's over this value
     # 3rd number is minumum radius, 1 = 3072

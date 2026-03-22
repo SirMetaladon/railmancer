@@ -11,11 +11,8 @@ def initialize():
     # Have to run this initially to get the Sectors dictionary up and running.
     global Sectors, sector_lookup_grid
 
-    try:
-        return Sectors
-    except:
-        Sectors = {}
-        sector_lookup_grid = {}
+    Sectors = {}
+    sector_lookup_grid = {}
 
 
 def sectors_are_connected(first_sector, second_sector):
@@ -416,7 +413,7 @@ def merge_edges():
                 elif dir_key == "S":
                     hook = (l, [-1], l, [0])
 
-                elif dir_key == "W":
+                else:  # dir_key == "W":
                     hook = ([-1], l, [0], l)
 
                 # -1 is the south side 0 is the north side

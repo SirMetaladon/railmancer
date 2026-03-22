@@ -4,8 +4,11 @@ from railmancer import tools, cfg
 
 # Handles extraction of line and point data from given lists of track-objects. Handles everything related to said lists of points.
 
+Beziers: list = []
+sampled_points = []
 
-def bezier(t, Bez, dimensions):
+
+def bezier_3d(t, Bez) -> tuple[float, float, float]:
 
     x = (
         (1 - t) ** 3 * Bez[0][0]
@@ -20,11 +23,13 @@ def bezier(t, Bez, dimensions):
         + t**3 * Bez[3][1]
     )
 
-    if dimensions == 2:
-        return x, y
-    else:
-        # more calculations needed for precision, but for now:
-        return x, y, Bez[0][2] + (Bez[3][2] - Bez[0][2]) * t
+    return x, y, Bez[0][2] + (Bez[3][2] - Bez[0][2]) * t
+
+
+def bezier_2d(t, Bez) -> tuple[float, float]:
+
+    x, y, z = bezier_3d(t, Bez)
+    return x, y
 
 
 def get_perpendicular_vec2d(v):
@@ -130,7 +135,7 @@ def draw_bezier_curve(Bez: list):
         t = i / steps
         # Cubic Bezier formula
 
-        x, y = bezier(t, Bez, 2)
+        x, y, _ = bezier_3d(t, Bez)
 
         turtle.goto(canvas((x, y)))
         # THING TO DO: MAKE THIS CHANGE COLOR WITH Z-VALUE
@@ -155,7 +160,7 @@ def bezier_curve(t, P0, P1, P2, P3):
 
 def convert_nodes_to_bezier(
     start_position, end_position, start_direction, end_direction
-):
+) -> list:
 
     # Convert to 2 dimensions, as the bezier pathing does not concern height (and it makes the math easier)
     p0 = np.array([start_position[0], start_position[1]])
@@ -215,13 +220,7 @@ def convert_nodes_to_bezier(
 
 def write_bezier_points(start_position, end_position, start_direction, end_direction):
 
-    global Beziers
-
-    try:
-        Beziers
-    except:
-        Beziers = []
-
+    Beziers: list = []
     Beziers += convert_nodes_to_bezier(
         start_position, end_position, start_direction, end_direction
     )
@@ -260,12 +259,11 @@ def convert_bezier_to_points(Segment, line_maximum_poll_point_distance):
         + 1,
     )
 
-    return [(bezier(t, Segment, 3)) for t in ts]
+    return [(bezier_3d(t, Segment)) for t in ts]
 
 
 def encode_lines():
 
-    global sampled_points
     line_maximum_poll_point_distance = cfg.get("line_maximum_poll_point_distance")
 
     if not len(Beziers):
@@ -283,10 +281,7 @@ def encode_lines():
 
 def get_all_track_points():
 
-    try:
-        return sampled_points
-    except:
-        return []
+    return sampled_points
 
 
 def get_terrain_points_from_sample(points_to_analyze):

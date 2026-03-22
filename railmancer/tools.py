@@ -1,7 +1,9 @@
 import time, math
 import numpy as np
+from typing import Dict
 
 # Pile of generic functions that have no dependencies.
+last_click: Dict[str, float] = {}
 
 
 def display_time(sec):
@@ -13,23 +15,21 @@ def display_time(sec):
     return "{0}:{1}:{2}".format(int(hours), int(mins), round(sec, 3))
 
 
-def stopwatch_click(name, blurb=""):
-    global last_click
-    try:
-        last_click
-    except NameError:
-        last_click = {name: 0}
+def stopwatch_click(name: str, blurb: str = "") -> float:
 
-    if last_click.get(name, 0) == 0:
-        last_click[name] = time.time()
-        return 0
+    now = time.time()
 
-    else:
+    if name not in last_click:
+        last_click[name] = now
+        return 0.0
 
-        sec = time.time() - last_click[name]
-        last_click[name] = time.time()
-        print(blurb + " in " + display_time(sec))
-        return sec
+    sec = now - last_click[name]
+    last_click[name] = now
+
+    if blurb:
+        print(f"{blurb} in {display_time(sec)}")
+
+    return sec
 
 
 def rot_z(Vector, Angle):
@@ -74,7 +74,7 @@ def extract(Dict, ToInvestigate, LookingFor, Default):
     return Output
 
 
-def import_json(path: str):
+def import_json(path: str) -> dict:
 
     import json
 
@@ -95,6 +95,8 @@ def import_json(path: str):
     except Exception as e:
         print(e)
         print('Read failed on "' + str(path) + '".')
+
+    return {}
 
 
 def linterp(a, b, x):
@@ -195,6 +197,8 @@ def blank_list_grid(dimensions, length, contains=None):
 
     if dimensions == 3:
         return [[[[contains] for _ in size] for _ in size] for _ in size]
+
+    return []
 
 
 def downtomult(number, modulus):

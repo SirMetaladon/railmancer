@@ -2,11 +2,10 @@ from railmancer import tools
 import random, math
 
 # This file handles all interactions between Railmancer and the Configuration file, sets defaults, and interpets information.
+CFG = {}
 
 
 def initialize(path: str):
-
-    global CFG
 
     CFG = tools.import_json(path)
 
@@ -37,8 +36,8 @@ def initialize(path: str):
             0,
             CFG["max_mapsize"],
         ],
-        ["trackhammer_block_standoff_distance", 1 , 99999, 3000],
-        ["trackhammer_block_size_horizontal",1,6000,2000],
+        ["trackhammer_block_standoff_distance", 1, 99999, 3000],
+        ["trackhammer_block_size_horizontal", 1, 6000, 2000],
     ]
 
     # need a mechanism in here for double checking the following:

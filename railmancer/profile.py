@@ -1,25 +1,31 @@
-import cProfile, pstats
+import cProfile
+import pstats
+from typing import Optional
+
+profiler: Optional[cProfile.Profile] = None
 
 
-def start():
+def start() -> None:
     global profiler
+
     profiler = cProfile.Profile()
     profiler.enable()
     print("Profile started.")
 
 
-def end():
+def end() -> bool:
+    global profiler
 
-    try:
-        profiler
-    except:
+    if profiler is None:
         print("No profile started!")
         return False
 
+    profiler.disable()
+
     stats = pstats.Stats(profiler)
-    stats.sort_stats(
-        "cumtime"
-    )  # 'cumtime' = total time spent in function (including subcalls)
+    stats.sort_stats("cumtime")
     stats.print_stats(15)
 
-    profiler.disable()
+    profiler = None  # reset state
+
+    return True
