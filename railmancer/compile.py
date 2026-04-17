@@ -160,6 +160,8 @@ def scatter_placables():
             sector_data,
         )
 
+    tools.stopwatch_click("submodule", "Scattering complete")
+
 
 def distribute(min_distance, TotalPoints, sector_data):
 

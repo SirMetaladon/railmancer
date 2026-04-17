@@ -220,7 +220,7 @@ def convert_nodes_to_bezier(
 
 def write_bezier_points(start_position, end_position, start_direction, end_direction):
 
-    Beziers: list = []
+    global Beziers
     Beziers += convert_nodes_to_bezier(
         start_position, end_position, start_direction, end_direction
     )
@@ -264,6 +264,8 @@ def convert_bezier_to_points(Segment, line_maximum_poll_point_distance):
 
 def encode_lines():
 
+    global sampled_points
+
     line_maximum_poll_point_distance = cfg.get("line_maximum_poll_point_distance")
 
     if not len(Beziers):
@@ -277,6 +279,8 @@ def encode_lines():
         sampled_points += convert_bezier_to_points(
             Segment, line_maximum_poll_point_distance
         )
+
+    tools.stopwatch_click("submodule", "Encoded lines done")
 
 
 def get_all_track_points():

@@ -21,7 +21,8 @@ def main():
 
     # Some input information. One contains the directory for building the Track Library, the other is the VMF for the importer.
     trackpack_directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
-    vmf_input_path = "vmf inputs/squamish test.vmf"
+    # vmf_input_path = "vmf inputs/squamish test.vmf"
+    vmf_input_path = "vmf inputs/vancouver_only.vmf"
 
     # Starts a few stopwatches for showing time progression.
     tools.stopwatch_click("total", "Start!")
@@ -35,7 +36,6 @@ def main():
 
     # Import line objects from a VMF, as well as the track entities themselves.
     parser.import_track(vmf_input_path)
-    tools.stopwatch_click("submodule", "Import complete")
 
     # Generate a mapping for finding the closest point relative to an existing point.
     lines.encode_lines()  # required for exclusion to work
@@ -44,13 +44,12 @@ def main():
     trackhammer.initialize()
     trackhammer.exclude_existing()
 
-    """
-    Vancouver_Start = [[7568, 3552, -12540 - 1500], "0fw", -90, False]  #
+    Vancouver_Start = [[7056, 3040, -13564], "0fw", -90, False]  #
     trackhammer.generate_mainline(
-        Vancouver_Start, 8, {"min_radius": 1, "min_grade": 2, "max_grade": 2}
+        Vancouver_Start, 5, {"min_radius": 2, "min_grade": 2, "max_grade": 2}
     )
 
-    Squamish_Start = [[7072, 3888, 512], "0fw", -90, False]  #
+    """Squamish_Start = [[7072, 3888, 512], "0fw", -90, False]  #
     trackhammer.generate_mainline(
         Squamish_Start, 9.5, {"min_radius": 0, "min_grade": 2, "max_grade": 3}
     )"""
@@ -68,17 +67,14 @@ def main():
     # 3rd number is minumum radius, 1 = 3072
     # 4th number is minimum grade level, in this case 0 is level
     # 5th number is maximum grade level, in this case 2.5%
-
+    """
     # Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
     lines.encode_lines()
     # these values are stored as global variables in the lines module.
-    tools.stopwatch_click("submodule", "Encoding and collapse done")
 
     # Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are. Also contains a map for "what block is next to this one"
-    sectors.initialize()
     sectors.build_fit()
     sectors.link()
-    tools.stopwatch_click("submodule", "Sector framework completed")
 
     # Takes points and puts them in buckets for sector processing.
     sectors.assign_points_to_sectors()
@@ -117,11 +113,10 @@ def main():
     # Turn the raw sector and heightmap data into brushes and displacements.
     compile.compile_sectors_to_brushes()
     tools.stopwatch_click("submodule", "Brushes and Displacements done")
-    profile.end()
+    profile.end()"""
 
     # For each sector, apply the scattering algorithm that places trees, rocks, bushes, etc.
     # compile.scatter_placables()
-    tools.stopwatch_click("submodule", "Scattering complete")
 
     """points = lines.get_all_track_points()
     for entry in points:

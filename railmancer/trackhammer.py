@@ -1,5 +1,6 @@
 import random, math, time
-from railmancer import tools, track, cfg, lines, vmfpy
+from railmancer import tools, track, lines, vmfpy
+from railmancer import cfg as TEST
 from scipy.spatial import distance
 import numpy as np
 
@@ -115,7 +116,7 @@ def track_placement_is_valid(model, current_node):
     points = get_block_points_from_nodes(current_node, test_node)
 
     end = (int(test_node[0][0]), int(test_node[0][1]))
-    valid = tools.within2d(end, cfg.get("trackhammer_border"))
+    valid = tools.within2d(end, TEST.get("trackhammer_border"))
 
     if valid:
         valid = not are_points_blocked(points)
@@ -138,8 +139,6 @@ def generate_selection_of_possible_tracks(node, count, params={}):
 
 
 def display_blocks_in_vmf():
-
-    print("Added blocks to VMF.")
 
     # Converts a block to coordinates to create brushes with
     def block_id_to_coords(block_id):
@@ -170,6 +169,8 @@ def display_blocks_in_vmf():
                 "24",
             ]
         )
+
+    print(f"Added {len(Blocks)} pathfinding blocks.")
 
 
 # From the block queue, push up to the block that corresponds with the standoff length, forward or backward, then return the current step
@@ -222,9 +223,9 @@ def initialize():
     global BlockVertical
     global Block_Standoff_Distance
 
-    BlockHorizontal = cfg.get("trackhammer_block_size_horizontal")
-    BlockVertical = cfg.get("sector_minimum_height") * 1.05
-    Block_Standoff_Distance = cfg.get("trackhammer_block_standoff_distance")
+    BlockHorizontal = TEST.get("trackhammer_block_size_horizontal")
+    BlockVertical = TEST.get("sector_minimum_height") * 1.05
+    Block_Standoff_Distance = TEST.get("trackhammer_block_standoff_distance")
 
     global Blocks
     Blocks = {}
@@ -306,11 +307,7 @@ def generation_process(
             if debug_overall_count % debug_reporting_interval == 0:
                 logLength = max(logLength, round(new_length / 12 / 5218, 3))
                 print(
-                    len(steps),
-                    round(new_length / 12 / 5218, 3),
-                    len(current_step["candidate_tracks"]),
-                    len(Blocks),
-                    blocks_current_step_index,
+                    f"{len(steps)} steps, {round(new_length / 12 / 5218, 3)} miles, {len(current_step["candidate_tracks"])} candidates, {len(Blocks)} blocks."
                 )
             debug_overall_count += 1
 
@@ -338,7 +335,10 @@ def generation_process(
                 )
 
     if debug_overall_count >= debug_maximum_count:
-        print("Longest fail used: ", round(longest_fail[-1]["length"] / 12 / 5218, 3))
+        print(
+            "Longest usable section loaded: ",
+            round(longest_fail[-1]["length"] / 12 / 5218, 3),
+        )
         return longest_fail
 
     else:

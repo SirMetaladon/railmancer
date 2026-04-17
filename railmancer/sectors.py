@@ -5,14 +5,8 @@ import numpy as np
 
 # Handles the creation and management of Sector objects, how they connect to each other, things related to stitching them together, and anything that takes sector objects instead of just raw grids.
 
-
-def initialize():
-
-    # Have to run this initially to get the Sectors dictionary up and running.
-    global Sectors, sector_lookup_grid
-
-    Sectors = {}
-    sector_lookup_grid = {}
+Sectors = {}
+sector_lookup_grid = {}
 
 
 def sectors_are_connected(first_sector, second_sector):
@@ -91,6 +85,9 @@ def get_sector_id_at_position(position):
 
 def new_sector(x, y, floor, ceiling):
 
+    global Sectors
+    global sector_lookup_grid
+
     # creates a new sector object at the x,y sector-grid coordinates using the correct heights.
     bound = cfg.get("max_mapsize") / 2
     minimum = cfg.get("sector_minimum_height") / 16
@@ -157,6 +154,8 @@ def link():
             if Sector_Data["id"] not in Sectors[Nearby_Sector]["neighbors"]:
 
                 Sector_Data["neighbors"][Direction_ID] = False
+
+    tools.stopwatch_click("submodule", "Sectors Linked")
 
 
 def get_expanded_points(startpoints, offset):
@@ -290,6 +289,8 @@ def build_fit():
                 current_ceiling_height + sector_maximum_height, sector_snap_grid
             ),
         )
+
+    tools.stopwatch_click("submodule", "Sectors Built & Fit")
 
 
 def get_all():

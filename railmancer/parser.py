@@ -8,7 +8,7 @@ lever_id_incrementor = 0
 
 def get_lever():
 
-    lever_id_incrementor: int = 0
+    global lever_id_incrementor
     lever_id_incrementor += 1
     return f"switch_{lever_id_incrementor}"
 
@@ -141,5 +141,6 @@ def import_track(path):
             )
 
     print(f"Imported {path}, {len(raw_ents)} entities.")
+    tools.stopwatch_click("submodule", "Import complete")
 
     reprocess_raw_data(raw_ents)

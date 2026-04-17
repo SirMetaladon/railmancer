@@ -3,28 +3,36 @@ from railmancer import vmfpy
 
 # Interface between VMFs as a file type and the system of blocks, entities, etc. Intended to be generic.
 
-Brushes = []
-Brush_Entites = []
-Entities = []
+Brushes: list = []
+Brush_Entites: list = []
+Entities: list = []
 
 
 # Handler function that makes Brushes a global list.
 def add_brush(Brush):
 
-    Brushes: list = []
-    Brushes += [Brush]
+    global Brushes
+
+    Flag = 0
+
+    for x in range(0, 5):
+        if abs(Brush[x]) > 16384:
+            Flag = 1
+
+    if Flag == 0:
+        Brushes += [Brush]
 
 
 def add_entity(Ent):
 
-    Entities: list = []
+    global Entities
     Entities += [Ent]
 
 
 # Handler function that makes Brush Entities a global list.
 def add_brush_entity(Object):
 
-    Brush_Entites: list = []
+    global Brush_Entites
 
     try:
 
@@ -404,6 +412,8 @@ def synthesize_entities(Entities):
 	}}
 }}"""
 
+    print(f"Synthesized {len(Entities)} entities into {len(EntityString)} chars.")
+
     return EntityString
 
 
@@ -414,6 +424,8 @@ def synthesize_brushes():
     for Brush in Brushes:
         BrushString += brush(Brush)
 
+    print(f"Synthesized {len(Brushes)} brushes into {len(BrushString)} chars.")
+
     return BrushString
 
 
@@ -423,6 +435,10 @@ def synthesize_brush_entities():
     BrushEntityString = ""
     for Object in Brush_Entites:
         BrushEntityString += f"""\nentity\n{{\n"id" "{get_ID()}"\n{brush(Object)}}}"""
+
+    print(
+        f"Synthesized {len(Brush_Entites)} brush-entities into {len(BrushEntityString)} chars."
+    )
 
     return BrushEntityString
 

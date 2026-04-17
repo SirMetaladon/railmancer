@@ -18,6 +18,7 @@ def display_time(sec):
 def stopwatch_click(name: str, blurb: str = "") -> float:
 
     now = time.time()
+    global last_click
 
     if name not in last_click:
         last_click[name] = now

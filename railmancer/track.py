@@ -4,9 +4,9 @@ from railmancer import lines, vmfpy, tools
 
 # Contains everything to do with the Track Library, which is a dictionary of conversions between modelpaths and physical dimensions / extracted information.
 
-track_model_library = {}
-valid_tracks_cache = {}
-track_straight_cache = {}
+track_model_library: dict = {}
+valid_tracks_cache: dict = {}
+track_straight_cache: dict = {}
 
 
 def determine_real_grade(raw_grade):
@@ -345,6 +345,8 @@ def process_file(model):
 
 def build_track_library(directory, extension):
 
+    global track_model_library
+
     for root, _, files in os.walk(directory):
         for file in files:
             if file.endswith(extension):
@@ -360,7 +362,7 @@ def build_track_library(directory, extension):
                     # more than 1 is a switch, less than 1 is an invalid model
                     track_model_library[model] = track_data[0]
 
-    tools.stopwatch_click("submodule", "Initialization complete")
+    tools.stopwatch_click("submodule", "Track Library init complete")
 
 
 def length_to_model_straight(length, direction, gradelevel):

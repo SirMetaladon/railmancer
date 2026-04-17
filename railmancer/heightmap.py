@@ -396,7 +396,7 @@ def height_sample(real_x, real_y, samples, radius, sector_data) -> list[float]:
             "height", (real_x + offset[0], real_y + offset[1], guess_z)
         )
 
-        if Example is not 8.8888:
+        if Example != 8.8888:
             Heights += [Example]
 
     return Heights

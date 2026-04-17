@@ -2,10 +2,12 @@ from railmancer import tools
 import random, math
 
 # This file handles all interactions between Railmancer and the Configuration file, sets defaults, and interpets information.
-CFG = {}
+CFG: dict = {}
 
 
 def initialize(path: str):
+
+    global CFG
 
     CFG = tools.import_json(path)
 
@@ -80,8 +82,12 @@ def initialize(path: str):
     CFG["noise_grid_max_deviation_adjustment"] = CFG[
         "noise_floor_ceiling_spillover_slope"
     ] * (CFG["sector_real_size"] / CFG["noise_grid_per_sector"])
+
+    tools.stopwatch_click("submodule", "CFG initialized")
+
     return CFG
 
 
 def get(path):
+
     return CFG[path]
