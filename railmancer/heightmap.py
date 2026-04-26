@@ -251,6 +251,8 @@ def generate_sector_heightmaps():
                 sector_data["grid"]["minmap"][noise_x][noise_y][0] = int(bottom)
                 sector_data["grid"]["maxmap"][noise_x][noise_y][0] = int(top)
 
+    tools.stopwatch_click("submodule", "Sector Generation done")
+
 
 def rescale_terrain(sector_data, noise_x, noise_y, position, Terrain):
 
@@ -317,6 +319,8 @@ def cut_and_fill_sector_heightmaps():
             for noise_y in poll_values:
 
                 generate_heightmap_node(sector_data, noise_x, noise_y)
+
+    tools.stopwatch_click("submodule", "Contours Pass completed")
 
 
 def query_field(field, position, sector_data=None) -> float:

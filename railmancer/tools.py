@@ -205,3 +205,13 @@ def blank_list_grid(dimensions, length, contains=None):
 def downtomult(number, modulus):
 
     return int(math.floor(number / modulus) * modulus)
+
+
+def inches(miles):
+
+    return miles * 63360
+
+
+def miles(inches):
+
+    return inches / 63360

@@ -233,7 +233,7 @@ def initialize():
 
 def generation_process(
     start_node,
-    length_target_in,
+    track_profile,
     backtrack_distance,
     candidates_to_generate,
     params,
@@ -267,7 +267,7 @@ def generation_process(
     steps = new_step(start_node)
 
     while (
-        steps[-1]["length"] < length_target_in
+        steps[-1]["length"] < track_profile[-1]
         and debug_overall_count < debug_maximum_count
     ):
         # might include a break inside, but this is a failsafe
@@ -305,9 +305,9 @@ def generation_process(
                 current_step["candidate_tracks"].remove(track_to_test)
 
             if debug_overall_count % debug_reporting_interval == 0:
-                logLength = max(logLength, round(new_length / 12 / 5218, 3))
+                logLength = max(logLength, round(tools.miles(new_length), 3))
                 print(
-                    f"{len(steps)} steps, {round(new_length / 12 / 5218, 3)} miles, {len(current_step["candidate_tracks"])} candidates, {len(Blocks)} blocks."
+                    f"{len(steps)} steps, {round(tools.miles(new_length), 3)} miles, {len(current_step["candidate_tracks"])} candidates, {len(Blocks)} blocks."
                 )
             debug_overall_count += 1
 
@@ -337,7 +337,7 @@ def generation_process(
     if debug_overall_count >= debug_maximum_count:
         print(
             "Longest usable section loaded: ",
-            round(longest_fail[-1]["length"] / 12 / 5218, 3),
+            round(tools.miles(longest_fail[-1]["length"]), 3),
         )
         return longest_fail
 
@@ -350,21 +350,12 @@ def generation_process(
         return steps
 
 
-# Taking a node start and target length + parameters, generate a list of track models that coincides with grade, curvature, and block rules.
-def generate_mainline(start_node, length_target_mi, params={}):
-    # FYI: Nodes are defined as [[x, y, z], "string TP3 direction", base rotation in 90 increments, IsReversed (compile relevant only)]
+def create_rail_path(start_node, track_profile, params={}):
 
     tools.stopwatch_click("trackhammer")
 
     # Hollows out a little area near the start of the trackhammer, to prevent old rails from blocking the start of the mains
     blocks_remove(get_block_ids(start_node[0]))
-
-    # debugging variables, tuning required sometimes to optimize behavior (magical numbers, boo!)
-    length_target_in = length_target_mi * 5280 * 12
-
-    print(
-        "Began working on generating mainline :", start_node, length_target_mi, params
-    )
 
     # system for testing multiple variations of rollbacks and candidates, currently semi-disabled
     rollbacks = [16000]
@@ -378,13 +369,46 @@ def generate_mainline(start_node, length_target_mi, params={}):
 
             steps_found = generation_process(
                 start_node,
-                length_target_in,
+                track_profile,
                 backtrack_distance,
                 candidates_to_generate,
                 params,
             )
 
-    tools.stopwatch_click("submodule", "Mainline generation complete")
+    tools.stopwatch_click("submodule", "Track path complete")
+    return steps_found
+
+
+def aggregate(track_profile):
+
+    Total = 0
+    Lengths = track_profile[1::2]
+    Incrementor = 1
+
+    for Entry in Lengths:
+        track_profile[Incrementor] = tools.inches(Entry + Total)
+
+        Total += Entry
+        Incrementor += 2
+
+    return track_profile
+
+
+# Taking a node start and target length + parameters, generate a list of track models that coincides with grade, curvature, and block rules.
+def generate_mainline(start_node, track_profile, params={}):
+    # FYI: Nodes are defined as [[x, y, z], "string TP3 direction", base rotation in 90 increments, IsReversed (compile relevant only)]
+
+    aggregated_profile = aggregate(track_profile)
+
+    print(
+        "Began working on generating "
+        + str(tools.miles(track_profile[-1]))
+        + " mile mainline :",
+        start_node,
+        params,
+    )
+
+    steps_found = create_rail_path(start_node, aggregated_profile, params)
 
     display_blocks_in_vmf()
     ModelList = []

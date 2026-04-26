@@ -438,6 +438,8 @@ def merge_edges():
                     grid[hook[2][0]][hook[3][0]][0] = C
                     neighbor_grid[hook[0][0]][hook[1][0]] = grid[hook[2][0]][hook[3][0]]
 
+    tools.stopwatch_click("submodule", "Merge edges complete")
+
 
 def apply_algorithm_to_grid(oldgrid, algorithm, adjust):
     # applies an algorithm input to each square in a grid
@@ -524,6 +526,8 @@ def blur_min_max_grids(iterations):
 
     blur_grid("maxmap", iterations, lower_ceiling)
 
+    tools.stopwatch_click("submodule", "Blur min-max done")
+
 
 def blur_heightmap_grid():
 
@@ -543,6 +547,8 @@ def blur_heightmap_grid():
         return total / count
 
     blur_grid("height", 1, cut_down_outliers)
+
+    tools.stopwatch_click("submodule", "Smoothed heightmap")
 
 
 def distance_to_line(pos, sector_data=None):

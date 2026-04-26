@@ -46,7 +46,10 @@ def main():
 
     Vancouver_Start = [[7056, 3040, -13564], "0fw", -90, False]  #
     trackhammer.generate_mainline(
-        Vancouver_Start, 5, {"min_radius": 2, "min_grade": 2, "max_grade": 2}
+        Vancouver_Start,
+        ["left", 1],
+        # ["main", 0.5, "left", 1, "main", 0.5],
+        {"min_radius": 2, "min_grade": 2, "max_grade": 2},
     )
 
     """Squamish_Start = [[7072, 3888, 512], "0fw", -90, False]  #
@@ -81,30 +84,24 @@ def main():
 
     # From the height-buckets, create sectors that adhere to CFG parameters.
     heightmap.generate_sector_heightmaps()
-    tools.stopwatch_click("submodule", "Sector Generation done")
 
     # From the sector-heightmaps, go through and apply the merging process that allows sectors to communicate.
     sectors.merge_edges()
-    tools.stopwatch_click("submodule", "Merge edges complete")
 
     # Blur heightmaps according to Gaussian blurring mechanisms, constraining min and max grids.
     profile.start()
     sectors.blur_min_max_grids(15)
     # iteration count
     profile.end()
-    tools.stopwatch_click("submodule", "Blur min-max done")
 
     # Apply the cut and fill relative to track that ensures terrain is not occluded.
     heightmap.cut_and_fill_sector_heightmaps()
-    tools.stopwatch_click("submodule", "Contours done")
 
     # Blur the main heightmap to reduce jagged edges on mountains and near cuts/fill
     sectors.blur_heightmap_grid()
-    tools.stopwatch_click("submodule", "Smoothed heightmap")
 
     # Apply cut-and-fill process again to prevent smoothing from occluding the rails.
     heightmap.cut_and_fill_sector_heightmaps()
-    tools.stopwatch_click("submodule", "Second pass Contours done")
 
     # Scan all entities for switch stands, determine which side of them is less blocked, place accordingly
     sectors.collapse_quantum_switchstands()
@@ -112,7 +109,6 @@ def main():
     profile.start()
     # Turn the raw sector and heightmap data into brushes and displacements.
     compile.compile_sectors_to_brushes()
-    tools.stopwatch_click("submodule", "Brushes and Displacements done")
     profile.end()"""
 
     # For each sector, apply the scattering algorithm that places trees, rocks, bushes, etc.

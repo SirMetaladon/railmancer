@@ -323,6 +323,8 @@ def compile_sectors_to_brushes():
 
             vmfpy.add_brush(finished_displacement)
 
+    tools.stopwatch_click("submodule", "Brushes and Displacements done")
+
 
 def create_scenery_block(sector_data):
     block_x, block_y, block_floor, block_ceiling = (
