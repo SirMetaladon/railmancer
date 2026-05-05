@@ -338,7 +338,9 @@ def process_file(model):
 
         return process_siding(path)
 
-    # print(f"No support for {model}")
+    else:
+
+        print(f"No track-processing support for {model}")
 
     return []
 
@@ -373,7 +375,7 @@ def length_to_model_straight(length, direction, gradelevel):
     return track_straight_cache.get(f"{length}|{direction}", {}).get(gradelevel, "")
 
 
-def add_track(pos, track_object, heading):
+def add_lines_from_track(pos, track_object, heading):
 
     EndPos = pos + tools.rot_z(track_object["Move"], heading)
 
@@ -385,13 +387,12 @@ def add_track(pos, track_object, heading):
     )
 
 
-def write_track(
+def convert_model_nodes_to_real_pos_and_angle(
     model,
     prev_node,
     new_node,
+    shift,
 ):
-
-    track_data = track_model_library[model]
 
     if new_node[3]:  # if it's reversed AHA IT DOES DO SOMETHING
         ModelPos = new_node[0]
@@ -401,10 +402,20 @@ def write_track(
         RotFix = 0
 
     ModelHeading = (
-        new_node[2] if track_data["EndDirection"][:1] != "8" else prev_node[2]
+        new_node[2]
+        if track_model_library[model]["EndDirection"][:1] != "8"
+        else prev_node[2]
     )
 
-    add_track(ModelPos, track_data, ModelHeading + RotFix)
+    Angle = ModelHeading + RotFix
+    ModelPos = tuple(map(sum, zip(ModelPos, shift)))
+
+    return ModelPos, Angle
+
+
+def write_track(model, ModelPos, Angle):
+
+    add_lines_from_track(ModelPos, track_model_library[model], Angle)
 
     vmfpy.add_entity(
         {
@@ -412,7 +423,7 @@ def write_track(
             "pos-y": ModelPos[1],
             "pos-z": ModelPos[2],
             "mdl": model,
-            "ang-yaw": ModelHeading + RotFix,
+            "ang-yaw": Angle,
             "visgroup": "23",
         }
     )
@@ -421,26 +432,6 @@ def write_track(
 def updated_position(position, jump, heading):
 
     return np.round(np.add(position, tools.rot_z(jump, heading)))
-
-
-"""
-def add_connector(pathnode):
-
-    import numpy as np
-
-    if pathnode[1] == "0fw":
-
-        new_pos = updated_position(pathnode[0], [-64, 0, 0], pathnode[2])
-
-        write_track(
-            np.array(pathnode[0]),
-            "0fw",
-            length_to_model_straight(64, "0fw", 0),
-            pathnode[2],
-            pathnode[2],
-        )
-
-        pathnode[0] = new_pos"""
 
 
 def get_new_node_from_node_and_model(Model, Node, ReverseStraight=False):
@@ -504,18 +495,14 @@ def get_new_node_from_node_and_model(Model, Node, ReverseStraight=False):
     return NewPosition, NewDirection, NewHeading, IsReversed
 
 
-def write_pathfinder_data(model_list, start_node):
+def write_track_from_trackhammer_steps(steps):
 
-    prev_node = start_node
+    for step in steps:
 
-    for model in model_list:
-
-        new_node = get_new_node_from_node_and_model(model, prev_node)
-
-        # finalize track placement
-        write_track(model, prev_node, new_node)
-
-        prev_node = new_node
+        for model in step["models"]:
+            mdl, pos, yaw = model
+            # finalize track placement
+            write_track(mdl, pos, yaw)
 
 
 def valid_next_tracks(Direction, params={}):

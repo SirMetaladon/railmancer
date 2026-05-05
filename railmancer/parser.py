@@ -13,6 +13,65 @@ def get_lever():
     return f"switch_{lever_id_incrementor}"
 
 
+def add_entity_to_new_map(Entity, Data):
+
+    Pos = (Entity["pos-x"], Entity["pos-y"], Entity["pos-z"])
+
+    # Regardless of what type it is, add lines for it if it's got data
+    for trackdata_chunk in Data:
+
+        track.add_lines_from_track(Pos, trackdata_chunk, Entity["ang-yaw"])
+
+    if not "switches" in Entity["mdl"]:
+
+        vmfpy.add_entity(Entity)
+
+    else:
+
+        lever_id = get_lever()
+        Entity["lever"] = lever_id
+        Entity["classname"] = "tp3_switch"
+
+        vmfpy.add_entity(Entity)
+
+        StandAngle = Entity["ang-yaw"] + track.direction_to_angle(
+            Data[0]["StartDirection"]
+        )
+
+        StandPos1 = np.add(
+            Pos,
+            tools.rot_z(np.array([-110, -100, -17.5]), StandAngle),
+        )
+
+        StandPos2 = np.add(Pos, tools.rot_z(np.array([-110, 100, -17.5]), StandAngle))
+
+        vmfpy.add_entity(
+            [
+                ["collapse", StandPos1, StandPos2],
+                {
+                    "pos-x": StandPos1[0],
+                    "pos-y": StandPos1[1],
+                    "pos-z": StandPos1[2],
+                    "mdl": "models/trakpak3_us/switchstands/racor_112e_right.mdl",
+                    "ang-yaw": StandAngle,
+                    "lever": lever_id,
+                    "classname": "tp3_switch_lever_anim",
+                    "visgroup": "23",
+                },
+                {
+                    "pos-x": StandPos2[0],
+                    "pos-y": StandPos2[1],
+                    "pos-z": StandPos2[2],
+                    "mdl": "models/trakpak3_us/switchstands/racor_112e_right.mdl",
+                    "ang-yaw": 180 + StandAngle,
+                    "lever": lever_id,
+                    "classname": "tp3_switch_lever_anim",
+                    "visgroup": "23",
+                },
+            ]
+        )
+
+
 def reprocess_raw_data(raw_ents):
 
     # recompile
@@ -36,64 +95,11 @@ def reprocess_raw_data(raw_ents):
             "visgroup": "23",
         }
 
-        Data = track.process_file(raw_ent["model"])
+        Data = track.process_file(Entity["mdl"])
 
         if Data:
 
-            if "switches" in raw_ent["model"]:
-
-                lever_id = get_lever()
-                Entity["lever"] = lever_id
-                Entity["classname"] = "tp3_switch"
-
-                vmfpy.add_entity(Entity)
-
-                StandAngle = Ang[1] + track.direction_to_angle(
-                    Data[0]["StartDirection"]
-                )
-
-                StandPos1 = np.add(
-                    Pos,
-                    tools.rot_z(np.array([-110, -100, -17.5]), StandAngle),
-                )
-
-                StandPos2 = np.add(
-                    Pos, tools.rot_z(np.array([-110, 100, -17.5]), StandAngle)
-                )
-
-                vmfpy.add_entity(
-                    [
-                        ["collapse", StandPos1, StandPos2],
-                        {
-                            "pos-x": StandPos1[0],
-                            "pos-y": StandPos1[1],
-                            "pos-z": StandPos1[2],
-                            "mdl": "models/trakpak3_us/switchstands/racor_112e_right.mdl",
-                            "ang-yaw": StandAngle,
-                            "lever": lever_id,
-                            "classname": "tp3_switch_lever_anim",
-                            "visgroup": "23",
-                        },
-                        {
-                            "pos-x": StandPos2[0],
-                            "pos-y": StandPos2[1],
-                            "pos-z": StandPos2[2],
-                            "mdl": "models/trakpak3_us/switchstands/racor_112e_right.mdl",
-                            "ang-yaw": 180 + StandAngle,
-                            "lever": lever_id,
-                            "classname": "tp3_switch_lever_anim",
-                            "visgroup": "23",
-                        },
-                    ]
-                )
-
-            else:
-
-                vmfpy.add_entity(Entity)
-
-            for Subsection in Data:  # this is a rail that needs a line
-
-                track.add_track(Pos, Subsection, Ang[1])
+            add_entity_to_new_map(Entity, Data)
 
 
 def import_track(path):

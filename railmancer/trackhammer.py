@@ -6,6 +6,9 @@ import numpy as np
 
 # This is an algoritm for pathing a mainline through the playable area without bumping into itself. Last part pending.
 
+debug_overall_count: int = 0
+logLength: float = 0
+
 
 # From a list, pick random entries and transfer them to a second list until you either hit count or run out.
 def sprinkle_selector(list, count):
@@ -110,19 +113,29 @@ def get_block_points_from_nodes(current_node, next_node):
 
 
 # From a model and a current node, return the resulting node, and whether the track is valid according to blocking and maximum border size.
-def track_placement_is_valid(model, current_node):
-    test_node = track.get_new_node_from_node_and_model(model, current_node)
+def generate_pieces_from_node_and_mdl(model, prev_node, mode):
 
-    points = get_block_points_from_nodes(current_node, test_node)
+    models = []
+    current_node = track.get_new_node_from_node_and_model(model, prev_node)
 
-    end = (int(test_node[0][0]), int(test_node[0][1]))
+    points = get_block_points_from_nodes(prev_node, current_node)
+
+    end = (int(current_node[0][0]), int(current_node[0][1]))
     valid = tools.within2d(end, TEST.get("trackhammer_border"))
 
     if valid:
         valid = not are_points_blocked(points)
 
-    # if track-end is inside the block and
-    return (test_node, valid, points)
+    shift = (0, 0, 0)
+
+    pos, yaw = track.convert_model_nodes_to_real_pos_and_angle(
+        model, prev_node, current_node, shift
+    )
+    models += (model, pos, yaw)
+    median_extra_length = 0  # will be accounted for later
+
+    # if track-end is inside a block
+    return (current_node, valid, points, models, median_extra_length)
 
 
 # Queries the track system to find valid tracks according to grade and curvature rules, then returns a randomized selection
@@ -240,20 +253,34 @@ def generation_process(
 ):
 
     print("Started permutation: ", backtrack_distance, candidates_to_generate)
-    debug_overall_count = 0
+
+    global debug_overall_count, logLength
+
     blocks_current_step_index = 0
-    logLength = 0
+
     longest_fail = []
     longest_fail_length = 0
 
     debug_reporting_interval = 100000
     debug_maximum_count = debug_reporting_interval * 25
 
+    def debug_logger(stepcount, new_length):
+
+        global logLength
+        global debug_overall_count
+
+        if debug_overall_count % debug_reporting_interval == 0:
+            logLength = max(logLength, round(tools.miles(new_length), 3))
+            print(
+                f"{len(steps)} steps, {round(tools.miles(new_length), 3)} miles, {len(current_step["candidate_tracks"])} candidates, {len(Blocks)} blocks."
+            )
+        debug_overall_count += 1
+
     # helper function that produces a prefilled "step" for moving forward
-    def new_step(start_node, existing_length=0, points=[], model=""):
+    def new_step(start_node, existing_length=0, points=[], models=[]):
         return [
             {
-                "model": model,
+                "models": models,
                 "node": start_node,
                 "length": existing_length,
                 "candidate_tracks": generate_selection_of_possible_tracks(
@@ -280,11 +307,18 @@ def generation_process(
 
             track_to_test = current_step["candidate_tracks"][-1]
 
-            result_node, valid, points = track_placement_is_valid(
-                track_to_test, current_step["node"]
+            result_node, valid, points, models, median_extra_length = (
+                generate_pieces_from_node_and_mdl(
+                    track_to_test, current_step["node"], "left"  # mode
+                )
             )
 
-            new_length = current_step["length"] + track.get_length(track_to_test)
+            #
+            new_length = (
+                current_step["length"]
+                + track.get_length(track_to_test)
+                + median_extra_length
+            )
 
             if new_length > longest_fail_length:
 
@@ -304,12 +338,7 @@ def generation_process(
 
                 current_step["candidate_tracks"].remove(track_to_test)
 
-            if debug_overall_count % debug_reporting_interval == 0:
-                logLength = max(logLength, round(tools.miles(new_length), 3))
-                print(
-                    f"{len(steps)} steps, {round(tools.miles(new_length), 3)} miles, {len(current_step["candidate_tracks"])} candidates, {len(Blocks)} blocks."
-                )
-            debug_overall_count += 1
+            debug_logger(len(steps), new_length)
 
         # if there's literally nothing left to do
         if len(steps) == 1 & len(current_step["candidate_tracks"]) == 0:
@@ -411,11 +440,7 @@ def generate_mainline(start_node, track_profile, params={}):
     steps_found = create_rail_path(start_node, aggregated_profile, params)
 
     display_blocks_in_vmf()
-    ModelList = []
 
-    for Step in steps_found[1:]:
-        ModelList += [Step["model"]]
-
-    track.write_pathfinder_data(ModelList, start_node)
+    track.write_track_from_trackhammer_steps(steps_found)
 
     tools.stopwatch_click("submodule", "Pathfinder data written")

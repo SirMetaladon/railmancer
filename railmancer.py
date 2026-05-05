@@ -44,10 +44,10 @@ def main():
     trackhammer.initialize()
     trackhammer.exclude_existing()
 
-    Vancouver_Start = [[7056, 3040, -13564], "0fw", -90, False]  #
+    Vancouver_Start = [(7056, 3040, -13564), "0fw", -90, False]  #
     trackhammer.generate_mainline(
         Vancouver_Start,
-        ["left", 1],
+        ["left", 0.1],
         # ["main", 0.5, "left", 1, "main", 0.5],
         {"min_radius": 2, "min_grade": 2, "max_grade": 2},
     )
