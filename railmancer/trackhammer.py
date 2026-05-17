@@ -117,6 +117,8 @@ def generate_pieces_from_node_and_mdl(model, prev_node, mode):
 
     models = []
     current_node = track.get_new_node_from_node_and_model(model, prev_node)
+    # FYI, node setup:
+    # NewPosition, NewDirection, NewHeading, IsReversed
 
     points = get_block_points_from_nodes(prev_node, current_node)
 
@@ -126,15 +128,59 @@ def generate_pieces_from_node_and_mdl(model, prev_node, mode):
     if valid:
         valid = not are_points_blocked(points)
 
-    shift = (0, 0, 0)
+    def add_model(shift=(0, 0, 0), mdloverwrite=""):
 
-    pos, yaw = track.convert_model_nodes_to_real_pos_and_angle(
-        model, prev_node, current_node, shift
-    )
-    models += (model, pos, yaw)
-    median_extra_length = 0  # will be accounted for later
+        mdl = mdloverwrite if mdloverwrite != "" else model
 
-    # if track-end is inside a block
+        pos, yaw = track.convert_model_nodes_to_real_pos_and_angle(
+            mdl, prev_node, current_node, shift
+        )
+        return (mdl, pos, yaw)
+
+    EndDirection = current_node[1]
+
+    if mode == "left":
+        if (EndDirection) == "0fw":
+            mainshift = tools.rot_z((0, 0, 0), prev_node[2])
+            sidingshift = tools.rot_z((0, -192, 0), prev_node[2])
+        elif (EndDirection) == "1lt":
+            mainshift = tools.rot_z((-48, 0, 0), prev_node[2])
+            sidingshift = tools.rot_z((0, -192, 0), prev_node[2])
+        elif (EndDirection) == "2lt":
+            mainshift = tools.rot_z((-96, 0, 0), prev_node[2])
+            sidingshift = tools.rot_z((0, -192, 0), prev_node[2])
+        elif (EndDirection) == "4lt":
+            mainshift = tools.rot_z((-64, 0, 0), prev_node[2])
+            sidingshift = tools.rot_z((0, -192, 0), prev_node[2])
+        elif "8lt" in model:
+            mainshift = tools.rot_z((-128, 0, 0), prev_node[2])
+            sidingshift = tools.rot_z((0, -192, 0), prev_node[2])
+        elif (EndDirection) == "1rt":
+            mainshift = tools.rot_z((0, 0, 0), prev_node[2])
+            sidingshift = tools.rot_z((-48, -192, 0), prev_node[2])
+        elif (EndDirection) == "2rt":
+            mainshift = tools.rot_z((0, 0, 0), prev_node[2])
+            sidingshift = tools.rot_z((-96, -192, 0), prev_node[2])
+        elif (EndDirection) == "4rt":
+            mainshift = tools.rot_z((0, 0, 0), prev_node[2])
+            sidingshift = tools.rot_z((-64, -192, 0), prev_node[2])
+        elif "8rt" in model:
+            mainshift = tools.rot_z((0, 0, 0), prev_node[2])
+            sidingshift = tools.rot_z((-128, -192, 0), prev_node[2])
+
+    else:
+        mainshift = tools.rot_z((0, 0, 0), prev_node[2])
+        sidingshift = tools.rot_z((0, -192, 0), prev_node[2])
+
+    models.append(add_model(mainshift))
+    models.append(add_model(sidingshift))
+
+    if mode == "left":
+        median_extra_length = 0
+        # zero when straight, 48 for 1rt, 96 for 2rt, 128 for 4rt, all divided by two for median for 1 track over
+    else:
+        median_extra_length = 0
+
     return (current_node, valid, points, models, median_extra_length)
 
 
@@ -325,13 +371,11 @@ def generation_process(
                 longest_fail_length = new_length
                 longest_fail = steps[:]
                 if len(steps) == 1:
-                    longest_fail += new_step(
-                        result_node, new_length, points, track_to_test
-                    )
+                    longest_fail += new_step(result_node, new_length, points, models)
 
             if valid:
 
-                steps += new_step(result_node, new_length, points, track_to_test)
+                steps += new_step(result_node, new_length, points, models)
                 break
 
             else:
@@ -375,7 +419,7 @@ def generation_process(
         sec = tools.stopwatch_click(
             "trackhammer", f"{candidates_to_generate}, {logLength}"
         )
-        print(f"{logLength/sec}")
+        print(f"Trackhammer finished normally: {logLength} length, {sec} seconds.")
         return steps
 
 
@@ -387,7 +431,7 @@ def create_rail_path(start_node, track_profile, params={}):
     blocks_remove(get_block_ids(start_node[0]))
 
     # system for testing multiple variations of rollbacks and candidates, currently semi-disabled
-    rollbacks = [16000]
+    rollbacks = [32000]
     candidates = [40]
     random.shuffle(rollbacks)
     random.shuffle(candidates)
