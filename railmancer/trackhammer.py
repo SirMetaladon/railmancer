@@ -141,36 +141,36 @@ def generate_pieces_from_node_and_mdl(model, prev_node, mode):
 
     if mode == "left":
         if (EndDirection) == "0fw":
-            mainshift = tools.rot_z((0, 0, 0), prev_node[2])
-            sidingshift = tools.rot_z((0, -192, 0), prev_node[2])
+            mainshift = tools.rot_orth((0, 0, 0), prev_node[2])
+            sidingshift = tools.rot_orth((0, -192, 0), prev_node[2])
         elif (EndDirection) == "1lt":
-            mainshift = tools.rot_z((-48, 0, 0), prev_node[2])
-            sidingshift = tools.rot_z((0, -192, 0), prev_node[2])
+            mainshift = tools.rot_orth((-48, 0, 0), prev_node[2])
+            sidingshift = tools.rot_orth((0, -192, 0), prev_node[2])
         elif (EndDirection) == "2lt":
-            mainshift = tools.rot_z((-96, 0, 0), prev_node[2])
-            sidingshift = tools.rot_z((0, -192, 0), prev_node[2])
+            mainshift = tools.rot_orth((-96, 0, 0), prev_node[2])
+            sidingshift = tools.rot_orth((0, -192, 0), prev_node[2])
         elif (EndDirection) == "4lt":
-            mainshift = tools.rot_z((-64, 0, 0), prev_node[2])
-            sidingshift = tools.rot_z((0, -192, 0), prev_node[2])
+            mainshift = tools.rot_orth((-64, 0, 0), prev_node[2])
+            sidingshift = tools.rot_orth((0, -192, 0), prev_node[2])
         elif "8lt" in model:
-            mainshift = tools.rot_z((-128, 0, 0), prev_node[2])
-            sidingshift = tools.rot_z((0, -192, 0), prev_node[2])
+            mainshift = tools.rot_orth((-128, 0, 0), prev_node[2])
+            sidingshift = tools.rot_orth((0, -192, 0), prev_node[2])
         elif (EndDirection) == "1rt":
-            mainshift = tools.rot_z((0, 0, 0), prev_node[2])
-            sidingshift = tools.rot_z((-48, -192, 0), prev_node[2])
+            mainshift = tools.rot_orth((0, 0, 0), prev_node[2])
+            sidingshift = tools.rot_orth((-48, -192, 0), prev_node[2])
         elif (EndDirection) == "2rt":
-            mainshift = tools.rot_z((0, 0, 0), prev_node[2])
-            sidingshift = tools.rot_z((-96, -192, 0), prev_node[2])
+            mainshift = tools.rot_orth((0, 0, 0), prev_node[2])
+            sidingshift = tools.rot_orth((-96, -192, 0), prev_node[2])
         elif (EndDirection) == "4rt":
-            mainshift = tools.rot_z((0, 0, 0), prev_node[2])
-            sidingshift = tools.rot_z((-64, -192, 0), prev_node[2])
+            mainshift = tools.rot_orth((0, 0, 0), prev_node[2])
+            sidingshift = tools.rot_orth((-64, -192, 0), prev_node[2])
         elif "8rt" in model:
-            mainshift = tools.rot_z((0, 0, 0), prev_node[2])
-            sidingshift = tools.rot_z((-128, -192, 0), prev_node[2])
+            mainshift = tools.rot_orth((0, 0, 0), prev_node[2])
+            sidingshift = tools.rot_orth((-128, -192, 0), prev_node[2])
 
     else:
-        mainshift = tools.rot_z((0, 0, 0), prev_node[2])
-        sidingshift = tools.rot_z((0, -192, 0), prev_node[2])
+        mainshift = tools.rot_orth((0, 0, 0), prev_node[2])
+        sidingshift = tools.rot_orth((0, -192, 0), prev_node[2])
 
     models.append(add_model(mainshift))
     models.append(add_model(sidingshift))
@@ -307,16 +307,17 @@ def generation_process(
     longest_fail = []
     longest_fail_length = 0
 
-    debug_reporting_interval = 100000
+    debug_reporting_interval = 10000
     debug_maximum_count = debug_reporting_interval * 25
 
-    def debug_logger(stepcount, new_length):
+    def debug_logger(steps, new_length):
 
         global logLength
         global debug_overall_count
 
         if debug_overall_count % debug_reporting_interval == 0:
             logLength = max(logLength, round(tools.miles(new_length), 3))
+            print(len(steps[0]["candidate_tracks"]))
             print(
                 f"{len(steps)} steps, {round(tools.miles(new_length), 3)} miles, {len(current_step["candidate_tracks"])} candidates, {len(Blocks)} blocks."
             )
@@ -342,14 +343,21 @@ def generation_process(
     while (
         steps[-1]["length"] < track_profile[-1]
         and debug_overall_count < debug_maximum_count
+        and len(steps) > 0
     ):
+
+        # print(len(steps))
+
         # might include a break inside, but this is a failsafe
 
+        # updates blocker to be correct
         blocks_current_step_index = update_blocks(steps, blocks_current_step_index)
 
         current_step = steps[-1]
 
-        while len(current_step["candidate_tracks"]):
+        BreakFlag = False
+
+        while len(current_step["candidate_tracks"]) != 0:
 
             track_to_test = current_step["candidate_tracks"][-1]
 
@@ -366,28 +374,36 @@ def generation_process(
                 + median_extra_length
             )
 
-            if new_length > longest_fail_length:
-
-                longest_fail_length = new_length
-                longest_fail = steps[:]
-                if len(steps) == 1:
-                    longest_fail += new_step(result_node, new_length, points, models)
-
             if valid:
 
                 steps += new_step(result_node, new_length, points, models)
+
+                if new_length > longest_fail_length:
+
+                    longest_fail_length = new_length
+                    longest_fail = steps[:]
+                    if len(steps) == 1:
+                        longest_fail += new_step(
+                            result_node, new_length, points, models
+                        )
+
+                BreakFlag = True
                 break
 
             else:
 
-                current_step["candidate_tracks"].remove(track_to_test)
+                current_step["candidate_tracks"].pop(-1)
 
-            debug_logger(len(steps), new_length)
+            debug_logger(steps, new_length)
+
+        if BreakFlag:
+
+            BreakFlag = False
+            continue
 
         # if there's literally nothing left to do
-        if len(steps) == 1 & len(current_step["candidate_tracks"]) == 0:
+        if len(steps) == 1 and len(current_step["candidate_tracks"]) == 0:
 
-            print(steps)
             print("Steps process has died! Exiting.")
             return longest_fail
 
@@ -432,7 +448,7 @@ def create_rail_path(start_node, track_profile, params={}):
 
     # system for testing multiple variations of rollbacks and candidates, currently semi-disabled
     rollbacks = [32000]
-    candidates = [40]
+    candidates = [20]
     random.shuffle(rollbacks)
     random.shuffle(candidates)
 

@@ -33,26 +33,104 @@ def stopwatch_click(name: str, blurb: str = "") -> float:
     return sec
 
 
-def rot_z(Vector, Angle):
-    math = Angle * (np.pi / 180)  # radians
+def rot2(v, angle):
+    """
+    BUILT BY CHATGPT 5-24-26
+    Rotate a 2D vector by any angle in degrees.
 
-    if len(Vector) == 3:
-        rotator = np.array(
-            [
-                [np.cos(math), -np.sin(math), 0],
-                [np.sin(math), np.cos(math), 0],
-                [0, 0, 1],
-            ]
-        )
-    elif len(Vector) == 2:
-        rotator = np.array(
-            [[np.cos(math), -np.sin(math)], [np.sin(math), np.cos(math)]]
-        )
+    Parameters
+    ----------
+    v : array-like
+        [x, y]
+    angle : float
+        Rotation angle in degrees.
 
-    else:
-        return Vector
+    Returns
+    -------
+    np.ndarray
+        Rotated vector.
+    """
 
-    return rotator @ Vector
+    r = np.deg2rad(angle)
+
+    c = np.cos(r)
+    s = np.sin(r)
+
+    x, y = v
+
+    return np.array([c * x - s * y, s * x + c * y])
+
+
+def rot3(v, angle):
+    """
+    BUILT BY CHATGPT 5-24-26
+    Rotate a 3D vector around the Z axis by any angle in degrees.
+
+    Parameters
+    ----------
+    v : array-like
+        [x, y, z]
+    angle : float
+        Rotation angle in degrees.
+
+    Returns
+    -------
+    np.ndarray
+        Rotated vector.
+    """
+
+    r = np.deg2rad(angle)
+
+    c = np.cos(r)
+    s = np.sin(r)
+
+    x, y, z = v
+
+    return np.array([c * x - s * y, s * x + c * y, z])
+
+
+def rot_orth(v, turns):
+    """
+    BUILT BY CHATGPT 5-24-26
+    Fast orthogonal 3D Z-axis rotation.
+    Optimized for 90-degree increments only.
+
+    Parameters
+    ----------
+    v : array-like
+        [x, y, z]
+    turns : int
+        Number of 90-degree clockwise turns.
+        Examples:
+            1  = 90°
+            2  = 180°
+            3  = 270°
+            4  = 0°
+            -1 = -90°
+
+    Returns
+    -------
+    np.ndarray
+        Rotated vector.
+    """
+
+    x, y, z = v
+
+    turns /= 90
+    turns = int(turns)
+    turns %= 4
+
+    if turns == 0:
+        return np.array([x, y, z])
+
+    elif turns == 1:
+        return np.array([-y, x, z])
+
+    elif turns == 2:
+        return np.array([-x, -y, z])
+
+    else:  # turns == 3
+        return np.array([y, -x, z])
 
 
 def is_same(v1, v2):
@@ -215,3 +293,8 @@ def inches(miles):
 def miles(inches):
 
     return inches / 63360
+
+
+def add(v1, v2):
+
+    return tuple(map(sum, zip(v1, v2)))

@@ -166,9 +166,13 @@ def convert_nodes_to_bezier(
     p0 = np.array([start_position[0], start_position[1]])
     p3 = np.array([end_position[0], end_position[1]])
 
+    # two dimensionalize
+    dir1 = np.array([start_direction[0], start_direction[1]])
+    dir2 = np.array([end_direction[0], end_direction[1]])
+
     # Normalize direction vectors
-    d0 = start_direction / np.linalg.norm(start_direction)
-    d3 = -end_direction / np.linalg.norm(end_direction)
+    d0 = dir1 / np.linalg.norm(dir1)
+    d3 = -dir2 / np.linalg.norm(dir2)
 
     # Check if the direction vectors are collinear
     cross_directions = np.cross(d0, d3)
@@ -187,8 +191,8 @@ def convert_nodes_to_bezier(
         return [
             (
                 start_position,
-                np.array(start_position) * (2 / 3) + np.array(end_position) * (1 / 3),
-                np.array(start_position) * (1 / 3) + np.array(end_position) * (2 / 3),
+                p0 * (2 / 3) + p3 * (1 / 3),
+                p0 * (1 / 3) + p3 * (2 / 3),
                 end_position,
             )
         ]

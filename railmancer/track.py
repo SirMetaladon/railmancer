@@ -40,33 +40,33 @@ def determine_grade_level(real_grade):
 def get_heading(raw_direction):
 
     if raw_direction == "0fw":
-        return (-4, 0)
+        return (-4, 0, 0)
     elif raw_direction == "1rt":
-        return (-4, 1)
+        return (-4, 1, 0)
     elif raw_direction == "1lt":
-        return (-4, -1)
+        return (-4, -1, 0)
     elif raw_direction == "2rt":
-        return (-4, 2)
+        return (-4, 2, 0)
     elif raw_direction == "2lt":
-        return (-4, -2)
+        return (-4, -2, 0)
 
     elif raw_direction == "4rt":
-        return (-4, 4)
+        return (-4, 4, 0)
     elif raw_direction == "4lt":
-        return (-4, -4)
+        return (-4, -4, 0)
     elif raw_direction == "8rt":
-        return (0, 4)
+        return (0, 4, 0)
     elif raw_direction == "8lt":
-        return (0, -4)
+        return (0, -4, 0)
 
     elif raw_direction == "6rt":
-        return (-2, 4)
+        return (-2, 4, 0)
     elif raw_direction == "6lt":
-        return (2, -4)
+        return (2, -4, 0)
     elif raw_direction == "7rt":
-        return (-1, 4)
+        return (-1, 4, 0)
     elif raw_direction == "7lt":
-        return (1, -4)
+        return (1, -4, 0)
     else:
         print(raw_direction)
 
@@ -377,13 +377,13 @@ def length_to_model_straight(length, direction, gradelevel):
 
 def add_lines_from_track(pos, track_object, heading):
 
-    EndPos = pos + tools.rot_z(track_object["Move"], heading)
+    EndPos = pos + tools.rot_orth(track_object["Move"], heading)
 
     lines.write_bezier_points(
         pos,
         EndPos,
-        tools.rot_z(get_heading(track_object["StartDirection"]), heading),
-        tools.rot_z(get_heading(track_object["EndDirection"]), heading + 180),
+        tools.rot_orth(get_heading(track_object["StartDirection"]), heading),
+        tools.rot_orth(get_heading(track_object["EndDirection"]), heading + 180),
     )
 
 
@@ -408,7 +408,7 @@ def convert_model_nodes_to_real_pos_and_angle(
     )
 
     Angle = ModelHeading + RotFix
-    ModelPos = tuple(map(sum, zip(ModelPos, shift)))
+    ModelPos = tools.add(ModelPos, shift)
 
     return ModelPos, Angle
 
@@ -431,7 +431,7 @@ def write_track(model, ModelPos, Angle):
 
 def updated_position(position, jump, heading):
 
-    return np.round(np.add(position, tools.rot_z(jump, heading)))
+    return np.round(np.add(position, tools.rot_orth(jump, heading)))
 
 
 def get_new_node_from_node_and_model(Model, Node, ReverseStraight=False):

@@ -394,7 +394,7 @@ def height_sample(real_x, real_y, samples, radius, sector_data) -> list[float]:
 
     for Slice in range(samples):
 
-        offset = tools.rot_z(Arm, Slice * SectorSize)
+        offset = tools.rot2(Arm, Slice * SectorSize)
 
         Example = query_field(
             "height", (real_x + offset[0], real_y + offset[1], guess_z)

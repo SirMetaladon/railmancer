@@ -40,10 +40,10 @@ def add_entity_to_new_map(Entity, Data):
 
         StandPos1 = np.add(
             Pos,
-            tools.rot_z(np.array([-110, -100, -17.5]), StandAngle),
+            tools.rot3(np.array([-110, -100, -17.5]), StandAngle),
         )
 
-        StandPos2 = np.add(Pos, tools.rot_z(np.array([-110, 100, -17.5]), StandAngle))
+        StandPos2 = np.add(Pos, tools.rot3(np.array([-110, 100, -17.5]), StandAngle))
 
         vmfpy.add_entity(
             [
