@@ -192,7 +192,7 @@ def distribute(min_distance, TotalPoints, sector_data):
             dist = realdist - Model["exclusion_radius"]
 
             Hardline = Terrain.get("tree_hard_distance", 128)
-            Softline = Terrain.get("tree_fade_distance", 300)
+            Softline = Terrain.get("tree_fade_distance", 128)
 
             if dist <= Hardline:
                 continue

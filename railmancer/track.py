@@ -434,7 +434,36 @@ def updated_position(position, jump, heading):
     return np.round(np.add(position, tools.rot_orth(jump, heading)))
 
 
-def get_new_node_from_node_and_model(Model, Node, ReverseStraight=False):
+def straight_convert_to_move(length, direction):
+
+    if direction == "1rt":
+        return (-length, length * 0.25, 0)
+    if direction == "2rt":
+        return (-length, length * 0.5, 0)
+    if direction == "4rt":
+        return (-length, length, 0)
+    if direction == "6rt":
+        return (-length * 0.5, length, 0)
+    if direction == "8rt":
+        return (0, length, 0)
+    if direction == "1lt":
+        return (-length, -length * 0.25, 0)
+    if direction == "2lt":
+        return (-length, -length * 0.5, 0)
+    if direction == "4lt":
+        return (-length, -length, 0)
+    if direction == "6lt":
+        return (-length * 0.5, -length, 0)
+    if direction == "8lt":
+        return (0, -length, 0)
+
+    # 0fw
+    return (-length, 0, 0)
+
+
+def get_new_node_from_node_and_model(
+    Model, Node, ReverseStraight=False, AddStart=0, AddEnd=0
+):
 
     Position, Direction, Heading, _ = Node  # I don't even use it here what
     # EDITORS NOTE THE 4th SLOT IS FOR MODEL REVERSING (does not effect the jump, only rotation of the model)
@@ -467,8 +496,18 @@ def get_new_node_from_node_and_model(Model, Node, ReverseStraight=False):
 
     if IsReversed:
         final_move = (move_x, move_y, -move_z)
+        additional_move = np.add(
+            straight_convert_to_move(AddStart, track_data["EndDirection"]),
+            straight_convert_to_move(AddEnd, track_data["StartDirection"]),
+        )
     else:
         final_move = (move_x, move_y, move_z)
+        additional_move = np.add(
+            straight_convert_to_move(AddStart, Direction),
+            straight_convert_to_move(AddEnd, NewDirection),
+        )
+
+    final_move = np.add(final_move, additional_move)
 
     NewHeading = Heading
     if Direction[:1] == "4" and (NewHand != OldHand):

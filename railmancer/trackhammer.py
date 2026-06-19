@@ -115,73 +115,84 @@ def get_block_points_from_nodes(current_node, next_node):
 # From a model and a current node, return the resulting node, and whether the track is valid according to blocking and maximum border size.
 def generate_pieces_from_node_and_mdl(model, prev_node, mode):
 
-    models = []
-    current_node = track.get_new_node_from_node_and_model(model, prev_node)
-    # FYI, node setup:
-    # NewPosition, NewDirection, NewHeading, IsReversed
+    current_node = track.get_new_node_from_node_and_model(
+        model, prev_node, False, 512, 0
+    )
 
-    points = get_block_points_from_nodes(prev_node, current_node)
+    points = get_block_points_from_nodes(
+        prev_node,
+        current_node,
+    )
 
-    end = (int(current_node[0][0]), int(current_node[0][1]))
-    valid = tools.within2d(end, TEST.get("trackhammer_border"))
+    end = (
+        int(current_node[0][0]),
+        int(current_node[0][1]),
+    )
 
-    if valid:
-        valid = not are_points_blocked(points)
+    if not tools.within2d(end, TEST.get("trackhammer_border")):
+        return None
+
+    if are_points_blocked(points):
+        return None
 
     def add_model(shift=(0, 0, 0), mdloverwrite=""):
 
         mdl = mdloverwrite if mdloverwrite != "" else model
 
         pos, yaw = track.convert_model_nodes_to_real_pos_and_angle(
-            mdl, prev_node, current_node, shift
+            mdl,
+            prev_node,
+            current_node,
+            shift,
         )
-        return (mdl, pos, yaw)
 
-    EndDirection = current_node[1]
+        return (model, pos, yaw)
+
+    heading = prev_node[2]
+    end_direction = current_node[1]
 
     if mode == "left":
-        if (EndDirection) == "0fw":
-            mainshift = tools.rot_orth((0, 0, 0), prev_node[2])
-            sidingshift = tools.rot_orth((0, -192, 0), prev_node[2])
-        elif (EndDirection) == "1lt":
-            mainshift = tools.rot_orth((-48, 0, 0), prev_node[2])
-            sidingshift = tools.rot_orth((0, -192, 0), prev_node[2])
-        elif (EndDirection) == "2lt":
-            mainshift = tools.rot_orth((-96, 0, 0), prev_node[2])
-            sidingshift = tools.rot_orth((0, -192, 0), prev_node[2])
-        elif (EndDirection) == "4lt":
-            mainshift = tools.rot_orth((-64, 0, 0), prev_node[2])
-            sidingshift = tools.rot_orth((0, -192, 0), prev_node[2])
-        elif "8lt" in model:
-            mainshift = tools.rot_orth((-128, 0, 0), prev_node[2])
-            sidingshift = tools.rot_orth((0, -192, 0), prev_node[2])
-        elif (EndDirection) == "1rt":
-            mainshift = tools.rot_orth((0, 0, 0), prev_node[2])
-            sidingshift = tools.rot_orth((-48, -192, 0), prev_node[2])
-        elif (EndDirection) == "2rt":
-            mainshift = tools.rot_orth((0, 0, 0), prev_node[2])
-            sidingshift = tools.rot_orth((-96, -192, 0), prev_node[2])
-        elif (EndDirection) == "4rt":
-            mainshift = tools.rot_orth((0, 0, 0), prev_node[2])
-            sidingshift = tools.rot_orth((-64, -192, 0), prev_node[2])
+
+        shifts = {
+            "0fw": ((0, 0, 0), (0, -192, 0)),
+            "1lt": ((-48, 0, 0), (0, -192, 0)),
+            "2lt": ((-96, 0, 0), (0, -192, 0)),
+            "4lt": ((-64, 0, 0), (0, -192, 0)),
+            "1rt": ((0, 0, 0), (-48, -192, 0)),
+            "2rt": ((0, 0, 0), (-96, -192, 0)),
+            "4rt": ((0, 0, 0), (-64, -192, 0)),
+        }
+
+        if "8lt" in model:
+            main_shift = (-128, 0, 0)
+            siding_shift = (0, -192, 0)
+
         elif "8rt" in model:
-            mainshift = tools.rot_orth((0, 0, 0), prev_node[2])
-            sidingshift = tools.rot_orth((-128, -192, 0), prev_node[2])
+            main_shift = (0, 0, 0)
+            siding_shift = (-128, -192, 0)
+
+        else:
+            main_shift, siding_shift = shifts[end_direction]
 
     else:
-        mainshift = tools.rot_orth((0, 0, 0), prev_node[2])
-        sidingshift = tools.rot_orth((0, -192, 0), prev_node[2])
 
-    models.append(add_model(mainshift))
-    models.append(add_model(sidingshift))
+        main_shift = (0, 0, 0)
+        siding_shift = (0, -192, 0)
+
+    models = [add_model(tools.rot_orth(main_shift, heading))]
 
     if mode == "left":
-        median_extra_length = 0
-        # zero when straight, 48 for 1rt, 96 for 2rt, 128 for 4rt, all divided by two for median for 1 track over
-    else:
-        median_extra_length = 0
+        models += [add_model(tools.rot_orth(siding_shift, heading))]
 
-    return (current_node, valid, points, models, median_extra_length)
+    median_extra_length = 0
+    track_length = track.get_length(model) + median_extra_length
+
+    return (
+        current_node,
+        points,
+        models,
+        track_length,
+    )
 
 
 # Queries the track system to find valid tracks according to grade and curvature rules, then returns a randomized selection
@@ -317,14 +328,25 @@ def generation_process(
 
         if debug_overall_count % debug_reporting_interval == 0:
             logLength = max(logLength, round(tools.miles(new_length), 3))
-            print(len(steps[0]["candidate_tracks"]))
+            print()
             print(
-                f"{len(steps)} steps, {round(tools.miles(new_length), 3)} miles, {len(current_step["candidate_tracks"])} candidates, {len(Blocks)} blocks."
+                f"{len(steps[0]["candidate_tracks"])} base candidates,"
+                f"{len(steps)} current steps, "
+                f"{round(tools.miles(new_length), 3)} miles, "
+                f"{len(current_step['candidate_tracks'])} current candidates, "
+                f"{len(Blocks)} blocks."
             )
         debug_overall_count += 1
 
     # helper function that produces a prefilled "step" for moving forward
-    def new_step(start_node, existing_length=0, points=[], models=[]):
+    def new_step(start_node, existing_length=0, points=None, models=None):
+
+        if points is None:
+            points = []
+
+        if models is None:
+            models = []
+
         return [
             {
                 "models": models,
@@ -332,111 +354,150 @@ def generation_process(
                 "length": existing_length,
                 "candidate_tracks": generate_selection_of_possible_tracks(
                     start_node, candidates_to_generate, params
-                ),  # count of these remaining = your fail counter
+                ),
                 "points": points,
                 "blocks_added": [],
             }
         ]
 
-    steps = new_step(start_node)
-
-    while (
-        steps[-1]["length"] < track_profile[-1]
-        and debug_overall_count < debug_maximum_count
-        and len(steps) > 0
+    def update_longest_fail(
+        steps,
+        result_node,
+        new_length,
+        points,
+        models,
     ):
+        nonlocal longest_fail
+        nonlocal longest_fail_length
 
-        # print(len(steps))
+        if new_length <= longest_fail_length:
+            return
 
-        # might include a break inside, but this is a failsafe
+        longest_fail_length = new_length
+        longest_fail = steps[:]
 
-        # updates blocker to be correct
-        blocks_current_step_index = update_blocks(steps, blocks_current_step_index)
+        if len(steps) == 1:
+            longest_fail += new_step(
+                result_node,
+                new_length,
+                points,
+                models,
+            )
+
+    def backtrack(steps, blocks_current_step_index):
 
         current_step = steps[-1]
 
-        BreakFlag = False
+        existing_length = current_step["length"]
+        target_length = existing_length - backtrack_distance
 
-        while len(current_step["candidate_tracks"]) != 0:
+        while steps[-1]["length"] > target_length and len(steps) > 1:
+
+            blocks_remove(steps[-1]["blocks_added"])
+            steps.pop()
+
+            blocks_current_step_index = min(
+                blocks_current_step_index,
+                len(steps) - 1,
+            )
+
+        return blocks_current_step_index
+
+    def try_candidates(current_step, steps, mode):
+
+        while current_step["candidate_tracks"]:
 
             track_to_test = current_step["candidate_tracks"][-1]
 
-            result_node, valid, points, models, median_extra_length = (
-                generate_pieces_from_node_and_mdl(
-                    track_to_test, current_step["node"], "left"  # mode
-                )
+            result = generate_pieces_from_node_and_mdl(
+                track_to_test,
+                current_step["node"],
+                mode,
             )
 
-            #
-            new_length = (
-                current_step["length"]
-                + track.get_length(track_to_test)
-                + median_extra_length
+            if result is None:
+
+                current_step["candidate_tracks"].pop()
+                debug_logger(steps, current_step["length"])
+                continue
+
+            (
+                result_node,
+                points,
+                models,
+                track_length,
+            ) = result
+
+            new_length = current_step["length"] + track_length
+
+            steps += new_step(
+                result_node,
+                new_length,
+                points,
+                models,
             )
 
-            if valid:
+            update_longest_fail(
+                steps,
+                result_node,
+                new_length,
+                points,
+                models,
+            )
 
-                steps += new_step(result_node, new_length, points, models)
+            return True
 
-                if new_length > longest_fail_length:
+        return False
 
-                    longest_fail_length = new_length
-                    longest_fail = steps[:]
-                    if len(steps) == 1:
-                        longest_fail += new_step(
-                            result_node, new_length, points, models
-                        )
+    steps = new_step(start_node)
 
-                BreakFlag = True
-                break
+    while (
+        len(steps) > 0
+        and steps[-1]["length"] < track_profile[-1]
+        and debug_overall_count < debug_maximum_count
+    ):
 
-            else:
+        blocks_current_step_index = update_blocks(
+            steps,
+            blocks_current_step_index,
+        )
 
-                current_step["candidate_tracks"].pop(-1)
+        current_step = steps[-1]
 
-            debug_logger(steps, new_length)
-
-        if BreakFlag:
-
-            BreakFlag = False
+        if try_candidates(current_step, steps, track_profile[0]):
+            # continue to the next step
             continue
 
-        # if there's literally nothing left to do
+        # if it happens that you ran out of candidates in the base step:
         if len(steps) == 1 and len(current_step["candidate_tracks"]) == 0:
 
             print("Steps process has died! Exiting.")
             return longest_fail
 
-        # If you ran out of attempts to place a track this step, roll back by the specified length
-        elif len(current_step["candidate_tracks"]) == 0:
+        # if your candidates did not succeed, backtrack
+        blocks_current_step_index = backtrack(
+            steps,
+            blocks_current_step_index,
+        )
 
-            existing_length = current_step["length"]
-            target_length = existing_length - backtrack_distance
-
-            # while the current end length is greater than the target, back up
-            while steps[-1]["length"] > target_length and len(steps) > 1:
-
-                blocks_remove(steps[-1]["blocks_added"])
-                steps.pop(-1)
-
-                blocks_current_step_index = min(
-                    blocks_current_step_index, len(steps) - 1
-                )
-
+    # if the process has concluded:
     if debug_overall_count >= debug_maximum_count:
+
         print(
             "Longest usable section loaded: ",
             round(tools.miles(longest_fail[-1]["length"]), 3),
         )
+
         return longest_fail
 
-    else:
+    sec = tools.stopwatch_click(
+        "trackhammer",
+        f"{candidates_to_generate}, {logLength}",
+    )
 
-        sec = tools.stopwatch_click(
-            "trackhammer", f"{candidates_to_generate}, {logLength}"
-        )
-        print(f"Trackhammer finished normally: {logLength} length, {sec} seconds.")
-        return steps
+    print(f"Trackhammer finished normally: " f"{logLength} length, {sec} seconds.")
+
+    return steps
 
 
 def create_rail_path(start_node, track_profile, params={}):
