@@ -461,20 +461,27 @@ def straight_convert_to_move(length, direction):
     return (-length, 0, 0)
 
 
+def get_end_direction(model, current_direction):
+
+    track_data = track_model_library[model]
+
+    return (
+        track_data["StartDirection"]
+        if track_data["StartDirection"][:1] != current_direction[:1]
+        else track_data["EndDirection"]
+    )
+
+
 def get_new_node_from_node_and_model(
     Model, Node, ReverseStraight=False, AddStart=0, AddEnd=0
 ):
 
-    Position, Direction, Heading, _ = Node  # I don't even use it here what
+    Position, current_direction, Heading, _ = Node  # I don't even use it here what
     # EDITORS NOTE THE 4th SLOT IS FOR MODEL REVERSING (does not effect the jump, only rotation of the model)
 
     track_data = track_model_library[Model]
 
-    NewDirection = (
-        track_data["StartDirection"]
-        if track_data["StartDirection"][:1] != Direction[:1]
-        else track_data["EndDirection"]
-    )
+    NewDirection = get_end_direction(Model, current_direction)
 
     # this will use the new heading rotation if it's a 45, and the old one if it's a 90
     NewHand = (
@@ -482,7 +489,7 @@ def get_new_node_from_node_and_model(
         if track_data["StartDirection"][1:] != "fw"
         else track_data["EndDirection"][1:]
     )
-    OldHand = Direction[1:]
+    OldHand = current_direction[1:]
 
     IsReversed = (
         NewDirection != track_data["EndDirection"]
@@ -503,14 +510,14 @@ def get_new_node_from_node_and_model(
     else:
         final_move = (move_x, move_y, move_z)
         additional_move = np.add(
-            straight_convert_to_move(AddStart, Direction),
+            straight_convert_to_move(AddStart, current_direction),
             straight_convert_to_move(AddEnd, NewDirection),
         )
 
     final_move = np.add(final_move, additional_move)
 
     NewHeading = Heading
-    if Direction[:1] == "4" and (NewHand != OldHand):
+    if current_direction[:1] == "4" and (NewHand != OldHand):
         # if old hand is lt and
         if NewHand == "rt":
             NewHeading = Heading + 90

@@ -112,11 +112,151 @@ def get_block_points_from_nodes(current_node, next_node):
     return [next_node[0]] + extras
 
 
+DIRECTIONS = {
+    "0fw": (1, 0),
+    "1lt": (4, 1),
+    "2lt": (2, 1),
+    "4lt": (1, 1),
+    "8lt": (0, 1),
+    "1rt": (4, -1),
+    "2rt": (2, -1),
+    "4rt": (1, -1),
+    "8rt": (0, -1),
+}
+
+# the spacings going RIGHTWARD from Main - so turning right takes you "backwards", turning left takes you "forwards"
+TRACK_SPACING = {
+    "0fw": (0, 192),
+    "1lt": (48, 192),
+    "2lt": (96, 192),
+    "4lt": (128, 128),
+    "8lt": (192, 0),
+    "1rt": (-48, 192),
+    "2rt": (-96, 192),
+    "4rt": (-128, 128),
+    "8rt": (-192, 0),
+}
+
+"""
+0fw to 2rt
+start spacing 0, 192
+end spacing -96, 192
+start dir 1, 0
+end dir 2,-1
+
+
+delta_x = -96 - 0 #end_x - start_x
+delta_y = 0 #end_spacing_y - start_spacing_y
+
+determinant = 1 #(1 * 1) - (-2 * 0)
+
+start_distance = (-96 * 1) / 1
+
+intersection_x = 0 - 96 * 1
+intersection_y = 192
+
+
+
+
+
+"""
+
+
+def solve_first_offset(start_direction, end_direction):
+    start_dir_x, start_dir_y = DIRECTIONS[start_direction]
+    end_dir_x, end_dir_y = DIRECTIONS[end_direction]
+
+    start_spacing_x, start_spacing_y = TRACK_SPACING[start_direction]
+    end_spacing_x, end_spacing_y = TRACK_SPACING[end_direction]
+
+    # Find where these two offset track centerlines intersect:
+    #
+    # start_offset + start_distance * start_direction
+    # end_offset   + end_distance   * end_direction
+
+    delta_x = end_spacing_x - start_spacing_x
+    delta_y = end_spacing_y - start_spacing_y
+
+    determinant = (start_dir_x * -end_dir_y) - (-end_dir_x * start_dir_y)
+
+    if abs(determinant) < 1e-8:
+        # raise ValueError("Start and end directions are parallel.")
+        return start_spacing_x, start_spacing_y
+
+    start_distance = ((delta_x * -end_dir_y) - (-end_dir_x * delta_y)) / determinant
+
+    intersection_x = start_spacing_x + start_distance * start_dir_x
+    intersection_y = start_spacing_y + start_distance * start_dir_y
+
+    return intersection_x, intersection_y
+
+
+def boundary_shift(offsets, start_direction, end_direction):
+    dx, dy = DIRECTIONS[start_direction]
+
+    farthest_back_distance = min(x * dx + y * dy for x, y, _ in offsets)
+
+    if farthest_back_distance >= 0:  # if there's no infringement
+
+        output = offsets
+        startshift = 0
+
+    else:
+
+        denom = dx * dx + dy * dy
+
+        startshift = -farthest_back_distance / denom
+
+        shift_x = startshift * dx
+        shift_y = startshift * dy
+
+        output = [(x + shift_x, y + shift_y, z) for x, y, z in offsets]
+
+    dx, dy = DIRECTIONS[end_direction]
+    farthest_forward_distance = max(x * dx + y * dy for x, y, _ in offsets)
+
+    if (
+        farthest_forward_distance <= 0
+    ):  # if the main isn't pushing the node forward at all (unlikely)
+        endshift = 0
+
+    else:
+
+        denom = dx * dx + dy * dy
+
+        endshift = -farthest_forward_distance / denom
+
+    return output, startshift, endshift
+
+
+def generate_offsets(start_direction, end_direction, tracks_left, tracks_right):
+
+    first_x, first_y = solve_first_offset(start_direction, end_direction)
+
+    offsets = []
+    offsets.append((0.0, 0.0, 0.0))
+
+    for n in range(tracks_right, 0, -1):
+        offsets.append((first_x * n, first_y * n, 0.0))
+
+    for n in range(1, tracks_left + 1):
+        offsets.append((-first_x * n, -first_y * n, 0.0))
+
+    return boundary_shift(offsets, start_direction, end_direction)
+
+
 # From a model and a current node, return the resulting node, and whether the track is valid according to blocking and maximum border size.
 def generate_pieces_from_node_and_mdl(model, prev_node, mode):
 
+    current_direction = prev_node[1]
+    end_direction = track.get_end_direction(model, current_direction)
+
+    offsets, startshift, endshift = generate_offsets(
+        current_direction, end_direction, 0, 0 if mode != "left" else 1
+    )
+
     current_node = track.get_new_node_from_node_and_model(
-        model, prev_node, False, 512, 0
+        model, prev_node, False, startshift, endshift
     )
 
     points = get_block_points_from_nodes(
@@ -149,40 +289,10 @@ def generate_pieces_from_node_and_mdl(model, prev_node, mode):
         return (model, pos, yaw)
 
     heading = prev_node[2]
-    end_direction = current_node[1]
 
-    if mode == "left":
+    for entry in offsets:
 
-        shifts = {
-            "0fw": ((0, 0, 0), (0, -192, 0)),
-            "1lt": ((-48, 0, 0), (0, -192, 0)),
-            "2lt": ((-96, 0, 0), (0, -192, 0)),
-            "4lt": ((-64, 0, 0), (0, -192, 0)),
-            "1rt": ((0, 0, 0), (-48, -192, 0)),
-            "2rt": ((0, 0, 0), (-96, -192, 0)),
-            "4rt": ((0, 0, 0), (-64, -192, 0)),
-        }
-
-        if "8lt" in model:
-            main_shift = (-128, 0, 0)
-            siding_shift = (0, -192, 0)
-
-        elif "8rt" in model:
-            main_shift = (0, 0, 0)
-            siding_shift = (-128, -192, 0)
-
-        else:
-            main_shift, siding_shift = shifts[end_direction]
-
-    else:
-
-        main_shift = (0, 0, 0)
-        siding_shift = (0, -192, 0)
-
-    models = [add_model(tools.rot_orth(main_shift, heading))]
-
-    if mode == "left":
-        models += [add_model(tools.rot_orth(siding_shift, heading))]
+        models = [add_model(tools.rot_orth(entry, heading))]
 
     median_extra_length = 0
     track_length = track.get_length(model) + median_extra_length
