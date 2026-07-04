@@ -314,6 +314,86 @@ def process_siding(path):
     ]
 
 
+def process_xover(path):
+
+    data = list(path[-1].split("_"))
+
+    # x0fw left minr2048 +0768x00000 +1536x-0192 dv
+    StartDirection = data[0][1:]
+
+    data2 = data[3].split("x")
+    ChangeX = int(data2[0])
+    ChangeY = int(data2[1])
+
+    data3 = data[4].split("x")
+    ChangeX2 = int(data3[0])
+    ChangeY2 = int(data3[1])
+
+    return [
+        {
+            "Length": 0,
+            "Radius": 0,
+            "StartDirection": StartDirection,
+            "EndDirection": StartDirection,
+            "GradeLevel": 0,
+            "Move": [-ChangeX, ChangeY, 0],
+            "ApproxGrade": 0,
+            "RealGrade": 0,
+        },
+        {
+            "Length": 0,
+            "Radius": 0,
+            "StartDirection": StartDirection,
+            "EndDirection": StartDirection,
+            "GradeLevel": 0,
+            "Move": [-ChangeX2, ChangeY2, 0],
+            "ApproxGrade": 0,
+            "RealGrade": 0,
+        },
+    ]
+
+
+def process_wye(path):
+
+    data = list(path[-1].split("_"))
+
+    # w0fw 1lt 1rt r2048 +0704x-0096 +0704x+0096 dv
+    StartDirection = data[0][1:]
+    EndDirection1 = data[1]
+    EndDirection2 = data[2]
+
+    data2 = data[4].split("x")
+    ChangeX = int(data2[0])
+    ChangeY = int(data2[1])
+
+    data3 = data[5].split("x")
+    ChangeX2 = int(data3[0])
+    ChangeY2 = int(data3[1])
+
+    return [
+        {
+            "Length": 0,
+            "Radius": 0,
+            "StartDirection": StartDirection,
+            "EndDirection": EndDirection1,
+            "GradeLevel": 0,
+            "Move": [-ChangeX, ChangeY, 0],
+            "ApproxGrade": 0,
+            "RealGrade": 0,
+        },
+        {
+            "Length": 0,
+            "Radius": 0,
+            "StartDirection": StartDirection,
+            "EndDirection": EndDirection2,
+            "GradeLevel": 0,
+            "Move": [-ChangeX2, ChangeY2, 0],
+            "ApproxGrade": 0,
+            "RealGrade": 0,
+        },
+    ]
+
+
 def process_file(model):
 
     path = model.split("/")
@@ -337,6 +417,14 @@ def process_file(model):
     elif path[3] == "sidings":
 
         return process_siding(path)
+
+    elif path[3] == "xovers":
+
+        return process_xover(path)
+
+    elif path[3] == "wyes":
+
+        return process_wye(path)
 
     else:
 
