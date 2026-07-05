@@ -10,23 +10,6 @@ debug_overall_count: int = 0
 logLength: float = 0
 
 
-# From a list, pick random entries and transfer them to a second list until you either hit count or run out.
-def sprinkle_selector(list, count):
-
-    import random
-
-    output = []
-    working = list[:]
-    for _ in range(count):
-        choice = random.choice(working)
-        working.remove(choice)
-        output += [choice]
-        if count == len(output) or len(working) == 0:
-            break
-
-    return output
-
-
 # From a set of real coordinates, get a block ID in exclusion block space and return a list of the nearest 2x2 of blocks in a list
 def get_block_ids(point):
 
@@ -200,28 +183,38 @@ def look_up_offset(start_direction, end_direction):
         )
 
 
-def apply_addlength(offsets, base_direction, base_addlength, is_reversed):
+def apply_addlength(
+    offsets, base_direction, base_addlength, is_reversed, end_direction
+):
 
     if base_direction == "1rt":
-        add_offset = base_addlength / 4
-    elif base_direction == "1lt":
         add_offset = -base_addlength / 4
+    elif base_direction == "1lt":
+        add_offset = base_addlength / 4
     elif base_direction == "2rt":
-        add_offset = base_addlength / 2
-    elif base_direction == "2lt":
         add_offset = -base_addlength / 2
+    elif base_direction == "2lt":
+        add_offset = base_addlength / 2
     else:
         add_offset = 0
 
     final_offsets = []
     reverse_mult = 1 if is_reversed else -1
 
+    out_x = base_addlength * reverse_mult
+    out_y = add_offset * reverse_mult
+
+    if end_direction[0] == "8":
+        out_x = 0
+        out_y = base_addlength * (-1 if "rt" in end_direction else 1)
+
     for entry in offsets:
         final_offsets += [
             (
-                entry[0] + (base_addlength * reverse_mult),
-                entry[1] - add_offset,
+                entry[0] + out_x,
+                entry[1] + out_y,
                 entry[2],
+                entry[3],
             )
         ]
 
@@ -231,7 +224,7 @@ def apply_addlength(offsets, base_direction, base_addlength, is_reversed):
 def generate_offsets(start_direction, end_direction, tracks_left, tracks_right):
 
     offsets = []
-    offsets.append((0.0, 0.0, 0.0))
+    offsets.append((0.0, 0.0, 0.0, ""))
     start_addlength = 0
     end_addlength = 0
 
@@ -242,14 +235,41 @@ def generate_offsets(start_direction, end_direction, tracks_left, tracks_right):
         )
 
         for n in range(tracks_right, 0, -1):
-            offsets.append((first_x * n, first_y * n, 0.0))
+            offsets.append((first_x * n, first_y * n, 0.0, ""))
 
         for n in range(1, tracks_left + 1):
-            offsets.append((-first_x * n, -first_y * n, 0.0))
+            offsets.append((-first_x * n, -first_y * n, 0.0, ""))
 
         is_reversed = int(start_direction[0]) > int(end_direction[0])
+        reverse_mult = -1 if is_reversed else 1
+        direction = end_direction if is_reversed else start_direction
+
         start_addlength_step = start_base if not is_reversed else end_base
         end_addlength_step = end_base if not is_reversed else start_base
+
+        for n in range(-tracks_left, tracks_right + 1, 1):
+
+            length = start_base * (tracks_left + n)
+
+            if length > 0:
+
+                lengths = track.decompose_length_to_straights(length)
+                is_left = "lt" in direction
+                slope = int(direction[0]) / (4 * (1 if is_left else -1))
+                cumulative = 0
+
+                for section in lengths:
+                    cumulative += section
+                    mdl = track.convert_length_to_mdl(section, direction)
+
+                    offsets.append(
+                        (
+                            first_x * n + cumulative * reverse_mult,
+                            first_y * n + (slope * cumulative * reverse_mult),
+                            0.0,
+                            mdl,
+                        )
+                    )
 
         # let's think about this.
         # By default, start is start and end is end. The offset is per-track, headed right. If you are going to the right, the push-out should be positive, else negative.
@@ -270,7 +290,7 @@ def generate_offsets(start_direction, end_direction, tracks_left, tracks_right):
         base_addlength = end_addlength if is_reversed else start_addlength
 
         final_offsets = apply_addlength(
-            offsets, base_direction, base_addlength, is_reversed
+            offsets, base_direction, base_addlength, is_reversed, end_direction
         )
 
     return final_offsets, start_addlength, end_addlength
@@ -309,7 +329,7 @@ def generate_pieces_from_node_and_mdl(model, prev_node, mode):
 
     def add_model(shift=(0, 0, 0), mdloverwrite=""):
 
-        mdl = mdloverwrite if mdloverwrite != "" else model
+        mdl = mdloverwrite if mdloverwrite else model
 
         pos, yaw = track.convert_model_nodes_to_real_pos_and_angle(
             mdl,
@@ -318,14 +338,17 @@ def generate_pieces_from_node_and_mdl(model, prev_node, mode):
             shift,
         )
 
-        return (model, pos, yaw)
+        return (mdl, pos, yaw)
 
     heading = current_node[2]
     models = []
 
     for entry in offsets:
 
-        models += [add_model(tools.rot_orth(entry, heading))]
+        x, y, z, overwrite = entry
+        pos = x, y, z
+
+        models += [add_model(tools.rot_orth(pos, heading), overwrite)]
 
     median_extra_length = 0
     track_length = track.get_length(model) + median_extra_length
@@ -343,7 +366,7 @@ def generate_selection_of_possible_tracks(node, count, params={}):
 
     # takes direction, minumum radius level, minimum grade level, maximum grade level
     possible_tracks = track.valid_next_tracks(node[1], params)
-    options = sprinkle_selector(possible_tracks, count)
+    options = tools.sprinkle_selector(possible_tracks, count)
 
     if len(options) == 0:
         print("Failed to find selection: ", node, count, params)
@@ -657,7 +680,7 @@ def create_rail_path(start_node, track_profile, params={}):
     blocks_remove(get_block_ids(start_node[0]))
 
     # system for testing multiple variations of rollbacks and candidates, currently semi-disabled
-    rollbacks = [3200]
+    rollbacks = [5000]
     candidates = [20]
     random.shuffle(rollbacks)
     random.shuffle(candidates)

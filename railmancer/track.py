@@ -1,4 +1,4 @@
-import os, math, re
+import os, math, re, random
 import numpy as np
 from railmancer import lines, vmfpy, tools
 
@@ -7,6 +7,7 @@ from railmancer import lines, vmfpy, tools
 track_model_library: dict = {}
 valid_tracks_cache: dict = {}
 track_straight_cache: dict = {}
+straight_decomposition_cache: dict = {}
 
 
 def determine_real_grade(raw_grade):
@@ -714,3 +715,84 @@ def valid_next_tracks(Direction, params={}):
 def get_length(model):
 
     return track_model_library[model]["Length"]
+
+
+def decompose_length_to_straights(target):
+
+    if target in straight_decomposition_cache:
+        output = straight_decomposition_cache[target]
+        random.shuffle(output)
+        return output
+
+    print("processing", target)
+
+    def create_new_card(current_state, new_piece, target):
+        """Create a new state with the given piece added."""
+        new_total = current_state[0] + new_piece
+        new_pieces = current_state[1] + [new_piece]
+        heuristic = new_total if new_total <= target else 0
+        return (new_total, new_pieces), heuristic
+
+    if target % 16 != 0:
+        print(f"Not divisible! length: {target}")
+        return []
+
+    lengths = [
+        32,
+        48,
+        64,
+        96,
+        128,
+        192,
+        256,
+        384,
+        512,
+        768,
+        1024,
+        1536,
+        2048,
+        3072,
+        4096,
+        6144,
+        8192,
+    ]
+
+    # Initialize the starting state
+    initial_state = (0, [])
+    cards = [(initial_state, 0)]
+
+    while cards and cards[0][0][0] != target:
+        current_state = cards.pop(0)
+        for length in lengths:
+            new_card = create_new_card(current_state[0], length, target)
+
+            tools.heuristic_inserter(cards, new_card)
+
+    if cards:
+
+        straight_decomposition_cache[target] = cards[0][0][1]
+        random.shuffle(cards[0][0][1])
+        return cards[0][0][1]
+
+    else:
+        print(f"Invalid decomposition length: {target}")
+        return []
+
+
+def convert_length_to_mdl(length, direction):
+
+    if direction == "8lt":
+        direction = "0fw"
+    elif direction == "8rt":
+        direction = "0fw"
+    extra = "0" * (4 - len(str(length)))
+    over = int(straight_convert_to_move(length, direction)[1])
+    minus = "-" if over < 0 else "+"
+    extra2 = "0" * (4 - len(str(abs(over))))
+    if over == 0:
+        minus = "0"
+    if direction[0] == "4":
+        direction = "4lt"
+        minus = "-"
+
+    return f"models/trakpak3_rsg/straights/s{extra}{length}_{direction}_0pg_+{extra}{length}x{minus}{extra2}{abs(over)}x0000.mdl"

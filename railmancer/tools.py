@@ -298,3 +298,20 @@ def miles(inches):
 def add(v1, v2):
 
     return tuple(map(sum, zip(v1, v2)))
+
+
+# From a list, pick random entries and transfer them to a second list until you either hit count or run out.
+def sprinkle_selector(list, count):
+
+    import random
+
+    output = []
+    working = list[:]
+    for _ in range(count):
+        choice = random.choice(working)
+        working.remove(choice)
+        output += [choice]
+        if count == len(output) or len(working) == 0:
+            break
+
+    return output
