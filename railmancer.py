@@ -121,6 +121,8 @@ def main():
     # Places Frogs at all track-points around the map, for debugging purposes.
     tools.stopwatch_click("submodule", "Frogging the Track, done")"""
 
+    vmfpy.add_light_environment()
+
     # Compile brush, entity, and brushentity data into a VMF text file and save.
     vmfpy.write_to_vmf(f"{"railmancer"}_{random.randint(4000,4999)}{".vmf"}")
 

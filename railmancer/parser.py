@@ -45,6 +45,12 @@ def add_entity_to_new_map(Entity, Data):
 
         StandPos2 = np.add(Pos, tools.rot3(np.array([-110, 100, -17.5]), StandAngle))
 
+        GravelPos1 = np.add(Pos, tools.rot3(np.array([-110, 0, 0]), StandAngle))
+        GravelPos2 = np.add(Pos, tools.rot3(np.array([-110, 0, 0]), StandAngle))
+        # models/trakpak3_us/switchstands/bethlehem_51a_right.mdl
+        # models/trakpak3_us/switchstands/racor_112e_right.mdl
+        # models/trakpak3_common/ballast/ballast_pile_switch.mdl
+
         vmfpy.add_entity(
             [
                 ["collapse", StandPos1, StandPos2],
@@ -52,7 +58,7 @@ def add_entity_to_new_map(Entity, Data):
                     "pos-x": StandPos1[0],
                     "pos-y": StandPos1[1],
                     "pos-z": StandPos1[2],
-                    "mdl": "models/trakpak3_us/switchstands/racor_112e_right.mdl",
+                    "mdl": "models/trakpak3_us/switchstands/bethlehem_51a_right.mdl",
                     "ang-yaw": StandAngle,
                     "lever": lever_id,
                     "classname": "tp3_switch_lever_anim",
@@ -62,10 +68,34 @@ def add_entity_to_new_map(Entity, Data):
                     "pos-x": StandPos2[0],
                     "pos-y": StandPos2[1],
                     "pos-z": StandPos2[2],
-                    "mdl": "models/trakpak3_us/switchstands/racor_112e_right.mdl",
+                    "mdl": "models/trakpak3_us/switchstands/bethlehem_51a_right.mdl",
                     "ang-yaw": 180 + StandAngle,
                     "lever": lever_id,
                     "classname": "tp3_switch_lever_anim",
+                    "visgroup": "23",
+                },
+            ]
+        )
+
+        vmfpy.add_entity(
+            [
+                ["collapse", StandPos1, StandPos2],
+                {
+                    "pos-x": GravelPos1[0],
+                    "pos-y": GravelPos1[1],
+                    "pos-z": GravelPos1[2],
+                    "mdl": "models/trakpak3_common/ballast/ballast_pile_switch.mdl",
+                    "ang-yaw": 180 + StandAngle,
+                    "classname": "prop_static",
+                    "visgroup": "23",
+                },
+                {
+                    "pos-x": GravelPos2[0],
+                    "pos-y": GravelPos2[1],
+                    "pos-z": GravelPos2[2],
+                    "mdl": "models/trakpak3_common/ballast/ballast_pile_switch.mdl",
+                    "ang-yaw": StandAngle,
+                    "classname": "prop_static",
                     "visgroup": "23",
                 },
             ]
@@ -92,7 +122,7 @@ def reprocess_raw_data(raw_ents):
             "ang-pitch": Ang[0],
             "ang-yaw": Ang[1],
             "ang-roll": Ang[2],
-            "visgroup": "23",
+            "visgroup": "25",
         }
 
         Data = track.process_file(Entity["mdl"])

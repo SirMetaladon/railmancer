@@ -279,6 +279,11 @@ def brush(Brush: list):
     }}"""
 
 
+def add_light_environment():
+
+    add_entity({"classname": "light_environment"})
+
+
 # Turns the main list of Entity-list primitives into compiled strings ready for VMF assembly.
 def synthesize_entities(Entities):
 
@@ -359,6 +364,31 @@ def synthesize_entities(Entities):
                 }}
             }}"""
 
+        elif Ent.get("classname", False) == "light_environment":
+            EntityString += f"""entity
+            {{
+                "id" "{get_ID()}"
+                "classname" "light_environment"
+                "_ambient" "116 113 149 300"
+                "_ambientHDR" "-1 -1 -1 1"
+                "_AmbientScaleHDR" "1"
+                "_light" "255 226 196 500"
+                "_lightHDR" "-1 -1 -1 1"
+                "_lightscaleHDR" "1"
+                "angles" "0 60 0"
+                "pitch" "-40"
+                "SunSpreadAngle" "0"
+                "origin" "0 0 300"
+                editor
+                {{
+                    "color" "220 30 220"
+                    "visgroupid" "77"
+                    "visgroupshown" "1"
+                    "visgroupautoshown" "1"
+                    "logicalpos" "[1500 1500]"
+                }}
+            }}"""
+
         else:  # implied if you don't recognize the class or prop_static
 
             Shadows = ""
@@ -387,30 +417,6 @@ def synthesize_entities(Entities):
                     "logicalpos" "[0 0]"
                 }}
             }}"""
-
-    EntityString += f"""entity
-{{
-	"id" "{get_ID()}"
-	"classname" "light_environment"
-	"_ambient" "116 113 149 300"
-	"_ambientHDR" "-1 -1 -1 1"
-	"_AmbientScaleHDR" "1"
-	"_light" "255 226 196 500"
-	"_lightHDR" "-1 -1 -1 1"
-	"_lightscaleHDR" "1"
-	"angles" "0 60 0"
-	"pitch" "-40"
-	"SunSpreadAngle" "0"
-	"origin" "0 0 300"
-	editor
-	{{
-		"color" "220 30 220"
-		"visgroupid" "77"
-		"visgroupshown" "1"
-		"visgroupautoshown" "1"
-		"logicalpos" "[1500 1500]"
-	}}
-}}"""
 
     print(f"Synthesized {len(Entities)} entities into {len(EntityString)} chars.")
 
@@ -566,7 +572,7 @@ def write_to_vmf(filename):
         }
         visgroup
         {
-            "name" "Track"
+            "name" "New Track"
             "visgroupid" "23"
             "color" "234 131 192"
         }
@@ -574,6 +580,12 @@ def write_to_vmf(filename):
         {
             "name" "Blocks"
             "visgroupid" "24"
+            "color" "234 131 192"
+        }
+        visgroup
+        {
+            "name" "Old Track"
+            "visgroupid" "25"
             "color" "234 131 192"
         }
     }
