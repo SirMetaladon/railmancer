@@ -37,9 +37,6 @@ def main():
     # Import line objects from a VMF, as well as the track entities themselves.
     parser.import_track(vmf_input_path)
 
-    # Generate a mapping for finding the closest point relative to an existing point.
-    lines.encode_lines()  # required for exclusion to work
-
     # Starting from a node, procedurally move forward and place track, finding a path that fits the parameters.
     trackhammer.initialize()
     trackhammer.exclude_existing()

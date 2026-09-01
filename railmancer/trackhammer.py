@@ -487,6 +487,10 @@ def initialize():
     global Blocks
     Blocks = {}
 
+    # Generate a mapping for finding the closest point relative to an existing point.
+    # required for exclusion to work
+    lines.encode_lines()
+
 
 def generation_process(
     start_node,
