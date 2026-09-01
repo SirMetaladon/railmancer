@@ -508,11 +508,9 @@ def write_track(model, ModelPos, Angle):
 
     vmfpy.add_entity(
         {
-            "pos-x": ModelPos[0],
-            "pos-y": ModelPos[1],
-            "pos-z": ModelPos[2],
+            "pos": ModelPos,
             "mdl": model,
-            "ang-yaw": Angle,
+            "ang": (0, Angle, 0),
             "visgroup": "23",
         }
     )

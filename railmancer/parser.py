@@ -15,12 +15,12 @@ def get_lever():
 
 def add_entity_to_new_map(Entity, Data):
 
-    Pos = (Entity["pos-x"], Entity["pos-y"], Entity["pos-z"])
+    Pos = Entity["pos"]
 
     # Regardless of what type it is, add lines for it if it's got data
     for trackdata_chunk in Data:
 
-        track.add_lines_from_track(Pos, trackdata_chunk, Entity["ang-yaw"])
+        track.add_lines_from_track(Pos, trackdata_chunk, Entity["ang"][1])
 
     if not "switches" in Entity["mdl"]:
 
@@ -34,7 +34,7 @@ def add_entity_to_new_map(Entity, Data):
 
         vmfpy.add_entity(Entity)
 
-        StandAngle = Entity["ang-yaw"] + track.direction_to_angle(
+        StandAngle = Entity["ang"][1] + track.direction_to_angle(
             Data[0]["StartDirection"]
         )
 
@@ -55,21 +55,17 @@ def add_entity_to_new_map(Entity, Data):
             [
                 ["collapse", StandPos1, StandPos2],
                 {
-                    "pos-x": StandPos1[0],
-                    "pos-y": StandPos1[1],
-                    "pos-z": StandPos1[2],
+                    "pos": StandPos1,
                     "mdl": "models/trakpak3_us/switchstands/bethlehem_51a_right.mdl",
-                    "ang-yaw": StandAngle,
+                    "ang": (0, StandAngle, 0),
                     "lever": lever_id,
                     "classname": "tp3_switch_lever_anim",
                     "visgroup": "23",
                 },
                 {
-                    "pos-x": StandPos2[0],
-                    "pos-y": StandPos2[1],
-                    "pos-z": StandPos2[2],
+                    "pos": StandPos2,
                     "mdl": "models/trakpak3_us/switchstands/bethlehem_51a_right.mdl",
-                    "ang-yaw": 180 + StandAngle,
+                    "ang": (0, 180 + StandAngle, 0),
                     "lever": lever_id,
                     "classname": "tp3_switch_lever_anim",
                     "visgroup": "23",
@@ -81,20 +77,16 @@ def add_entity_to_new_map(Entity, Data):
             [
                 ["collapse", StandPos1, StandPos2],
                 {
-                    "pos-x": GravelPos1[0],
-                    "pos-y": GravelPos1[1],
-                    "pos-z": GravelPos1[2],
+                    "pos": GravelPos1,
                     "mdl": "models/trakpak3_common/ballast/ballast_pile_switch.mdl",
-                    "ang-yaw": 180 + StandAngle,
+                    "ang": (0, 180 + StandAngle, 0),
                     "classname": "prop_static",
                     "visgroup": "23",
                 },
                 {
-                    "pos-x": GravelPos2[0],
-                    "pos-y": GravelPos2[1],
-                    "pos-z": GravelPos2[2],
+                    "pos": GravelPos2,
                     "mdl": "models/trakpak3_common/ballast/ballast_pile_switch.mdl",
-                    "ang-yaw": StandAngle,
+                    "ang": (0, StandAngle, 0),
                     "classname": "prop_static",
                     "visgroup": "23",
                 },
@@ -107,21 +99,17 @@ def reprocess_raw_data(raw_ents):
     # recompile
     for raw_ent in raw_ents:
 
-        Pos = [float(coord) for coord in raw_ent["origin"].split(" ")]
-        Ang = [float(coord) for coord in raw_ent["angles"].split(" ")]
+        Pos = (float(coord) for coord in raw_ent["origin"].split(" "))
+        Ang = (float(coord) for coord in raw_ent["angles"].split(" "))
 
         # if raw_ent["classname"] != "prop_static":
         # Entities += [{"raw_entity": raw_ent["raw"] + "}"}]
 
         Entity = {
-            "pos-x": Pos[0],
-            "pos-y": Pos[1],
-            "pos-z": Pos[2],
+            "pos": Pos,
             "mdl": raw_ent["model"],
             "skin": raw_ent["skin"],
-            "ang-pitch": Ang[0],
-            "ang-yaw": Ang[1],
-            "ang-roll": Ang[2],
+            "ang": Ang,
             "visgroup": "25",
         }
 

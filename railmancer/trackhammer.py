@@ -221,6 +221,35 @@ def apply_addlength(
     return final_offsets
 
 
+def place_shim(length, direction, first_x, first_y, track_index, is_reversed):
+
+    if length <= 0:
+
+        return []
+
+    shims = []
+    lengths = track.decompose_length_to_straights(length)
+    is_left = "lt" in direction
+    slope = int(direction[0]) / (4 * (1 if is_left else -1))
+    cumulative = 0
+    reverse_mult = -1 if is_reversed else 1
+
+    for section in lengths:
+        cumulative += section
+        mdl = track.convert_length_to_mdl(section, direction)
+
+        shims.append(
+            (
+                first_x * track_index + cumulative * reverse_mult,
+                first_y * track_index + (slope * cumulative * reverse_mult),
+                0.0,
+                mdl,
+            )
+        )
+
+    return shims
+
+
 def generate_offsets(start_direction, end_direction, tracks_left, tracks_right):
 
     offsets = []
@@ -234,42 +263,34 @@ def generate_offsets(start_direction, end_direction, tracks_left, tracks_right):
             start_direction, end_direction
         )
 
-        for n in range(tracks_right, 0, -1):
-            offsets.append((first_x * n, first_y * n, 0.0, ""))
+        # curves to the right
+        for track_index in range(tracks_right, 0, -1):
+            offsets.append((first_x * track_index, first_y * track_index, 0.0, ""))
 
-        for n in range(1, tracks_left + 1):
-            offsets.append((-first_x * n, -first_y * n, 0.0, ""))
+        # curves to the left
+        for track_index in range(1, tracks_left + 1):
+            offsets.append((-first_x * track_index, -first_y * track_index, 0.0, ""))
 
         is_reversed = int(start_direction[0]) > int(end_direction[0])
-        reverse_mult = -1 if is_reversed else 1
-        direction = end_direction if is_reversed else start_direction
+        main_direction = end_direction if is_reversed else start_direction
 
         start_addlength_step = start_base if not is_reversed else end_base
         end_addlength_step = end_base if not is_reversed else start_base
 
-        for n in range(-tracks_left, tracks_right + 1, 1):
+        for track_index in range(-tracks_left, tracks_right + 1, 1):
 
-            length = start_base * (tracks_left + n)
+            length = start_base * (tracks_left + track_index)
+            offsets += place_shim(
+                length, main_direction, first_x, first_y, track_index, is_reversed
+            )
 
-            if length > 0:
+        opposite_direction = end_direction if not is_reversed else start_direction
+        for track_index in range(-tracks_left, tracks_right + 1, 1):
 
-                lengths = track.decompose_length_to_straights(length)
-                is_left = "lt" in direction
-                slope = int(direction[0]) / (4 * (1 if is_left else -1))
-                cumulative = 0
-
-                for section in lengths:
-                    cumulative += section
-                    mdl = track.convert_length_to_mdl(section, direction)
-
-                    offsets.append(
-                        (
-                            first_x * n + cumulative * reverse_mult,
-                            first_y * n + (slope * cumulative * reverse_mult),
-                            0.0,
-                            mdl,
-                        )
-                    )
+            length = end_base * (tracks_left + track_index)
+            offsets += place_shim(
+                length, opposite_direction, first_x, first_y, track_index, is_reversed
+            )
 
         # let's think about this.
         # By default, start is start and end is end. The offset is per-track, headed right. If you are going to the right, the push-out should be positive, else negative.

@@ -222,13 +222,17 @@ def distribute(min_distance, TotalPoints, sector_data):
 
             vmfpy.add_entity(
                 {
-                    "pos-x": Point[0],
-                    "pos-y": Point[1],
-                    "pos-z": min(HeightSamples) + Model.get("height_offset", 0),
+                    "pos": (
+                        Point[0],
+                        Point[1],
+                        min(HeightSamples) + Model.get("height_offset", 0),
+                    ),
                     "mdl": ModelPath,
-                    "ang-yaw": random.randrange(-180, 180),
-                    "ang-pitch": random.randrange(-4, 4),
-                    "ang-roll": random.randrange(-4, 4),
+                    "ang": (
+                        random.randrange(-180, 180),
+                        random.randrange(-4, 4),
+                        random.randrange(-4, 4),
+                    ),
                     "shadows": "noself",
                     "visgroup": "22",
                     "disablevertexlighting": "1",

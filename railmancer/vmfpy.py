@@ -57,13 +57,9 @@ def re_id(original_string, replacement):
 def blank_entity(Pos, MDL, Ang):
 
     return {
-        "pos-x": Pos[0],
-        "pos-y": Pos[1],
-        "pos-z": Pos[2],
+        "pos": Pos,
         "mdl": MDL,
-        "ang-pitch": Ang[0],
-        "ang-yaw": Ang[1],
-        "ang-roll": Ang[2],
+        "ang": Ang,
     }
 
 
@@ -310,7 +306,7 @@ def synthesize_entities(Entities):
             {{
                 "id" "{get_ID()}"
                 "classname" "tp3_switch"
-                "angles" "{Ent.get("ang-pitch",0)} {Ent.get("ang-yaw",0)} {Ent.get("ang-roll",0)}"
+                "angles" "{Ent["ang"][0]} {Ent["ang"][1]} {Ent["ang"][2]}"
                 "animated" "1"
                 "collision_dv" "1"
                 "collision_mn" "1"
@@ -320,7 +316,7 @@ def synthesize_entities(Entities):
                 "lever" "{Ent.get("lever","misconfigured")}"
                 "model" "{Ent.get("mdl","models/props_2fort/frog.mdl")}"
                 "skin" "{Ent.get("skin",0)}"
-                "origin" "{Ent["pos-x"]} {Ent["pos-y"]} {Ent["pos-z"]}"
+                "origin" "{Ent["pos"][0]} {Ent["pos"][1]} {Ent["pos"][2]}"
                 editor
                 {{
                     "color" "220 30 220"
@@ -336,7 +332,7 @@ def synthesize_entities(Entities):
             {{
                 "id" "{get_ID()}"
                 "classname" "tp3_switch_lever_anim"
-                "angles" "{Ent.get("ang-pitch",0)} {Ent.get("ang-yaw",0)} {Ent.get("ang-roll",0)}"
+                "angles" "{Ent["ang"][0]} {Ent["ang"][1]} {Ent["ang"][2]}"
                 "autoreset" "0"
                 "autoscan" "0"
                 "behavior" "-1"
@@ -354,7 +350,7 @@ def synthesize_entities(Entities):
                 "skin" "{Ent.get("skin",0)}"
                 "targetname" "{Ent.get("lever","misconfigured")}"
                 "targetstate" "0"
-                "origin" "{Ent["pos-x"]} {Ent["pos-y"]} {Ent["pos-z"]}"
+                "origin" "{Ent["pos"][0]} {Ent["pos"][1]} {Ent["pos"][2]}"
                 editor
                 {{
                     "color" "220 30 220"
@@ -400,13 +396,13 @@ def synthesize_entities(Entities):
             {{
                 "id" "{get_ID()}"
                 "classname" "prop_static"
-                "angles" "{Ent.get("ang-pitch",0)} {Ent.get("ang-yaw",0)} {Ent.get("ang-roll",0)}"
+                "angles" "{Ent["ang"][0]} {Ent["ang"][1]} {Ent["ang"][2]}"
                 "fademindist" "-1"
                 "fadescale" "1"
                 "model" "{Ent.get("mdl","models/props_2fort/frog.mdl")}"
                 "skin" "{Ent.get("skin",0)}"
                 "solid" "6"
-                "origin" "{Ent["pos-x"]} {Ent["pos-y"]} {Ent["pos-z"]}"
+                "origin" "{Ent["pos"][0]} {Ent["pos"][1]} {Ent["pos"][2]}"
                 {Shadows}
                 "disablevertexlighting" "{Ent.get("disablevertexlighting",0)}"
                 editor
