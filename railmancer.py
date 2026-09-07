@@ -22,7 +22,7 @@ def main():
     # Some input information. One contains the directory for building the Track Library, the other is the VMF for the importer.
     trackpack_directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
     # vmf_input_path = "vmf inputs/squamish test.vmf"
-    vmf_input_path = "vmf inputs/combined v1.vmf"  # "vmf inputs/vancouver_only.vmf"
+    vmf_input_path = "vmf inputs/vancouver_only.vmf"
 
     # Starts a few stopwatches for showing time progression.
     tools.stopwatch_click("total", "Start!")
@@ -44,7 +44,7 @@ def main():
     Vancouver_Start = [(7056, 3040, -13564), "0fw", -90, False]  #
     trackhammer.generate_mainline(
         Vancouver_Start,
-        ["test", 0.5],
+        [(0, 5), 1],
         # ["main", 0.5, "left", 1, "main", 0.5],
         {"min_radius": 2, "min_grade": 3, "max_grade": 3},
     )

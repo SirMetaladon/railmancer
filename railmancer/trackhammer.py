@@ -95,237 +95,15 @@ def get_block_points_from_nodes(current_node, next_node):
     return [next_node[0]] + extras
 
 
-def right_turn_right_track_offset(start_direction, end_direction):
-
-    # the default view is adding tracks to the RIGHT of the main, so most of the values for left-turning pieces should be negative for addlength per the VMF example
-    # addlengths will be POSITIVE if you need to MOVE UP, and negative if not. Positive = movement, negative = no.
-
-    if start_direction == end_direction:
-
-        # data = forward-back track x, left-right track y, addlength relative to main on the lower angle, ditto for the higher other angle
-
-        if start_direction[0] == "0":
-            return 0, 192, 0, 0
-        elif start_direction[0] == "1":
-            return -48, 192, 0, 0
-        elif start_direction[0] == "2":
-            return -96, 192, 0, 0
-        elif start_direction[0] == "4":
-            return -144, 144, 0, 0
-
-    elif start_direction == "0fw" or end_direction == "0fw":
-        other_direction = start_direction if end_direction == "0fw" else end_direction
-
-        if other_direction[0] == "1":
-            return -48, 192, 48, 0
-        elif other_direction[0] == "2":
-            return -96, 192, 96, 0
-        elif other_direction[0] == "4":
-            return (
-                -96,
-                192,
-                96,
-                48,
-            )
-        elif other_direction[0] == "8":
-            return (
-                -192,
-                192,
-                192,
-                192,
-            )
-
-    elif start_direction[0] == "1" or end_direction[0] == "1":
-        other_direction = start_direction if end_direction[0] == "1" else end_direction
-
-        if other_direction[0] == "2":
-            return (
-                -144,
-                168,
-                96,
-                -48,
-            )
-        elif other_direction[0] == "4":
-            return -112, 176, 64, 32
-
-    elif start_direction[0] == "2" or end_direction[0] == "2":
-        other_direction = start_direction if end_direction[0] == "2" else end_direction
-
-        if other_direction[0] == "4":
-            return -96, 192, 0, 48
-
-    print("Invalid combination!", start_direction, end_direction)
-    return 0, 0, 0, 0
-
-
-def look_up_offset(start_direction, end_direction):
-
-    data = right_turn_right_track_offset(start_direction, end_direction)
-
-    if data == (0, 0, 0, 0):
-        return data
-    else:
-
-        x, y, start, end = data
-        is_left = "lt" in end_direction
-        is_nintey = end_direction[0] == "8"
-        is_strange = "fw" in end_direction and "lt" in start_direction
-
-        left_mult = 1 if is_left else -1
-        nintey_mult = -1 if is_nintey else 1
-        strange_mult = -1 if is_strange else 1
-
-        return (
-            x * left_mult * nintey_mult * strange_mult,
-            y,
-            start,
-            end,
-        )
-
-
-def apply_addlength(
-    offsets, base_direction, base_addlength, is_reversed, end_direction
-):
-
-    if base_direction == "1rt":
-        add_offset = -base_addlength / 4
-    elif base_direction == "1lt":
-        add_offset = base_addlength / 4
-    elif base_direction == "2rt":
-        add_offset = -base_addlength / 2
-    elif base_direction == "2lt":
-        add_offset = base_addlength / 2
-    else:
-        add_offset = 0
-
-    final_offsets = []
-    reverse_mult = 1 if is_reversed else -1
-
-    out_x = base_addlength * reverse_mult
-    out_y = add_offset * reverse_mult
-
-    if end_direction[0] == "8":
-        out_x = 0
-        out_y = base_addlength * (-1 if "rt" in end_direction else 1)
-
-    for entry in offsets:
-        final_offsets += [
-            (
-                entry[0] + out_x,
-                entry[1] + out_y,
-                entry[2],
-                entry[3],
-            )
-        ]
-
-    return final_offsets
-
-
-def place_shim(length, direction, first_x, first_y, track_index, is_reversed):
-
-    if length <= 0:
-
-        return []
-
-    shims = []
-    lengths = track.decompose_length_to_straights(length)
-    is_left = "lt" in direction
-    slope = int(direction[0]) / (4 * (1 if is_left else -1))
-    cumulative = 0
-    reverse_mult = -1 if is_reversed else 1
-
-    for section in lengths:
-        cumulative += section
-        mdl = track.convert_length_to_mdl(section, direction)
-
-        shims.append(
-            (
-                first_x * track_index + cumulative * reverse_mult,
-                first_y * track_index + (slope * cumulative * reverse_mult),
-                0.0,
-                mdl,
-            )
-        )
-
-    return shims
-
-
-def generate_offsets(start_direction, end_direction, tracks_left, tracks_right):
-
-    offsets = []
-    offsets.append((0.0, 0.0, 0.0, ""))
-    start_addlength = 0
-    end_addlength = 0
-
-    if (tracks_left + tracks_right) > 0:
-
-        first_x, first_y, start_base, end_base = look_up_offset(
-            start_direction, end_direction
-        )
-
-        # curves to the right
-        for track_index in range(tracks_right, 0, -1):
-            offsets.append((first_x * track_index, first_y * track_index, 0.0, ""))
-
-        # curves to the left
-        for track_index in range(1, tracks_left + 1):
-            offsets.append((-first_x * track_index, -first_y * track_index, 0.0, ""))
-
-        is_reversed = int(start_direction[0]) > int(end_direction[0])
-        main_direction = end_direction if is_reversed else start_direction
-
-        start_addlength_step = start_base if not is_reversed else end_base
-        end_addlength_step = end_base if not is_reversed else start_base
-
-        for track_index in range(-tracks_left, tracks_right + 1, 1):
-
-            length = start_base * (tracks_left + track_index)
-            offsets += place_shim(
-                length, main_direction, first_x, first_y, track_index, is_reversed
-            )
-
-        opposite_direction = end_direction if not is_reversed else start_direction
-        for track_index in range(-tracks_left, tracks_right + 1, 1):
-
-            length = end_base * (tracks_left + track_index)
-            offsets += place_shim(
-                length, opposite_direction, first_x, first_y, track_index, is_reversed
-            )
-
-        # let's think about this.
-        # By default, start is start and end is end. The offset is per-track, headed right. If you are going to the right, the push-out should be positive, else negative.
-        # This means the only relevant factor is the reversed status, right?
-
-        # when you add a track to the left (default), the spacing needs to increase. The spacing won't change when you add tracks on the right UNLESS the spacing added is negative
-        start_addlength = max(
-            0,
-            max(
-                -start_addlength_step * tracks_left, start_addlength_step * tracks_right
-            ),
-        )
-        end_addlength = max(
-            0, max(-end_addlength_step * tracks_left, end_addlength_step * tracks_right)
-        )
-
-        base_direction = end_direction if is_reversed else start_direction
-        base_addlength = end_addlength if is_reversed else start_addlength
-
-        final_offsets = apply_addlength(
-            offsets, base_direction, base_addlength, is_reversed, end_direction
-        )
-
-    return final_offsets, start_addlength, end_addlength
-
-
 # From a model and a current node, return the resulting node, and whether the track is valid according to blocking and maximum border size.
-def generate_pieces_from_node_and_mdl(model, prev_node, mode):
+def iterate_backbone(model, prev_node, mode):
 
     prev_direction = prev_node[1]
     end_direction = track.get_end_direction(model, prev_direction)
     current_direction = track.get_end_direction(model, end_direction)
 
-    offsets, start_addlength, end_addlength = generate_offsets(
-        current_direction, end_direction, 3 if mode != "left" else 1, 3
+    start_addlength, end_addlength = track.get_addlength(
+        current_direction, end_direction, mode
     )
 
     current_node = track.get_new_node_from_node_and_model(
@@ -348,36 +126,12 @@ def generate_pieces_from_node_and_mdl(model, prev_node, mode):
     if are_points_blocked(points):
         return None
 
-    def add_model(shift=(0, 0, 0), mdloverwrite=""):
-
-        mdl = mdloverwrite if mdloverwrite else model
-
-        pos, yaw = track.convert_model_nodes_to_real_pos_and_angle(
-            mdl,
-            prev_node,
-            current_node,
-            shift,
-        )
-
-        return (mdl, pos, yaw)
-
-    heading = current_node[2]
-    models = []
-
-    for entry in offsets:
-
-        x, y, z, overwrite = entry
-        pos = x, y, z
-
-        models += [add_model(tools.rot_orth(pos, heading), overwrite)]
-
     median_extra_length = 0
     track_length = track.get_length(model) + median_extra_length
 
     return (
         current_node,
         points,
-        models,
         track_length,
     )
 
@@ -529,17 +283,18 @@ def generation_process(
         debug_overall_count += 1
 
     # helper function that produces a prefilled "step" for moving forward
-    def new_step(start_node, existing_length=0, points=None, models=None):
+    def new_step(
+        start_node, existing_length=0, points=None, mdl_to_test="", track_mode=None
+    ):
 
         if points is None:
             points = []
 
-        if models is None:
-            models = []
+        if track_mode is None:
+            track_mode = {"tracks": (0, 0)}
 
         return [
             {
-                "models": models,
                 "node": start_node,
                 "length": existing_length,
                 "candidate_tracks": generate_selection_of_possible_tracks(
@@ -547,16 +302,12 @@ def generation_process(
                 ),
                 "points": points,
                 "blocks_added": [],
+                "model": mdl_to_test,
+                "track_mode": track_mode,
             }
         ]
 
-    def update_longest_fail(
-        steps,
-        result_node,
-        new_length,
-        points,
-        models,
-    ):
+    def update_longest_fail(steps, new_length):
         nonlocal longest_fail
         nonlocal longest_fail_length
 
@@ -565,14 +316,6 @@ def generation_process(
 
         longest_fail_length = new_length
         longest_fail = steps[:]
-
-        if len(steps) == 1:
-            longest_fail += new_step(
-                result_node,
-                new_length,
-                points,
-                models,
-            )
 
     def backtrack(steps, blocks_current_step_index):
 
@@ -602,14 +345,10 @@ def generation_process(
 
         while current_step["candidate_tracks"]:
 
-            track_to_test = current_step["candidate_tracks"][-1]
+            mdl_to_test = current_step["candidate_tracks"][-1]
             current_step["candidate_tracks"].pop()
 
-            result = generate_pieces_from_node_and_mdl(
-                track_to_test,
-                current_step["node"],
-                mode,
-            )
+            result = iterate_backbone(mdl_to_test, current_step["node"], mode)
 
             if result is None:
 
@@ -621,31 +360,22 @@ def generation_process(
                 (
                     result_node,
                     points,
-                    models,
                     track_length,
                 ) = result
 
                 new_length = current_step["length"] + track_length
 
                 steps += new_step(
-                    result_node,
-                    new_length,
-                    points,
-                    models,
+                    result_node, new_length, points, mdl_to_test, {"track_mode": mode}
                 )
 
-                update_longest_fail(
-                    steps,
-                    result_node,
-                    new_length,
-                    points,
-                    models,
-                )
+                update_longest_fail(steps, new_length)
 
                 return True
 
         return False
 
+    # START OF PROCESS
     steps = new_step(start_node)
 
     while (
@@ -692,7 +422,10 @@ def generation_process(
         f"{candidates_to_generate}, {logLength}",
     )
 
-    print(f"Trackhammer finished normally: " f"{logLength} length, {sec} seconds.")
+    print(
+        f"Trackhammer finished normally: "
+        f"{round(steps[-1]["length"]/(12*5280),2)} length, {sec} seconds."
+    )
 
     return steps
 

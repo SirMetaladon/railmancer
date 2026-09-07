@@ -99,11 +99,8 @@ def reprocess_raw_data(raw_ents):
     # recompile
     for raw_ent in raw_ents:
 
-        Pos = (float(coord) for coord in raw_ent["origin"].split(" "))
-        Ang = (float(coord) for coord in raw_ent["angles"].split(" "))
-
-        # if raw_ent["classname"] != "prop_static":
-        # Entities += [{"raw_entity": raw_ent["raw"] + "}"}]
+        Pos = tuple(map(float, raw_ent["origin"].split()))
+        Ang = tuple(map(float, raw_ent["angles"].split()))
 
         Entity = {
             "pos": Pos,

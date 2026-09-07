@@ -476,19 +476,18 @@ def add_lines_from_track(pos, track_object, heading):
     )
 
 
-def convert_model_nodes_to_real_pos_and_angle(
-    model,
-    prev_node,
-    new_node,
-    shift,
-):
+def deal_with_reversing_nonsense(model, prev_node, new_node):
 
-    if new_node[3]:  # if it's reversed AHA IT DOES DO SOMETHING
+    IsReversed = new_node[3]  # if it's reversed AHA IT DOES DO SOMETHING
+
+    if IsReversed:
         ModelPos = new_node[0]
         RotFix = 180
+        Direction = new_node[1]
     else:
         ModelPos = prev_node[0]
         RotFix = 0
+        Direction = prev_node[1]
 
     ModelHeading = (
         new_node[2]
@@ -497,9 +496,8 @@ def convert_model_nodes_to_real_pos_and_angle(
     )
 
     Angle = ModelHeading + RotFix
-    ModelPos = tools.add(ModelPos, shift)
 
-    return ModelPos, Angle
+    return ModelPos, Angle, Direction, IsReversed
 
 
 def write_track(model, ModelPos, Angle):
@@ -521,31 +519,63 @@ def updated_position(position, jump, heading):
     return np.round(np.add(position, tools.rot_orth(jump, heading)))
 
 
-def straight_convert_to_move(length, direction):
+def move_in_trackspace(length_forward, direction, tracks_over_right=0):
 
     if direction == "1rt":
-        return (-length, length * 0.25, 0)
+        return (
+            -length_forward + tracks_over_right * 48,
+            length_forward * 0.25 + tracks_over_right * 192,
+            0,
+        )
     if direction == "2rt":
-        return (-length, length * 0.5, 0)
+        return (
+            -length_forward + tracks_over_right * 96,
+            length_forward * 0.5 + tracks_over_right * 192,
+            0,
+        )
     if direction == "4rt":
-        return (-length, length, 0)
+        return (
+            -length_forward + tracks_over_right * 144,
+            length_forward + tracks_over_right * 144,
+            0,
+        )
     if direction == "6rt":
-        return (-length * 0.5, length, 0)
+        return (
+            -length_forward * 0.5 + tracks_over_right * 192,
+            length_forward + tracks_over_right * 96,
+            0,
+        )
     if direction == "8rt":
-        return (0, length, 0)
+        return (tracks_over_right * 192, length_forward, 0)
     if direction == "1lt":
-        return (-length, -length * 0.25, 0)
+        return (
+            -length_forward - tracks_over_right * 48,
+            -length_forward * 0.25 + tracks_over_right * 192,
+            0,
+        )
     if direction == "2lt":
-        return (-length, -length * 0.5, 0)
+        return (
+            -length_forward - tracks_over_right * 96,
+            -length_forward * 0.5 + tracks_over_right * 192,
+            0,
+        )
     if direction == "4lt":
-        return (-length, -length, 0)
+        return (
+            -length_forward - tracks_over_right * 144,
+            -length_forward + tracks_over_right * 144,
+            0,
+        )
     if direction == "6lt":
-        return (-length * 0.5, -length, 0)
+        return (
+            -length_forward * 0.5 - tracks_over_right * 192,
+            -length_forward + tracks_over_right * 96,
+            0,
+        )
     if direction == "8lt":
-        return (0, -length, 0)
+        return (-tracks_over_right * 192, -length_forward, 0)
 
     # 0fw
-    return (-length, 0, 0)
+    return (-length_forward, tracks_over_right * 192, 0)
 
 
 def get_end_direction(model, current_direction):
@@ -591,14 +621,14 @@ def get_new_node_from_node_and_model(
     if IsReversed:
         final_move = (move_x, move_y, -move_z)
         additional_move = np.add(
-            straight_convert_to_move(AddStart, track_data["EndDirection"]),
-            straight_convert_to_move(AddEnd, track_data["StartDirection"]),
+            move_in_trackspace(AddStart, track_data["EndDirection"]),
+            move_in_trackspace(AddEnd, track_data["StartDirection"]),
         )
     else:
         final_move = (move_x, move_y, move_z)
         additional_move = np.add(
-            straight_convert_to_move(AddStart, current_direction),
-            straight_convert_to_move(AddEnd, NewDirection),
+            move_in_trackspace(AddStart, current_direction),
+            move_in_trackspace(AddEnd, NewDirection),
         )
 
     final_move = np.add(final_move, additional_move)
@@ -630,12 +660,51 @@ def get_new_node_from_node_and_model(
 
 def write_track_from_trackhammer_steps(steps):
 
+    prev_node = ["", "0fw"]
+
     for step in steps:
 
-        for model in step["models"]:
-            mdl, pos, yaw = model
-            # finalize track placement
-            write_track(mdl, pos, yaw)
+        model = step["model"]
+        new_node = step["node"]
+
+        # (array([-15232.,  -3664., -12556.]), '1rt', 90, True)
+        # models/trakpak3_rsg/arcs/r4096/a1rt_2rt_right_-328pg_+1024x+0384x-036dn.mdl'
+
+        if model == "":
+            prev_node = new_node
+            continue
+
+        BasePos, Heading, Direction, IsReversed = deal_with_reversing_nonsense(
+            model, prev_node, new_node
+        )
+
+        track_mode = step["track_mode"]["track_mode"]
+
+        def tuple_to_range_list(bounds: tuple[int, int], IsReversed: bool) -> list[int]:
+
+            start, stop = bounds
+            begin, end = (stop, start) if IsReversed else (start, stop)
+
+            return list(range(-begin, end + 1))
+
+        tracks = tuple_to_range_list(track_mode, IsReversed)
+
+        print(tracks)
+
+        front, back = look_up_offset(prev_node[1], new_node[1])
+
+        base = max(tracks[0] * front, tracks[-1] * front)
+
+        for track in tracks:
+
+            fore_aft = base + front * track
+
+            final_move = move_in_trackspace(fore_aft, Direction, track)
+
+            final_position = updated_position(BasePos, final_move, Heading)
+            write_track(model, final_position, Heading)
+
+        prev_node = new_node
 
 
 def valid_next_tracks(Direction, params={}):
@@ -784,7 +853,7 @@ def convert_length_to_mdl(length, direction):
     elif direction == "8rt":
         direction = "0fw"
     extra = "0" * (4 - len(str(length)))
-    over = int(straight_convert_to_move(length, direction)[1])
+    over = int(move_in_trackspace(length, direction)[1])
     minus = "-" if over < 0 else "+"
     extra2 = "0" * (4 - len(str(abs(over))))
     if over == 0:
@@ -794,3 +863,82 @@ def convert_length_to_mdl(length, direction):
         minus = "-"
 
     return f"models/trakpak3_rsg/straights/s{extra}{length}_{direction}_0pg_+{extra}{length}x{minus}{extra2}{abs(over)}x0000.mdl"
+
+
+def look_up_offset(start_direction, end_direction):
+
+    handedness_mult = -1 if end_direction[1] == "r" else 1
+
+    if start_direction == end_direction:
+
+        return 0, 0
+
+    elif start_direction == "0fw" or end_direction == "0fw":
+        other_direction = start_direction if end_direction == "0fw" else end_direction
+
+        if other_direction[0] == "1":
+            return 48 * handedness_mult, 0
+        elif other_direction[0] == "2":
+            return 96 * handedness_mult, 0
+        elif other_direction[0] == "4":
+            return (
+                96 * handedness_mult,
+                48,
+            )
+
+        elif other_direction[0] == "8":
+            return (
+                192 * handedness_mult,
+                192,
+            )
+
+    elif start_direction[0] == "1" or end_direction[0] == "1":
+        other_direction = start_direction if end_direction[0] == "1" else end_direction
+
+        if other_direction[0] == "2":
+            return (
+                96 * handedness_mult,
+                48,
+            )
+        elif other_direction[0] == "4":
+            return 64 * handedness_mult, 32
+
+    elif start_direction[0] == "2" or end_direction[0] == "2":
+        other_direction = start_direction if end_direction[0] == "2" else end_direction
+
+        if other_direction[0] == "4":
+            return 0, 48
+
+    print("Invalid combination!", start_direction, end_direction)
+    return 0, 0
+
+
+def get_addlength(start_direction, end_direction, mode):
+
+    start_addlength, end_addlength = 0, 0
+
+    tracks_left = mode[0]
+    tracks_right = mode[1]
+
+    if (tracks_left + tracks_right) > 0:
+
+        start_base, end_base = look_up_offset(start_direction, end_direction)
+
+        is_reversed = int(start_direction[0]) > int(end_direction[0])
+
+        start_addlength_step = start_base if not is_reversed else end_base
+        end_addlength_step = end_base if not is_reversed else start_base
+
+        start_addlength = max(
+            0,
+            max(
+                -start_addlength_step * tracks_left, start_addlength_step * tracks_right
+            ),
+        )
+        end_addlength = max(
+            0, max(-end_addlength_step * tracks_left, end_addlength_step * tracks_right)
+        )
+
+        print(start_direction, end_direction, mode, start_addlength, end_addlength)
+
+    return start_addlength, end_addlength
