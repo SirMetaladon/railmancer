@@ -44,9 +44,10 @@ def main():
     Vancouver_Start = [(7056, 3040, -13564), "0fw", -90, False]  #
     trackhammer.generate_mainline(
         Vancouver_Start,
-        [(0, 5), 1],
-        # ["main", 0.5, "left", 1, "main", 0.5],
-        {"min_radius": 2, "min_grade": 3, "max_grade": 3},
+        [
+            [(0, 0), 0.5, {"min_radius": 2, "min_grade": 3, "max_grade": 3}],  # run 1
+            [(0, 0), 0.5, {"min_radius": 3, "min_grade": 2, "max_grade": 2}],  # run 2
+        ],
     )
 
     """Squamish_Start = [[7072, 3888, 512], "0fw", -90, False]  #

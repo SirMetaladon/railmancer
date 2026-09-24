@@ -687,17 +687,21 @@ def write_track_from_trackhammer_steps(steps):
 
             return list(range(-begin, end + 1))
 
-        tracks = tuple_to_range_list(track_mode, IsReversed)
+        tracks = tuple_to_range_list(track_mode, new_node[3])
 
         print(tracks)
 
-        front, back = look_up_offset(prev_node[1], new_node[1])
+        forward_per_track, back = get_offset_forward_for_parallel_on_right(
+            prev_node[1], new_node[1]
+        )
 
-        base = max(tracks[0] * front, tracks[-1] * front)
+        farthest_back = min(
+            tracks[0] * forward_per_track, tracks[-1] * forward_per_track
+        )
 
         for track in tracks:
 
-            fore_aft = base + front * track
+            fore_aft = -farthest_back + forward_per_track * track
 
             final_move = move_in_trackspace(fore_aft, Direction, track)
 
@@ -865,7 +869,7 @@ def convert_length_to_mdl(length, direction):
     return f"models/trakpak3_rsg/straights/s{extra}{length}_{direction}_0pg_+{extra}{length}x{minus}{extra2}{abs(over)}x0000.mdl"
 
 
-def look_up_offset(start_direction, end_direction):
+def get_offset_forward_for_parallel_on_right(start_direction, end_direction):
 
     handedness_mult = -1 if end_direction[1] == "r" else 1
 
@@ -922,21 +926,22 @@ def get_addlength(start_direction, end_direction, mode):
 
     if (tracks_left + tracks_right) > 0:
 
-        start_base, end_base = look_up_offset(start_direction, end_direction)
-
+        start_base, end_base = get_offset_forward_for_parallel_on_right(
+            start_direction, end_direction
+        )
+        end_base = 1024
+        # would return positive 48 for 1rt
         is_reversed = int(start_direction[0]) > int(end_direction[0])
 
+        # someone needs to explain why this is to me
         start_addlength_step = start_base if not is_reversed else end_base
         end_addlength_step = end_base if not is_reversed else start_base
 
-        start_addlength = max(
-            0,
-            max(
-                -start_addlength_step * tracks_left, start_addlength_step * tracks_right
-            ),
+        start_addlength = -min(
+            0, -start_addlength_step * tracks_left, start_addlength_step * tracks_right
         )
-        end_addlength = max(
-            0, max(-end_addlength_step * tracks_left, end_addlength_step * tracks_right)
+        end_addlength = -min(
+            0, -end_addlength_step * tracks_left, end_addlength_step * tracks_right
         )
 
         print(start_direction, end_direction, mode, start_addlength, end_addlength)

@@ -248,16 +248,16 @@ def initialize():
 
 def generation_process(
     start_node,
-    track_profile,
+    cumulative_track_profile,
     backtrack_distance,
     candidates_to_generate,
-    params,
 ):
 
     print("Started permutation: ", backtrack_distance, candidates_to_generate)
 
     global debug_overall_count, logLength
 
+    current_run_id = 0
     blocks_current_step_index = 0
 
     longest_fail = []
@@ -284,26 +284,20 @@ def generation_process(
 
     # helper function that produces a prefilled "step" for moving forward
     def new_step(
-        start_node, existing_length=0, points=None, mdl_to_test="", track_mode=None
+        start_node, existing_length=0, points=[], step_model="", current_run=[]
     ):
-
-        if points is None:
-            points = []
-
-        if track_mode is None:
-            track_mode = {"tracks": (0, 0)}
 
         return [
             {
                 "node": start_node,
                 "length": existing_length,
                 "candidate_tracks": generate_selection_of_possible_tracks(
-                    start_node, candidates_to_generate, params
+                    start_node, candidates_to_generate, current_run
                 ),
                 "points": points,
                 "blocks_added": [],
-                "model": mdl_to_test,
-                "track_mode": track_mode,
+                "model": step_model,
+                "current_run": current_run,
             }
         ]
 
@@ -316,6 +310,17 @@ def generation_process(
 
         longest_fail_length = new_length
         longest_fail = steps[:]
+
+    def determine_current_run_id(length):
+
+        if len(cumulative_track_profile) == 1:
+            return 0
+
+        for runid in range(0, len(cumulative_track_profile) - 1):
+            if cumulative_track_profile[runid][1] > length:
+                return runid - 1
+
+        return 0
 
     def backtrack(steps, blocks_current_step_index):
 
@@ -343,6 +348,8 @@ def generation_process(
 
     def try_candidates(current_step, steps, mode):
 
+        nonlocal current_run_id
+
         while current_step["candidate_tracks"]:
 
             mdl_to_test = current_step["candidate_tracks"][-1]
@@ -365,8 +372,19 @@ def generation_process(
 
                 new_length = current_step["length"] + track_length
 
+                potential_run_id = determine_current_run_id(new_length)
+                if current_run_id != potential_run_id:
+                    current_run_id = potential_run_id
+
+                # if new length is over a boundary
+                # add another step for the switch
+
                 steps += new_step(
-                    result_node, new_length, points, mdl_to_test, {"track_mode": mode}
+                    result_node,
+                    new_length,
+                    points,
+                    mdl_to_test,
+                    cumulative_track_profile[current_run_id],
                 )
 
                 update_longest_fail(steps, new_length)
@@ -380,7 +398,7 @@ def generation_process(
 
     while (
         len(steps) > 0
-        and steps[-1]["length"] < track_profile[-1]
+        and steps[-1]["length"] < cumulative_track_profile[-1]
         and debug_overall_count < debug_maximum_count
     ):
 
@@ -391,7 +409,7 @@ def generation_process(
 
         current_step = steps[-1]
 
-        if try_candidates(current_step, steps, track_profile[0]):
+        if try_candidates(current_step, steps, cumulative_track_profile[0]):
             # continue to the next step
             continue
 
@@ -430,7 +448,7 @@ def generation_process(
     return steps
 
 
-def create_rail_path(start_node, track_profile, params={}):
+def create_rail_path(start_node, cumulative_track_profile):
 
     tools.stopwatch_click("trackhammer")
 
@@ -449,46 +467,50 @@ def create_rail_path(start_node, track_profile, params={}):
 
             steps_found = generation_process(
                 start_node,
-                track_profile,
+                cumulative_track_profile,
                 backtrack_distance,
                 candidates_to_generate,
-                params,
             )
 
     tools.stopwatch_click("submodule", "Track path complete")
     return steps_found
 
 
-def aggregate(track_profile):
+def aggregate_track_profile(Runs):
+    """
+    each list entry:
+    [(TracksLeft, TracksRight), Length(miles), {params}],
+    """
 
-    Total = 0
-    Lengths = track_profile[1::2]
-    Incrementor = 1
+    cumulative_track_profile = []
+    prev = 0
 
-    for Entry in Lengths:
-        track_profile[Incrementor] = tools.inches(Entry + Total)
+    for Run in Runs:
 
-        Total += Entry
-        Incrementor += 2
+        data = Run[:]
+        prev = tools.inches(Run[1]) + prev
+        data[1] = prev
+        cumulative_track_profile += [data]
 
-    return track_profile
+    return cumulative_track_profile
 
 
 # Taking a node start and target length + parameters, generate a list of track models that coincides with grade, curvature, and block rules.
-def generate_mainline(start_node, track_profile, params={}):
+def generate_mainline(start_node, simple_track_profile):
     # FYI: Nodes are defined as [[x, y, z], "string TP3 direction", base rotation in 90 increments, IsReversed (compile relevant only)]
 
-    aggregated_profile = aggregate(track_profile)
+    cumulative_track_profile = aggregate_track_profile(simple_track_profile)
+
+    print(cumulative_track_profile)
 
     print(
         "Began working on generating "
-        + str(tools.miles(track_profile[-1]))
+        + str(tools.miles(cumulative_track_profile[-1][1]))
         + " mile mainline :",
         start_node,
-        params,
     )
 
-    steps_found = create_rail_path(start_node, aggregated_profile, params)
+    steps_found = create_rail_path(start_node, cumulative_track_profile)
 
     display_blocks_in_vmf()
 
