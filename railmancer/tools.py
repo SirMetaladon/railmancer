@@ -315,3 +315,11 @@ def sprinkle_selector(list, count):
             break
 
     return output
+
+
+def tuple_to_range_list(bounds: tuple[int, int], IsReversed: bool) -> list[int]:
+
+    start, stop = bounds
+    begin, end = (stop, start) if IsReversed else (start, stop)
+
+    return list(range(-begin, end + 1))

@@ -41,14 +41,24 @@ def main():
     trackhammer.initialize()
     trackhammer.exclude_existing()
 
-    Vancouver_Start = [(7056, 3040, -13564), "0fw", -90, False]  #
+    Vancouver_Start = [(7056, 3040, -13564), "0fw", -90, False]
     trackhammer.generate_mainline(
         Vancouver_Start,
         [
-            [(0, 0), 0.5, {"min_radius": 2, "min_grade": 3, "max_grade": 3}],  # run 1
-            [(0, 0), 0.5, {"min_radius": 3, "min_grade": 2, "max_grade": 2}],  # run 2
+            [(4, 4), 3, {"min_radius": 2, "min_grade": 3, "max_grade": 3}],  # run 1
         ],
     )
+
+    """[(0, 0), 0.3, {"min_radius": 5, "min_grade": 0, "max_grade": 0}],  # run 4
+    [(1, 0), 1, {"min_radius": 3, "min_grade": 2, "max_grade": 2}],  # run 2
+    [(0, 0), 0.3, {"min_radius": 5, "min_grade": 0, "max_grade": 0}],  # run 4
+    [(0, 0), 1, {"min_radius": 2, "min_grade": 3, "max_grade": 3}],  # run 3
+    [(0, 0), 0.3, {"min_radius": 5, "min_grade": 0, "max_grade": 0}],  # run 4
+    [(0, 1), 1, {"min_radius": 3, "min_grade": 2, "max_grade": 2}],  # run 4
+    [(0, 0), 0.3, {"min_radius": 5, "min_grade": 0, "max_grade": 0}],  # run 4
+    [(0, 0), 1, {"min_radius": 2, "min_grade": 3, "max_grade": 3}],  # run 3
+    [(0, 0), 0.3, {"min_radius": 5, "min_grade": 0, "max_grade": 0}],  # run 4
+    [(1, 1), 1, {"min_radius": 3, "min_grade": 2, "max_grade": 2}],  # run 4"""
 
     """Squamish_Start = [[7072, 3888, 512], "0fw", -90, False]  #
     trackhammer.generate_mainline(

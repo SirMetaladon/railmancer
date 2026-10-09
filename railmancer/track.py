@@ -107,7 +107,7 @@ def determine_length(StartDirection, EndDirection, Radius):
     Length = round(Radius * math.pi * Degrees / 180, 2)
 
     if Length == 0:
-        print(StartDirection, EndDirection, Radius)
+        print("Failed determine length?", StartDirection, EndDirection, Radius)
 
     return Length
 
@@ -484,20 +484,32 @@ def deal_with_reversing_nonsense(model, prev_node, new_node):
         ModelPos = new_node[0]
         RotFix = 180
         Direction = new_node[1]
+        OtherDirection = prev_node[1]
     else:
         ModelPos = prev_node[0]
         RotFix = 0
         Direction = prev_node[1]
+        OtherDirection = new_node[1]
 
-    ModelHeading = (
-        new_node[2]
-        if track_model_library[model]["EndDirection"][:1] != "8"
-        else prev_node[2]
-    )
+    TrackEndDirection = track_model_library[model]["EndDirection"]
+
+    ModelHeading = new_node[2] if TrackEndDirection[:1] != "8" else prev_node[2]
 
     Angle = ModelHeading + RotFix
 
-    return ModelPos, Angle, Direction, IsReversed
+    ForwardPerTrack, RearPerTrack = get_offset_forward_for_parallel_on_right(
+        track_model_library[model]["StartDirection"], TrackEndDirection
+    )
+
+    return (
+        ModelPos,
+        Angle,
+        Direction,
+        IsReversed,
+        ForwardPerTrack,
+        RearPerTrack,
+        OtherDirection,
+    )
 
 
 def write_track(model, ModelPos, Angle):
@@ -674,39 +686,70 @@ def write_track_from_trackhammer_steps(steps):
             prev_node = new_node
             continue
 
-        BasePos, Heading, Direction, IsReversed = deal_with_reversing_nonsense(
-            model, prev_node, new_node
-        )
+        (
+            BasePos,
+            Heading,
+            Direction,
+            IsReversed,
+            forward_per_track,
+            rear_per_track,
+            OtherDirection,
+        ) = deal_with_reversing_nonsense(model, prev_node, new_node)
 
-        track_mode = step["track_mode"]["track_mode"]
+        track_mode = step["current_run"][0]
+        # tuple like (1,3), which means 1 track to left, 3 tracks to right for a total of 5 including main
 
-        def tuple_to_range_list(bounds: tuple[int, int], IsReversed: bool) -> list[int]:
-
-            start, stop = bounds
-            begin, end = (stop, start) if IsReversed else (start, stop)
-
-            return list(range(-begin, end + 1))
-
-        tracks = tuple_to_range_list(track_mode, new_node[3])
-
-        print(tracks)
-
-        forward_per_track, back = get_offset_forward_for_parallel_on_right(
-            prev_node[1], new_node[1]
-        )
+        tracks = tools.tuple_to_range_list(track_mode, IsReversed)
 
         farthest_back = min(
             tracks[0] * forward_per_track, tracks[-1] * forward_per_track
         )
 
+        farthest_rear_back = min(
+            tracks[0] * rear_per_track, tracks[-1] * rear_per_track
+        )
+
         for track in tracks:
 
             fore_aft = -farthest_back + forward_per_track * track
+            rear = -farthest_rear_back + rear_per_track * track
 
             final_move = move_in_trackspace(fore_aft, Direction, track)
 
             final_position = updated_position(BasePos, final_move, Heading)
             write_track(model, final_position, Heading)
+
+            if fore_aft > 0:
+
+                # for each
+                lengths = decompose_length_to_straights(fore_aft)
+                total = 0
+
+                for length in lengths:
+                    move = move_in_trackspace(total, Direction, track)
+                    final_position = updated_position(BasePos, move, Heading)
+                    total += length
+                    write_track(
+                        convert_length_to_mdl(length, Direction),
+                        final_position,
+                        Heading,
+                    )
+
+            """if rear > 0:
+
+                # for each
+                lengths = decompose_length_to_straights(rear)
+                total = 0
+
+                for length in lengths:
+                    move = move_in_trackspace(total, OtherDirection, track)
+                    extra_position = updated_position(final_position, move, Heading)
+                    total += length
+                    write_track(
+                        convert_length_to_mdl(length, OtherDirection),
+                        extra_position,
+                        Heading,
+                    )"""
 
         prev_node = new_node
 
@@ -871,46 +914,49 @@ def convert_length_to_mdl(length, direction):
 
 def get_offset_forward_for_parallel_on_right(start_direction, end_direction):
 
-    handedness_mult = -1 if end_direction[1] == "r" else 1
-
-    if start_direction == end_direction:
+    if start_direction[0] == end_direction[0]:
 
         return 0, 0
 
-    elif start_direction == "0fw" or end_direction == "0fw":
-        other_direction = start_direction if end_direction == "0fw" else end_direction
+    first_direction, second_direction = (
+        (start_direction, end_direction)
+        if int(end_direction[0]) > int(start_direction[0])
+        else (end_direction, start_direction)
+    )
 
-        if other_direction[0] == "1":
+    handedness_mult = -1 if second_direction[1] == "r" else 1
+
+    if first_direction == "0fw":
+
+        if second_direction[0] == "1":
             return 48 * handedness_mult, 0
-        elif other_direction[0] == "2":
+        elif second_direction[0] == "2":
             return 96 * handedness_mult, 0
-        elif other_direction[0] == "4":
+        elif second_direction[0] == "4":
             return (
                 96 * handedness_mult,
                 48,
             )
 
-        elif other_direction[0] == "8":
+        elif second_direction[0] == "8":
             return (
                 192 * handedness_mult,
                 192,
             )
 
-    elif start_direction[0] == "1" or end_direction[0] == "1":
-        other_direction = start_direction if end_direction[0] == "1" else end_direction
+    elif first_direction[0] == "1":
 
-        if other_direction[0] == "2":
+        if second_direction[0] == "2":
             return (
                 96 * handedness_mult,
                 48,
             )
-        elif other_direction[0] == "4":
-            return 64 * handedness_mult, 32
+        elif second_direction[0] == "4":
+            return (64 * handedness_mult, 32)
 
-    elif start_direction[0] == "2" or end_direction[0] == "2":
-        other_direction = start_direction if end_direction[0] == "2" else end_direction
+    elif first_direction[0] == "2":
 
-        if other_direction[0] == "4":
+        if second_direction[0] == "4":
             return 0, 48
 
     print("Invalid combination!", start_direction, end_direction)
@@ -929,7 +975,7 @@ def get_addlength(start_direction, end_direction, mode):
         start_base, end_base = get_offset_forward_for_parallel_on_right(
             start_direction, end_direction
         )
-        end_base = 1024
+        # end_base = 1024
         # would return positive 48 for 1rt
         is_reversed = int(start_direction[0]) > int(end_direction[0])
 
@@ -944,6 +990,6 @@ def get_addlength(start_direction, end_direction, mode):
             0, -end_addlength_step * tracks_left, end_addlength_step * tracks_right
         )
 
-        print(start_direction, end_direction, mode, start_addlength, end_addlength)
+        # print(start_direction, end_direction, mode, start_addlength, end_addlength)
 
     return start_addlength, end_addlength

@@ -137,14 +137,14 @@ def iterate_backbone(model, prev_node, mode):
 
 
 # Queries the track system to find valid tracks according to grade and curvature rules, then returns a randomized selection
-def generate_selection_of_possible_tracks(node, count, params={}):
+def generate_selection_of_possible_tracks(node, count, current_run={}):
 
     # takes direction, minumum radius level, minimum grade level, maximum grade level
-    possible_tracks = track.valid_next_tracks(node[1], params)
+    possible_tracks = track.valid_next_tracks(node[1], current_run[2])
     options = tools.sprinkle_selector(possible_tracks, count)
 
     if len(options) == 0:
-        print("Failed to find selection: ", node, count, params)
+        print("Failed to find selection: ", node, count, current_run)
 
     return options
 
@@ -257,7 +257,6 @@ def generation_process(
 
     global debug_overall_count, logLength
 
-    current_run_id = 0
     blocks_current_step_index = 0
 
     longest_fail = []
@@ -284,7 +283,12 @@ def generation_process(
 
     # helper function that produces a prefilled "step" for moving forward
     def new_step(
-        start_node, existing_length=0, points=[], step_model="", current_run=[]
+        start_node,
+        current_run_id,
+        current_run,
+        existing_length=0,
+        points=[],
+        step_model="",
     ):
 
         return [
@@ -298,6 +302,7 @@ def generation_process(
                 "blocks_added": [],
                 "model": step_model,
                 "current_run": current_run,
+                "current_run_id": current_run_id,
             }
         ]
 
@@ -316,9 +321,9 @@ def generation_process(
         if len(cumulative_track_profile) == 1:
             return 0
 
-        for runid in range(0, len(cumulative_track_profile) - 1):
+        for runid in range(0, len(cumulative_track_profile)):
             if cumulative_track_profile[runid][1] > length:
-                return runid - 1
+                return runid
 
         return 0
 
@@ -348,8 +353,6 @@ def generation_process(
 
     def try_candidates(current_step, steps, mode):
 
-        nonlocal current_run_id
-
         while current_step["candidate_tracks"]:
 
             mdl_to_test = current_step["candidate_tracks"][-1]
@@ -372,19 +375,25 @@ def generation_process(
 
                 new_length = current_step["length"] + track_length
 
-                potential_run_id = determine_current_run_id(new_length)
-                if current_run_id != potential_run_id:
-                    current_run_id = potential_run_id
+                new_run_id = determine_current_run_id(new_length)
+                if current_step["current_run_id"] != new_run_id:
+                    print(
+                        "Went over a boundary!",
+                        result_node,
+                        new_run_id,
+                        current_step["current_run_id"],
+                    )
 
                 # if new length is over a boundary
                 # add another step for the switch
 
                 steps += new_step(
                     result_node,
+                    new_run_id,
+                    cumulative_track_profile[new_run_id],
                     new_length,
                     points,
                     mdl_to_test,
-                    cumulative_track_profile[current_run_id],
                 )
 
                 update_longest_fail(steps, new_length)
@@ -394,11 +403,11 @@ def generation_process(
         return False
 
     # START OF PROCESS
-    steps = new_step(start_node)
+    steps = new_step(start_node, 0, cumulative_track_profile[0])
 
     while (
         len(steps) > 0
-        and steps[-1]["length"] < cumulative_track_profile[-1]
+        and steps[-1]["length"] < cumulative_track_profile[-1][1]
         and debug_overall_count < debug_maximum_count
     ):
 
@@ -409,7 +418,7 @@ def generation_process(
 
         current_step = steps[-1]
 
-        if try_candidates(current_step, steps, cumulative_track_profile[0]):
+        if try_candidates(current_step, steps, current_step["current_run"][0]):
             # continue to the next step
             continue
 
