@@ -229,8 +229,8 @@ def distribute(min_distance, TotalPoints, sector_data):
                     ),
                     "mdl": ModelPath,
                     "ang": (
-                        random.randrange(-180, 180),
                         random.randrange(-4, 4),
+                        random.randrange(-180, 180),
                         random.randrange(-4, 4),
                     ),
                     "shadows": "noself",

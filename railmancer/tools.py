@@ -323,3 +323,7 @@ def tuple_to_range_list(bounds: tuple[int, int], IsReversed: bool) -> list[int]:
     begin, end = (stop, start) if IsReversed else (start, stop)
 
     return list(range(-begin, end + 1))
+
+
+def split_into_parts(number, n_parts):
+    return np.linspace(0, number, n_parts + 1)[1:]

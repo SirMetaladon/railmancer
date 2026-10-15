@@ -74,7 +74,7 @@ def parse_blocks(text: str) -> list[Block]:
     stack: list[int | None] = []
 
     pending_name: str | None = None
-    pending_start: int | None = None
+    pending_start: int = 0
 
     in_string = False
     escaped = False
@@ -180,7 +180,6 @@ def parse_blocks(text: str) -> list[Block]:
                 stack.append(block_index)
 
                 pending_name = None
-                pending_start = None
 
             else:
                 # An unnamed brace. This should not normally occur in VMF,

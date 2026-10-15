@@ -6,6 +6,7 @@ from railmancer import tools, cfg
 
 Beziers: list = []
 sampled_points = []
+staged_points = []
 
 
 def bezier_3d(t, Bez) -> tuple[float, float, float]:
@@ -264,6 +265,18 @@ def convert_bezier_to_points(Segment, line_maximum_poll_point_distance):
     )
 
     return [(bezier_3d(t, Segment)) for t in ts]
+
+
+def stage_points(more_points):
+
+    global staged_points
+    staged_points += more_points
+
+
+def insert_staged_points():
+
+    global sampled_points
+    sampled_points += staged_points
 
 
 def encode_lines():

@@ -37,7 +37,7 @@ def main():
     # Import line objects from a VMF, as well as the track entities themselves.
     parser.import_track(vmf_input_path)
 
-    # Starting from a node, procedurally move forward and place track, finding a path that fits the parameters.
+    """# Starting from a node, procedurally move forward and place track, finding a path that fits the parameters.
     trackhammer.initialize()
     trackhammer.exclude_existing()
 
@@ -45,9 +45,9 @@ def main():
     trackhammer.generate_mainline(
         Vancouver_Start,
         [
-            [(4, 4), 3, {"min_radius": 2, "min_grade": 3, "max_grade": 3}],  # run 1
+            [(3, 3), 1, {"min_radius": 2, "min_grade": 3, "max_grade": 3}],  # run 1
         ],
-    )
+    )"""
 
     """[(0, 0), 0.3, {"min_radius": 5, "min_grade": 0, "max_grade": 0}],  # run 4
     [(1, 0), 1, {"min_radius": 3, "min_grade": 2, "max_grade": 2}],  # run 2
@@ -83,13 +83,16 @@ def main():
     lines.encode_lines()
     # these values are stored as global variables in the lines module.
 
+    # takes staged building foundation points and makes them ignore sector creation while still being a part of sectors
+    lines.insert_staged_points()
+
     # Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are. Also contains a map for "what block is next to this one"
     sectors.build_fit()
     sectors.link()
 
     # Takes points and puts them in buckets for sector processing.
     sectors.assign_points_to_sectors()
-    """
+
     # From the height-buckets, create sectors that adhere to CFG parameters.
     heightmap.generate_sector_heightmaps()
 
@@ -113,14 +116,14 @@ def main():
 
     # Scan all entities for switch stands, determine which side of them is less blocked, place accordingly
     sectors.collapse_quantum_switchstands()
-    
+
     profile.start()
     # Turn the raw sector and heightmap data into brushes and displacements.
     compile.compile_sectors_to_brushes()
     profile.end()
-    """
+
     # For each sector, apply the scattering algorithm that places trees, rocks, bushes, etc.
-    # compile.scatter_placables()
+    compile.scatter_placables()
 
     """points = lines.get_all_track_points()
     for entry in points:
@@ -129,7 +132,7 @@ def main():
     # Places Frogs at all track-points around the map, for debugging purposes.
     tools.stopwatch_click("submodule", "Frogging the Track, done")"""
 
-    # vmfpy.add_light_environment()
+    vmfpy.add_light_environment()
 
     # Compile brush, entity, and brushentity data into a VMF text file and save.
     vmfpy.write_to_vmf(f"{"railmancer"}_{random.randint(4000,4999)}{".vmf"}")

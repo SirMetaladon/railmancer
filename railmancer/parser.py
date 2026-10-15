@@ -1,5 +1,8 @@
-from railmancer import track, lines, tools, vmfpy
+from railmancer import track, lines, tools, vmfpy, vmfparse, cfg
 import numpy as np
+import re
+import itertools
+import math
 
 # Subsystem for taking raw VMFs and converting them into usable dictionaries of data.
 
@@ -117,12 +120,145 @@ def reprocess_raw_data(raw_ents):
             add_entity_to_new_map(Entity, Data)
 
 
+def extract_vertices(text):
+
+    pattern = r'"v"\s+"(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)"'
+
+    vertices = {tuple(map(float, match)) for match in re.findall(pattern, text)}
+
+    return list(vertices)
+
+
+import math
+
+
+import math
+
+
+def fill_convex_polygon_3d(vertices, spacing):
+    """Generates a grid of 3D points filling the area of a convex polygon.
+
+    :param vertices: List of (x, y, z) tuples representing the unordered polygon
+    vertices.
+    :param spacing: Distance between grid points.
+    :return: List of (x, y, z) tuples covering the polygon area.
+    """
+    if not vertices or spacing <= 0:
+        return []
+
+    # 1. Extract the common z height
+    z = vertices[0][2]
+
+    # 2. Order the unordered vertices by their polar angle around the centroid
+    cx = sum(v[0] for v in vertices) / len(vertices)
+    cy = sum(v[1] for v in vertices) / len(vertices)
+    ordered = sorted(vertices, key=lambda v: math.atan2(v[1] - cy, v[0] - cx))
+
+    # 3. Find the 2D bounding box
+    xs = [v[0] for v in ordered]
+    ys = [v[1] for v in ordered]
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+
+    # 4. Helper: Check if a 2D point is inside/on a convex polygon using cross products
+    def is_inside(px, py):
+        n = len(ordered)
+        sign = None
+        for i in range(n):
+            v1 = ordered[i]
+            v2 = ordered[(i + 1) % n]
+
+            # Edge vector and point vector
+            dx = v2[0] - v1[0]
+            dy = v2[1] - v1[1]
+            pdx = px - v1[0]
+            pdy = py - v1[1]
+
+            # 2D cross product
+            cross = dx * pdy - dy * pdx
+
+            # Skip points exactly on collinear edges (within floating-point tolerance)
+            if abs(cross) < 1e-9:
+                continue
+
+            current_sign = cross > 0
+            if sign is None:
+                sign = current_sign
+            elif sign != current_sign:
+                return False
+        return True
+
+    # 5. Generate grid points and filter
+    filled_points = []
+    y = min_y
+    while y <= max_y:
+        x = min_x
+        while x <= max_x:
+            if is_inside(x, y):
+                filled_points.append((x, y, z))
+            x += spacing
+        y += spacing
+
+    return filled_points
+
+
 def import_track(path):
 
     if path == "":
         return [], []
 
-    import re
+    sections = vmfparse.split_vmf(path)
+
+    imported_brushes = sections.Brushes
+
+    pattern = r'"name"\s+"groundhints"\s*\n\s*"visgroupid"\s*"(\d+)"'
+    match = re.search(pattern, sections.Start)
+
+    if match:
+        visgroupnumber = match.group(1)
+    else:
+        visgroupnumber = "0"
+
+    for brush in imported_brushes:
+
+        if '''"visgroupid" "''' + visgroupnumber + '''"''' in brush:
+
+            vertices = extract_vertices(brush)
+            verts2 = []
+            verts3 = []
+
+            if not vertices:
+                print(brush)
+
+            vertices = [(x, y, z + 35) for x, y, z in vertices]
+            min_z = min(z for _, _, z in vertices)
+
+            verts2 = [(x, y, z) for x, y, z in vertices if z == min_z]
+
+            verts3 = fill_convex_polygon_3d(
+                verts2, cfg.get("line_maximum_poll_point_distance")
+            )
+            """
+            pairs = list(itertools.combinations(verts2, 2))
+
+            maxlength = 400
+
+            for pair in pairs:
+                v1, v2 = pair
+                p1 = np.array(v1)
+                p2 = np.array(v2)
+
+                dist = np.linalg.norm(p1 - p2)
+
+                if dist < maxlength:
+                    continue
+                count = math.ceil(dist / maxlength)
+                spots = tools.split_into_parts(1, count)
+
+                for spot in spots:
+                    verts3 += [tools.linterp(p1, p2, spot)]"""
+
+            lines.stage_points(verts2 + verts3)
 
     with open(path, "r") as file:
         content = file.read()

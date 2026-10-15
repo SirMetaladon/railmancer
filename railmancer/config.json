@@ -159,7 +159,7 @@
         "ballast_alpha_distance": 200,
         "ballast_alpha_slope": 50,
         "height_track_to_terrain": -35,
-        "maximum_models_per_1kx1k": 12,
+        "maximum_models_per_1kx1k": 50,
         "noise_hill_resolution": 30,
         "noise_persistence": 0.3,
         "noise_lacunarity": 4,

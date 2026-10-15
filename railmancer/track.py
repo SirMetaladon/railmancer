@@ -99,10 +99,10 @@ def direction_to_angle(Direction) -> float:
 
 def determine_length(StartDirection, EndDirection, Radius):
 
-    StartAngle = direction_to_angle(StartDirection)
-    EndAngle = direction_to_angle(EndDirection)
+    start_angle = direction_to_angle(StartDirection)
+    end_angle = direction_to_angle(EndDirection)
 
-    Degrees = abs(EndAngle - StartAngle)
+    Degrees = abs(end_angle - start_angle)
 
     Length = round(Radius * math.pi * Degrees / 180, 2)
 
@@ -476,51 +476,15 @@ def add_lines_from_track(pos, track_object, heading):
     )
 
 
-def deal_with_reversing_nonsense(model, prev_node, new_node):
+def write_track(model, pos, yaw):
 
-    IsReversed = new_node[3]  # if it's reversed AHA IT DOES DO SOMETHING
-
-    if IsReversed:
-        ModelPos = new_node[0]
-        RotFix = 180
-        Direction = new_node[1]
-        OtherDirection = prev_node[1]
-    else:
-        ModelPos = prev_node[0]
-        RotFix = 0
-        Direction = prev_node[1]
-        OtherDirection = new_node[1]
-
-    TrackEndDirection = track_model_library[model]["EndDirection"]
-
-    ModelHeading = new_node[2] if TrackEndDirection[:1] != "8" else prev_node[2]
-
-    Angle = ModelHeading + RotFix
-
-    ForwardPerTrack, RearPerTrack = get_offset_forward_for_parallel_on_right(
-        track_model_library[model]["StartDirection"], TrackEndDirection
-    )
-
-    return (
-        ModelPos,
-        Angle,
-        Direction,
-        IsReversed,
-        ForwardPerTrack,
-        RearPerTrack,
-        OtherDirection,
-    )
-
-
-def write_track(model, ModelPos, Angle):
-
-    add_lines_from_track(ModelPos, track_model_library[model], Angle)
+    add_lines_from_track(pos, track_model_library[model], yaw)
 
     vmfpy.add_entity(
         {
-            "pos": ModelPos,
+            "pos": pos,
             "mdl": model,
-            "ang": (0, Angle, 0),
+            "ang": (0, yaw, 0),
             "visgroup": "23",
         }
     )
@@ -670,6 +634,29 @@ def get_new_node_from_node_and_model(
     return NewPosition, NewDirection, NewHeading, IsReversed
 
 
+def create_straight(StartPosition, Distance, Direction, Heading):
+
+    if Distance < 0:
+
+        raise ValueError()
+
+    elif Distance > 0:
+
+        # for each
+        lengths = decompose_length_to_straights(Distance)
+        total = 0
+
+        for length in lengths:
+            move = move_in_trackspace(total, Direction)
+            final_position = updated_position(StartPosition, move, Heading)
+            total += length
+            write_track(
+                convert_length_to_mdl(length, Direction),
+                final_position,
+                Heading,
+            )
+
+
 def write_track_from_trackhammer_steps(steps):
 
     prev_node = ["", "0fw"]
@@ -686,20 +673,37 @@ def write_track_from_trackhammer_steps(steps):
             prev_node = new_node
             continue
 
-        (
-            BasePos,
-            Heading,
-            Direction,
-            IsReversed,
-            forward_per_track,
-            rear_per_track,
-            OtherDirection,
-        ) = deal_with_reversing_nonsense(model, prev_node, new_node)
+        IsReversed = new_node[3]  # if it's reversed AHA IT DOES DO SOMETHING
+
+        if IsReversed:
+            base_pos_of_section = new_node[0]
+            RotFix = 180
+            Direction = new_node[1]
+            base_of_far_side = prev_node[0]
+            far_direction = prev_node[1]
+        else:
+            base_pos_of_section = prev_node[0]
+            RotFix = 0
+            Direction = prev_node[1]
+            far_direction = new_node[1]
+            base_of_far_side = new_node[0]
+
+        TrackEndDirection = track_model_library[model]["EndDirection"]
+
+        ModelHeading = new_node[2] if TrackEndDirection[:1] != "8" else prev_node[2]
+
+        Heading = int(ModelHeading) + RotFix
+        alt_heading = new_node[2] + 90 if (IsReversed and far_direction == "4rt") else 0
+
+        forward_per_track, rear_per_track = get_offset_forward_for_parallel_on_right(
+            track_model_library[model]["StartDirection"], TrackEndDirection
+        )
 
         track_mode = step["current_run"][0]
         # tuple like (1,3), which means 1 track to left, 3 tracks to right for a total of 5 including main
 
         tracks = tools.tuple_to_range_list(track_mode, IsReversed)
+        tracks_alt = tools.tuple_to_range_list(track_mode, not IsReversed)
 
         farthest_back = min(
             tracks[0] * forward_per_track, tracks[-1] * forward_per_track
@@ -709,47 +713,29 @@ def write_track_from_trackhammer_steps(steps):
             tracks[0] * rear_per_track, tracks[-1] * rear_per_track
         )
 
+        # for those watching the stream > say hi
+        # I have all of you muted now
+        # your his shall be only be heard by yourselves
+
+        for track in tracks_alt:
+
+            rear = -farthest_rear_back + rear_per_track * track
+            lateral_move = move_in_trackspace(0, far_direction, track)
+            final_position = updated_position(
+                base_of_far_side, lateral_move, alt_heading
+            )
+            create_straight(final_position, rear, far_direction, alt_heading + 180)
+
         for track in tracks:
 
             fore_aft = -farthest_back + forward_per_track * track
-            rear = -farthest_rear_back + rear_per_track * track
 
             final_move = move_in_trackspace(fore_aft, Direction, track)
 
-            final_position = updated_position(BasePos, final_move, Heading)
+            final_position = updated_position(base_pos_of_section, final_move, Heading)
             write_track(model, final_position, Heading)
 
-            if fore_aft > 0:
-
-                # for each
-                lengths = decompose_length_to_straights(fore_aft)
-                total = 0
-
-                for length in lengths:
-                    move = move_in_trackspace(total, Direction, track)
-                    final_position = updated_position(BasePos, move, Heading)
-                    total += length
-                    write_track(
-                        convert_length_to_mdl(length, Direction),
-                        final_position,
-                        Heading,
-                    )
-
-            """if rear > 0:
-
-                # for each
-                lengths = decompose_length_to_straights(rear)
-                total = 0
-
-                for length in lengths:
-                    move = move_in_trackspace(total, OtherDirection, track)
-                    extra_position = updated_position(final_position, move, Heading)
-                    total += length
-                    write_track(
-                        convert_length_to_mdl(length, OtherDirection),
-                        extra_position,
-                        Heading,
-                    )"""
+            create_straight(final_position, fore_aft, Direction, Heading + 180)
 
         prev_node = new_node
 
