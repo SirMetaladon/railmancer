@@ -236,7 +236,7 @@ def import_track(path):
             verts2 = [(x, y, z) for x, y, z in vertices if z == min_z]
 
             verts3 = fill_convex_polygon_3d(
-                verts2, cfg.get("line_maximum_poll_point_distance")
+                verts2, cfg.get("line_maximum_poll_point_distance") * 2
             )
             """
             pairs = list(itertools.combinations(verts2, 2))

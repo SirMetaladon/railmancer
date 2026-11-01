@@ -37,17 +37,41 @@ def main():
     # Import line objects from a VMF, as well as the track entities themselves.
     parser.import_track(vmf_input_path)
 
-    """# Starting from a node, procedurally move forward and place track, finding a path that fits the parameters.
+    # Starting from a node, procedurally move forward and place track, finding a path that fits the parameters.
     trackhammer.initialize()
     trackhammer.exclude_existing()
 
-    Vancouver_Start = [(7056, 3040, -13564), "0fw", -90, False]
+    Vancouver_Start = [(7568, 3552, -13040), "0fw", -90, False]
     trackhammer.generate_mainline(
         Vancouver_Start,
         [
-            [(3, 3), 1, {"min_radius": 2, "min_grade": 3, "max_grade": 3}],  # run 1
+            [
+                (random.randint(0, 2), random.randint(0, 2)),
+                1,
+                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
+            ],
+            [
+                (random.randint(0, 2), random.randint(0, 2)),
+                1,
+                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
+            ],
+            [
+                (random.randint(0, 2), random.randint(0, 2)),
+                1,
+                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
+            ],
+            [
+                (random.randint(0, 2), random.randint(0, 2)),
+                1,
+                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
+            ],
+            [
+                (random.randint(0, 2), random.randint(0, 2)),
+                1,
+                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
+            ],
         ],
-    )"""
+    )
 
     """[(0, 0), 0.3, {"min_radius": 5, "min_grade": 0, "max_grade": 0}],  # run 4
     [(1, 0), 1, {"min_radius": 3, "min_grade": 2, "max_grade": 2}],  # run 2
@@ -78,11 +102,14 @@ def main():
     # 3rd number is minumum radius, 1 = 3072
     # 4th number is minimum grade level, in this case 0 is level
     # 5th number is maximum grade level, in this case 2.5%
-
+    '''
     # Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
     lines.encode_lines()
     # these values are stored as global variables in the lines module.
 
+    # Scan all entities for switch stands, determine which side of them is less blocked, place accordingly
+    sectors.collapse_quantum_switchstands()
+    
     # takes staged building foundation points and makes them ignore sector creation while still being a part of sectors
     lines.insert_staged_points()
 
@@ -114,9 +141,6 @@ def main():
     # Apply cut-and-fill process again to prevent smoothing from occluding the rails.
     heightmap.cut_and_fill_sector_heightmaps()
 
-    # Scan all entities for switch stands, determine which side of them is less blocked, place accordingly
-    sectors.collapse_quantum_switchstands()
-
     profile.start()
     # Turn the raw sector and heightmap data into brushes and displacements.
     compile.compile_sectors_to_brushes()
@@ -132,7 +156,7 @@ def main():
     # Places Frogs at all track-points around the map, for debugging purposes.
     tools.stopwatch_click("submodule", "Frogging the Track, done")"""
 
-    vmfpy.add_light_environment()
+    vmfpy.add_light_environment()'''
 
     # Compile brush, entity, and brushentity data into a VMF text file and save.
     vmfpy.write_to_vmf(f"{"railmancer"}_{random.randint(4000,4999)}{".vmf"}")

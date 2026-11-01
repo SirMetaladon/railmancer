@@ -116,6 +116,24 @@
           "base_radius": 70,
           "steepness": 2
         },
+        "models/props_foliage/tree_pine_tall_01.mdl": {
+          "weight": 15,
+          "exclusion_radius": 128,
+          "base_radius": 40,
+          "steepness": 2
+        },
+        "models/props_foliage/tree_pine_tall_02.mdl": {
+          "weight": 15,
+          "exclusion_radius": 150,
+          "base_radius": 50,
+          "steepness": 2
+        },
+        "models/props_foliage/tree_pine_02.mdl": {
+          "weight": 5,
+          "exclusion_radius": 175,
+          "base_radius": 60,
+          "steepness": 2
+        },
         "models/props_wasteland/rockcliff_cluster01b.mdl":{
           "weight": 1,
           "exclusion_radius": 500,
@@ -159,7 +177,7 @@
         "ballast_alpha_distance": 200,
         "ballast_alpha_slope": 50,
         "height_track_to_terrain": -35,
-        "maximum_models_per_1kx1k": 50,
+        "maximum_models_per_1kx1k": 25,
         "noise_hill_resolution": 30,
         "noise_persistence": 0.3,
         "noise_lacunarity": 4,

@@ -638,6 +638,7 @@ def create_straight(StartPosition, Distance, Direction, Heading):
 
     if Distance < 0:
 
+        print(StartPosition, Distance, Direction, Heading)
         raise ValueError()
 
     elif Distance > 0:
@@ -693,7 +694,18 @@ def write_track_from_trackhammer_steps(steps):
         ModelHeading = new_node[2] if TrackEndDirection[:1] != "8" else prev_node[2]
 
         Heading = int(ModelHeading) + RotFix
-        alt_heading = new_node[2] + 90 if (IsReversed and far_direction == "4rt") else 0
+
+        alt_heading = (
+            Heading
+            - (90 if track_model_library[model]["EndDirection"] == "8rt" else 0)
+            + (90 if track_model_library[model]["EndDirection"] == "8lt" else 0)
+            - (
+                90
+                if (IsReversed and track_model_library[model]["EndDirection"] == "4rt")
+                else 0
+            )
+        )
+        # alt_heading = new_node[2] + 90 if (IsReversed and far_direction == "4rt") else 0
 
         forward_per_track, rear_per_track = get_offset_forward_for_parallel_on_right(
             track_model_library[model]["StartDirection"], TrackEndDirection
@@ -710,17 +722,18 @@ def write_track_from_trackhammer_steps(steps):
         )
 
         farthest_rear_back = min(
-            tracks[0] * rear_per_track, tracks[-1] * rear_per_track
+            tracks_alt[0] * rear_per_track, tracks_alt[-1] * rear_per_track
         )
-
-        # for those watching the stream > say hi
-        # I have all of you muted now
-        # your his shall be only be heard by yourselves
 
         for track in tracks_alt:
 
             rear = -farthest_rear_back + rear_per_track * track
-            lateral_move = move_in_trackspace(0, far_direction, track)
+
+            lateral_move = move_in_trackspace(
+                0,
+                track_model_library[model]["EndDirection"],
+                track + (1 if not IsReversed else -1),
+            )
             final_position = updated_position(
                 base_of_far_side, lateral_move, alt_heading
             )
@@ -921,13 +934,13 @@ def get_offset_forward_for_parallel_on_right(start_direction, end_direction):
         elif second_direction[0] == "4":
             return (
                 96 * handedness_mult,
-                48,
+                48 * handedness_mult,
             )
 
         elif second_direction[0] == "8":
             return (
                 192 * handedness_mult,
-                192,
+                192 * handedness_mult,
             )
 
     elif first_direction[0] == "1":
@@ -935,15 +948,15 @@ def get_offset_forward_for_parallel_on_right(start_direction, end_direction):
         if second_direction[0] == "2":
             return (
                 96 * handedness_mult,
-                48,
+                -48 * handedness_mult,  # apparently that IS reversed
             )
         elif second_direction[0] == "4":
-            return (64 * handedness_mult, 32)
+            return (64 * handedness_mult, 32 * handedness_mult)
 
     elif first_direction[0] == "2":
 
         if second_direction[0] == "4":
-            return 0, 48
+            return 0, 48 * handedness_mult
 
     print("Invalid combination!", start_direction, end_direction)
     return 0, 0
@@ -951,31 +964,36 @@ def get_offset_forward_for_parallel_on_right(start_direction, end_direction):
 
 def get_addlength(start_direction, end_direction, mode):
 
-    start_addlength, end_addlength = 0, 0
-
     tracks_left = mode[0]
     tracks_right = mode[1]
 
-    if (tracks_left + tracks_right) > 0:
+    if (tracks_left + tracks_right) <= 0:
+        return 0, 0
 
-        start_base, end_base = get_offset_forward_for_parallel_on_right(
-            start_direction, end_direction
-        )
-        # end_base = 1024
-        # would return positive 48 for 1rt
-        is_reversed = int(start_direction[0]) > int(end_direction[0])
+    per_righthand_blue_base, per_righthand_green_end = (
+        get_offset_forward_for_parallel_on_right(start_direction, end_direction)
+    )
 
-        # someone needs to explain why this is to me
-        start_addlength_step = start_base if not is_reversed else end_base
-        end_addlength_step = end_base if not is_reversed else start_base
+    is_reversed = int(start_direction[0]) > int(end_direction[0])
 
-        start_addlength = -min(
-            0, -start_addlength_step * tracks_left, start_addlength_step * tracks_right
-        )
-        end_addlength = -min(
-            0, -end_addlength_step * tracks_left, end_addlength_step * tracks_right
-        )
+    # since, if reversed, left becomes right; the values flip with track number
+    first_offset_relative_to_main = (
+        per_righthand_blue_base if not is_reversed else -per_righthand_green_end
+    )
+    second_offset_relative_to_main = (
+        per_righthand_green_end if not is_reversed else -per_righthand_blue_base
+    )
 
-        # print(start_direction, end_direction, mode, start_addlength, end_addlength)
+    first_offset_push_forward = -min(
+        0,
+        tracks_right * first_offset_relative_to_main,
+        -tracks_left * first_offset_relative_to_main,
+    )
 
-    return start_addlength, end_addlength
+    second_offset_push_forward = -min(
+        0,
+        tracks_right * second_offset_relative_to_main,
+        -tracks_left * second_offset_relative_to_main,
+    )
+
+    return first_offset_push_forward, second_offset_push_forward
