@@ -30,6 +30,7 @@ if ROOT not in sys.path:
 sys.modules.setdefault("turtle", types.ModuleType("turtle"))
 
 from railmancer import lines, track, tools, vmfpy
+from railmancer.joincheck import audit_props, endpoint_key
 
 NODE_DIRS = ("0fw", "1lt", "1rt", "2lt", "2rt", "4lt", "4rt")
 ALL_DIRS = NODE_DIRS + ("8lt", "8rt")
@@ -407,27 +408,19 @@ def run_case(name, start, pieces, models):
     except Exception as error:
         return [f"{name}: {type(error).__name__}: {error}"]
 
-    segments, adjacency = collect_segments(placed)
-    failures = []
-    used = set()
+    allowed = set()
     for track_index, first_piece, last_piece in track_runs(modes):
-        sub_nodes = nodes[first_piece : last_piece + 2]
-        failures.extend(
-            walk_track(
-                name,
-                adjacency,
-                segments,
-                used,
-                sub_nodes,
-                track_index,
+        for boundary in (nodes[first_piece], nodes[last_piece + 1]):
+            allowed.add(
+                endpoint_key(
+                    station_point(boundary, track_index),
+                    node_tangent(boundary),
+                )
             )
-        )
-    unused = len(segments) - len(used)
-    if unused:
-        failures.append(f"{name}: {unused} rail pieces were not on any track")
-    if not failures:
-        present = present_at_nodes(modes)
-        failures.extend(check_spacing(name, zip(nodes, present)))
+    failures = [
+        f"{name}: {problem}"
+        for problem in audit_props(placed, track.track_model_library, allowed)
+    ]
     return failures
 
 

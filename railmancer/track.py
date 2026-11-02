@@ -659,6 +659,16 @@ def get_new_node_from_node_and_model(
     return NewPosition, NewDirection, NewHeading, IsReversed
 
 
+def straight_prop_yaw(direction, heading):
+
+    # There is no 4rt straight; it would duplicate 4lt. Working in 4rt
+    # track space means the 4lt prop, turned 90° so its mesh follows the
+    # 4rt step. Origins are still stepped in 4rt space at `heading`.
+    if direction == "4rt":
+        return heading - 90
+    return heading
+
+
 def create_straight(StartPosition, Distance, Direction, Heading):
 
     if Distance < 0:
@@ -671,6 +681,7 @@ def create_straight(StartPosition, Distance, Direction, Heading):
         # for each
         lengths = decompose_length_to_straights(Distance)
         total = 0
+        prop_yaw = straight_prop_yaw(Direction, Heading)
 
         for length in lengths:
             move = move_in_trackspace(total, Direction)
@@ -679,7 +690,7 @@ def create_straight(StartPosition, Distance, Direction, Heading):
             write_track(
                 convert_length_to_mdl(length, Direction),
                 final_position,
-                Heading,
+                prop_yaw,
             )
 
 
@@ -799,7 +810,6 @@ def write_track_from_trackhammer_steps(steps):
         # tuple like (1,3), which means 1 track to left, 3 tracks to right for a total of 5 including main
 
         tracks = tools.tuple_to_range_list(track_mode, IsReversed)
-        tracks_alt = tools.tuple_to_range_list(track_mode, not IsReversed)
 
         farthest_back = min(
             tracks[0] * forward_per_track, tracks[-1] * forward_per_track
@@ -821,45 +831,37 @@ def write_track_from_trackhammer_steps(steps):
             prev_run = step["current_run"]
             continue
 
-        # The far straight is the joint with the neighboring segment, so it has
-        # to use that node's direction and heading, and the same travel-side
-        # index the neighbor will step over with. tracks_alt is travel-space
-        # only when this piece is reversed.
-        join_tracks = tracks_alt if IsReversed else tracks
-        join_heading = prev_node[2] if IsReversed else new_node[2]
-
+        # Forward piece. Curves sit in the incoming frame so a 45° hand
+        # change does not swing the entrance step off the previous segment.
+        # Assembly order: center and parallel curves, shim at the start node,
+        # then the exit shim unless it is zero.
+        step_heading = prev_node[2]
+        join_heading = new_node[2]
         farthest_rear_back = min(
-            join_tracks[0] * rear_per_track, join_tracks[-1] * rear_per_track
+            tracks[0] * rear_per_track, tracks[-1] * rear_per_track
         )
-
-        for track in join_tracks:
-
-            rear = -farthest_rear_back + rear_per_track * track
-
-            lateral_move = move_in_trackspace(0, far_direction, track)
-            final_position = updated_position(
-                base_of_far_side, lateral_move, join_heading
-            )
-            create_straight(final_position, rear, far_direction, join_heading + 180)
-
-        # Step over in the frame Direction belongs to. That is the incoming
-        # node, unless this prop is reversed and Direction is the outgoing one.
-        # The prop yaw can differ by 90° on a diagonal hand change; the filler
-        # straight still has to point along Direction or it misses the joint.
-        step_heading = Heading if IsReversed else prev_node[2]
+        piece = track_model_library[model]
 
         for track in tracks:
 
             fore_aft = -farthest_back + forward_per_track * track
+            rear = -farthest_rear_back + rear_per_track * track
 
             final_move = move_in_trackspace(fore_aft, Direction, track)
+            curve_pos = updated_position(base_pos_of_section, final_move, step_heading)
+            write_track(model, curve_pos, Heading)
 
-            final_position = updated_position(
-                base_pos_of_section, final_move, step_heading
-            )
-            write_track(model, final_position, Heading)
+            if fore_aft > 0:
+                station = updated_position(
+                    base_pos_of_section,
+                    move_in_trackspace(0, Direction, track),
+                    step_heading,
+                )
+                create_straight(station, fore_aft, Direction, step_heading)
 
-            create_straight(final_position, fore_aft, Direction, step_heading + 180)
+            if rear > 0:
+                curve_end = np.add(curve_pos, tools.rot_orth(piece["Move"], Heading))
+                create_straight(curve_end, rear, far_direction, join_heading)
 
         prev_node = new_node
         prev_run = step["current_run"]
@@ -1006,10 +1008,13 @@ def decompose_length_to_straights(target):
 
 def convert_length_to_mdl(length, direction):
 
-    if direction == "8lt":
+    # 8lt/8rt straights are 0fw props; the heading carries the corner.
+    # 4rt is the 4lt prop (see straight_prop_yaw). The filename has to be
+    # the real 4lt piece, whose Y step is the opposite of 4rt's.
+    if direction == "8lt" or direction == "8rt":
         direction = "0fw"
-    elif direction == "8rt":
-        direction = "0fw"
+    elif direction == "4rt":
+        direction = "4lt"
     extra = "0" * (4 - len(str(length)))
     over = int(move_in_trackspace(length, direction)[1])
     minus = "-" if over < 0 else "+"
