@@ -127,9 +127,6 @@ def register_library():
     models = {}
     for start_direction in ALL_DIRS:
         for end_direction in ALL_DIRS:
-            _along_start, _along_end, legal = grid_offset(start_direction, end_direction)
-            if not legal:
-                continue
             name = (
                 "models/trakpak3_rsg/arcs/r4096/"
                 f"a{start_direction}_{end_direction}_geom.mdl"
@@ -450,8 +447,11 @@ def _entry_directions(start_direction, end_direction):
 def single_piece_cases(models):
     cases = []
     for authored, _name in models.items():
-        _along_start, _along_end, legal = grid_offset(*authored)
-        if not legal:
+        along_start, _along_end, exact = grid_offset(*authored)
+        if along_start is None:
+            # 8lt↔8rt: tangents are opposite, so the snap cannot close the joint.
+            continue
+        if not exact:
             continue
         for entry in sorted(_entry_directions(*authored)):
             for heading in HEADINGS:
@@ -546,30 +546,77 @@ def check_legacy_table():
         got = track.get_offset_forward_for_parallel_on_right(*pair)
         if got != expected:
             failures.append(f"offset {pair[0]}->{pair[1]} is {got}, table says {expected}")
-        swapped = track.get_offset_forward_for_parallel_on_right(pair[1], pair[0])
-        expect_swapped = (-expected[1], -expected[0])
-        if swapped != expect_swapped:
+        # The table is stored low-angle to high-angle, so either call order
+        # returns that same pair. Travel order is applied when the segment is placed.
+        reverse = track.get_offset_forward_for_parallel_on_right(pair[1], pair[0])
+        if reverse != expected:
             failures.append(
-                f"offset {pair[1]}->{pair[0]} is {swapped}, expected {expect_swapped}"
+                f"offset {pair[1]}->{pair[0]} is {reverse}, table says {expected}"
             )
     return failures
 
 
-def unsupported_transitions():
-    skipped = []
+def _code_stagger(start_direction, end_direction):
+    """Stagger the placer actually uses, along this traversal."""
+
+    along_low, along_high = track.get_offset_forward_for_parallel_on_right(
+        start_direction, end_direction
+    )
+    if int(start_direction[0]) > int(end_direction[0]):
+        return -along_high, -along_low
+    return along_low, along_high
+
+
+def rounded_residuals(outer_tracks=3):
+    """How far the outermost parallel track sits from a perfect (non-grid) stagger.
+
+    Reported for pairs the table does not hit exactly: the snap to 16 units,
+    and 8lt↔8rt, where the tangents are opposite so the nearest grid value is 0.
+    """
+
+    rows = []
+    worst = 0.0
+    worst_name = ""
     for start_direction in ALL_DIRS:
         for end_direction in ALL_DIRS:
-            along_start, along_end, legal = grid_offset(start_direction, end_direction)
-            if legal:
+            if start_direction == end_direction:
                 continue
-            if along_start is None:
-                skipped.append(f"{start_direction}->{end_direction} (parallel tangents)")
-            else:
-                skipped.append(
-                    f"{start_direction}->{end_direction} "
-                    f"(stagger {along_start}, {along_end} is off the 16-unit grid)"
+            exact_start, exact_end, exact = grid_offset(start_direction, end_direction)
+            used_start, used_end = _code_stagger(start_direction, end_direction)
+            if exact_start is None:
+                right_start = track.move_in_trackspace(0, start_direction, 1)
+                right_end = track.move_in_trackspace(0, end_direction, 1)
+                forward_start = track.move_in_trackspace(1, start_direction, 0)
+                forward_end = track.move_in_trackspace(1, end_direction, 0)
+                remain_x = (right_end[0] - right_start[0]) - (
+                    used_start * forward_start[0] + used_end * forward_end[0]
                 )
-    return skipped
+                remain_y = (right_end[1] - right_start[1]) - (
+                    used_start * forward_start[1] + used_end * forward_end[1]
+                )
+                per_track = math.hypot(remain_x, remain_y)
+                note = "opposite tangents, snap is 0"
+            else:
+                if exact and (used_start, used_end) == (exact_start, exact_end):
+                    continue
+                forward_start = track.move_in_trackspace(1, start_direction, 0)
+                forward_end = track.move_in_trackspace(1, end_direction, 0)
+                delta_start = used_start - exact_start
+                delta_end = used_end - exact_end
+                remain_x = delta_start * forward_start[0] + delta_end * forward_end[0]
+                remain_y = delta_start * forward_start[1] + delta_end * forward_end[1]
+                per_track = math.hypot(remain_x, remain_y)
+                note = (
+                    f"exact ({exact_start:.1f}, {exact_end:.1f}) "
+                    f"used ({used_start}, {used_end})"
+                )
+            miss = per_track * outer_tracks
+            rows.append((miss, f"{start_direction}->{end_direction}", note, per_track))
+            if miss > worst:
+                worst = miss
+                worst_name = f"{start_direction}->{end_direction}"
+    rows.sort(reverse=True)
+    return rows, worst, worst_name
 
 
 def main():
@@ -581,7 +628,7 @@ def main():
         return 1
     failures = check_legacy_table()
     cases = single_piece_cases(models) + chain_cases(models)
-    skipped = unsupported_transitions()
+    residuals, worst, worst_name = rounded_residuals()
     log = io.StringIO()
     with contextlib.redirect_stdout(log):
         for name, start, pieces in cases:
@@ -590,13 +637,21 @@ def main():
                 break
 
     print(
-        f"parallel geometry: {len(cases)} cases, "
-        f"{len(failures)} failures, {len(skipped)} unsupported transitions"
+        f"parallel geometry: {len(cases)} exact-join cases, "
+        f"{len(failures)} failures"
     )
-    if skipped:
-        print("unsupported (straight fillers cannot close these):")
-        for line in skipped:
-            print(f"  {line}")
+    print(
+        f"rounded-stagger residual, outermost of 3 tracks each side: "
+        f"{worst:.1f} units on {worst_name}"
+    )
+    print("rounded families (ideal joint vs 16-unit snap):")
+    shown = set()
+    for miss, name, note, per_track in residuals:
+        family = tuple(sorted(name.split("->")))
+        if family in shown:
+            continue
+        shown.add(family)
+        print(f"  {name}: {miss:.1f} units at 3 tracks ({per_track:.1f} per track); {note}")
     noise = [
         line
         for line in log.getvalue().splitlines()
@@ -611,7 +666,7 @@ def main():
         for line in failures[:40]:
             print(f"  {line}")
         return 1
-    print("all grid-legal parallel cases met in position, heading, and 192-unit spacing")
+    print("exact joins met in position, heading, and 192-unit spacing")
     return 0
 
 
