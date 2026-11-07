@@ -201,10 +201,7 @@ def audit_props(props, library, allowed_open=None):
     return problems
 
 
-def parse_vmf_track_props(vmf_text):
-    """prop_static / prop_dynamic track pieces named in a VMF."""
-
-    props = []
+def _entity_blocks(vmf_text):
     index = 0
     while True:
         start = vmf_text.find("entity", index)
@@ -228,12 +225,82 @@ def parse_vmf_track_props(vmf_text):
             cursor += 1
         if end is None:
             break
-        block = vmf_text[brace : end + 1]
+        yield vmf_text[brace : end + 1]
         index = end + 1
+
+
+def parse_vmf_track_props(vmf_text):
+    """prop_static / prop_dynamic track pieces named in a VMF."""
+
+    props = []
+    for block in _entity_blocks(vmf_text):
         prop = _prop_from_entity_block(block)
         if prop is not None:
             props.append(prop)
     return props
+
+
+# Hammer markers Isaiah drops on a run: frog on the main start and end,
+# traffic cone on each parallel start and end. They are endpoints, so a
+# marked open end is a joint of two (the rail and the marker).
+_MARKER_MODELS = ("frog.mdl", "trafficcone001a.mdl")
+
+
+def parse_vmf_markers(vmf_text):
+    """Origins of frog and traffic-cone props, as rounded positions."""
+
+    markers = []
+    for block in _entity_blocks(vmf_text):
+        model = _quoted(block, "model")
+        if not model:
+            continue
+        name = model.replace("\\", "/").rsplit("/", 1)[-1].lower()
+        if name not in _MARKER_MODELS:
+            continue
+        origin = _quoted(block, "origin")
+        if origin is None:
+            continue
+        markers.append(position_key(origin.split()))
+    return markers
+
+
+def fold_markers(counts, markers):
+    """Add each marker to the track endpoint sitting at that position.
+
+    Returns the updated counts and a list of markers that do not land on
+    exactly one track endpoint.
+    """
+
+    counts = dict(counts)
+    misses = []
+    for position in markers:
+        keys = [key for key in counts if key[0] == position]
+        if len(keys) == 1:
+            counts[keys[0]] += 1
+        else:
+            misses.append((position, len(keys)))
+    return counts, misses
+
+
+def audit_marked_props(props, library, markers):
+    """Like audit_props, but frog and cone origins count as endpoints.
+
+    With markers on the open ends, every point should be shared by exactly
+    two endpoints. A marker that misses the rail is its own problem.
+    """
+
+    counts, _where = tally_endpoints(props, library)
+    counts, misses = fold_markers(counts, markers)
+    problems = []
+    for position, hits in misses:
+        if hits == 0:
+            problems.append(f"marker at {position} does not meet a track endpoint")
+        else:
+            problems.append(f"marker at {position} meets {hits} headings")
+    for key, count in sorted(counts.items(), key=lambda item: (item[0][0], item[0][1])):
+        if count != 2:
+            problems.append(describe_endpoint(key, count))
+    return problems, counts
 
 
 def _quoted(block, field):
