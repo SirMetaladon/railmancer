@@ -12,7 +12,18 @@
   "sector_minimum_track_to_edge_distance": 700,
   "noise_floor_ceiling_spillover_slope": 2,
   "trackhammer_minimum_allowed_distance_from_edge_of_map": 1000,
-  "trackhammer_block_standoff_distance": 3000, 
+  "trackhammer_block_standoff_distance": 3000,
+  "trackhammer_scored_selection": 0,
+  "trackhammer_score_top_k": 3,
+  "trackhammer_score_probe_cells": 5,
+  "trackhammer_score_pop_limit": 8,
+  "trackhammer_attempt_limit": 250000,
+  "trackhammer_score_weight_grade": 100.0,
+  "trackhammer_score_weight_runway": 2.0,
+  "trackhammer_score_weight_hug": 3.0,
+  "trackhammer_score_weight_heading": 1.5,
+  "trackhammer_score_weight_reverse": 4.0,
+  "trackhammer_score_weight_jitter": 0.25, 
   "Biomes": {
     "tf2_alpine_snow": {
       "models": {
