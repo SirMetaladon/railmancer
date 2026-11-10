@@ -78,6 +78,34 @@ def initialize(path: str):
         value = min(max(value, lo), hi)
         CFG[name] = int(value) if as_int else value
 
+    # "layers" is the 3-D on/off block grid. "height" stores one absolute
+    # rail height per horizontal cell. Anything else falls back to layers
+    # so a typo cannot silently change a map.
+    block_mode = str(CFG.get("trackhammer_block_mode", "layers")).strip().lower()
+    CFG["trackhammer_block_mode"] = block_mode if block_mode in ("layers", "height") else "layers"
+
+    # Height mode only. "down" keeps the lowest rail in the cell and requires
+    # the next track to pass at least trackhammer_height_clearance underneath it.
+    height_direction = str(CFG.get("trackhammer_height_direction", "up")).strip().lower()
+    CFG["trackhammer_height_direction"] = (
+        height_direction if height_direction in ("up", "down") else "up"
+    )
+
+    # Exact vertical gap for height mode, in map units. Defaults to one
+    # sector_minimum_height (1200 in the shipped config). That is the same
+    # floor-to-ceiling the terrain sectors already use, and it replaces the
+    # layers-mode gap of two block layers (2 * sector_minimum_height * 1.05,
+    # about 2520) with a distance the next rail can clear exactly.
+    try:
+        clearance = float(
+            CFG.get("trackhammer_height_clearance", CFG["sector_minimum_height"])
+        )
+    except (TypeError, ValueError):
+        clearance = float(CFG["sector_minimum_height"])
+    CFG["trackhammer_height_clearance"] = int(
+        min(max(clearance, 0), CFG["max_mapsize"])
+    )
+
     CFG["sector_real_size"] = int(math.floor(CFG["sector_real_size"] / 16) * 16)
     for Biome in CFG["Biomes"].values():
         Biome["terrain"]["seed"] = random.randint(0, 100)

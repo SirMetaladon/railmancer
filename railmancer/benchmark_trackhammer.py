@@ -26,8 +26,11 @@ The default run asks for 2.5 miles inside a small border, which is long
 enough that a low grade has to fold instead of shooting across once. The
 attempt limit here is 12000 failed placements. A home run uses whatever
 trackhammer_attempt_limit is in the config (250000 unless you change it).
-Three seeds and both shapes take several minutes because the scored search
-prices every legal piece at every step.
+Three seeds, both shapes, both selectors, and both block modes (layers and
+height) take several minutes because the scored search prices every legal
+piece at every step. Height mode stores one rail height per cell and clears
+trackhammer_height_clearance (one sector_minimum_height) instead of two
+block layers.
 
 One existing footgun shows up in the 0..1 band: valid_next_tracks skips
 its minimum-grade test when min_grade is 0, because `0 != False` is
@@ -232,10 +235,14 @@ def cells_used(steps):
     return used
 
 
-def run_case(mode, seed, shape, grade_band, target_miles, attempt_limit):
+def run_case(
+    mode, seed, shape, grade_band, target_miles, attempt_limit, block_mode="layers"
+):
 
     predicate, start = shape_setup(shape)
     cfg.CFG["trackhammer_scored_selection"] = 1 if mode == "new" else 0
+    cfg.CFG["trackhammer_block_mode"] = block_mode
+    cfg.CFG["trackhammer_height_direction"] = "up"
     cfg.CFG["trackhammer_attempt_limit"] = int(attempt_limit)
     trackhammer.set_border_override(predicate)
     trackhammer.rebuild_border_distance()
@@ -278,6 +285,7 @@ def run_case(mode, seed, shape, grade_band, target_miles, attempt_limit):
     finished = length + 1e-6 >= target and not stats["died"] and not stats["stuck"]
     return {
         "mode": mode,
+        "blocks": block_mode,
         "seed": seed,
         "shape": shape,
         "band": f"{grade_band[0]}..{grade_band[1]}",
@@ -308,7 +316,7 @@ def _fmt(value, digits):
 def print_table(rows):
 
     header = (
-        f"{'shape':<10} {'band':<7} {'mode':<4} {'seed':>4} "
+        f"{'shape':<10} {'band':<7} {'mode':<4} {'blocks':<7} {'seed':>4} "
         f"{'miles':>7} {'rise':>8} {'len/rise':>8} {'cover':>6} "
         f"{'died':>4} {'stuck':>5} {'tried':>7} {'sec':>7}"
     )
@@ -316,7 +324,7 @@ def print_table(rows):
     print("-" * len(header))
     for row in rows:
         print(
-            f"{row['shape']:<10} {row['band']:<7} {row['mode']:<4} {row['seed']:>4} "
+            f"{row['shape']:<10} {row['band']:<7} {row['mode']:<4} {row['blocks']:<7} {row['seed']:>4} "
             f"{row['miles']:>7.3f} {row['rise']:>8.1f} {_fmt(row['per_rise'], 8)} "
             f"{row['coverage']:>6.3f} {row['died']:>4} {row['stuck']:>5} "
             f"{row['attempts']:>7} {row['seconds']:>7.2f}"
@@ -327,12 +335,12 @@ def print_summary(rows):
 
     groups = {}
     for row in rows:
-        key = (row["shape"], row["band"], row["mode"])
+        key = (row["shape"], row["band"], row["mode"], row["blocks"])
         groups.setdefault(key, []).append(row)
 
     print()
     print(
-        f"{'shape':<10} {'band':<7} {'mode':<4} {'n':>2} "
+        f"{'shape':<10} {'band':<7} {'mode':<4} {'blocks':<7} {'n':>2} "
         f"{'miles':>7} {'rise':>8} {'len/rise':>8} {'cover':>6} "
         f"{'died':>4} {'stuck':>5} {'tried':>7} {'sec':>7}"
     )
@@ -346,9 +354,9 @@ def print_summary(rows):
         ratios = [item["per_rise"] for item in items if item["per_rise"] is not None]
         # One descending seed must not stand in for a group that was mostly flat.
         ratio = sum(ratios) / len(ratios) if ratios and len(ratios) * 2 >= n else None
-        shape, band, mode = key
+        shape, band, mode, blocks = key
         print(
-            f"{shape:<10} {band:<7} {mode:<4} {n:>2} "
+            f"{shape:<10} {band:<7} {mode:<4} {blocks:<7} {n:>2} "
             f"{avg('miles'):>7.3f} {avg('rise'):>8.1f} {_fmt(ratio, 8)} "
             f"{avg('coverage'):>6.3f} {sum(i['died'] for i in items):>4} "
             f"{sum(i['stuck'] for i in items):>5} {avg('attempts'):>7.0f} "
@@ -406,7 +414,8 @@ def main(argv=None):
     )
     print(
         f"Target {args.miles} miles, attempt cap {args.attempt_limit} "
-        f"(config default is {250000})."
+        f"(config default is {250000}). "
+        f"Height clearance {cfg.CFG['trackhammer_height_clearance']}."
     )
 
     rows = []
@@ -414,22 +423,24 @@ def main(argv=None):
         for band in GRADE_BANDS:
             for seed in args.seeds:
                 for mode in ("old", "new"):
-                    row = run_case(
-                        mode,
-                        seed,
-                        shape,
-                        band,
-                        args.miles,
-                        args.attempt_limit,
-                    )
-                    rows.append(row)
-                    print(
-                        f"done {shape} {band[0]}..{band[1]} seed {seed} {mode}: "
-                        f"{row['miles']:.3f} mi, cover {row['coverage']:.3f}, "
-                        f"died {row['died']}, stuck {row['stuck']}, "
-                        f"{row['seconds']:.2f}s",
-                        flush=True,
-                    )
+                    for block_mode in ("layers", "height"):
+                        row = run_case(
+                            mode,
+                            seed,
+                            shape,
+                            band,
+                            args.miles,
+                            args.attempt_limit,
+                            block_mode,
+                        )
+                        rows.append(row)
+                        print(
+                            f"done {shape} {band[0]}..{band[1]} seed {seed} {mode} {block_mode}: "
+                            f"{row['miles']:.3f} mi, cover {row['coverage']:.3f}, "
+                            f"died {row['died']}, stuck {row['stuck']}, "
+                            f"{row['seconds']:.2f}s",
+                            flush=True,
+                        )
 
     print()
     print_table(rows)

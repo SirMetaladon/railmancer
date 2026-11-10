@@ -14,6 +14,8 @@ logLength: float = 0
 HeightMap: dict = {}
 HeightColumns: dict = {}
 HeightCounts: dict = {}
+# Height mode only: one absolute rail height per horizontal cell. No lists.
+HeightTable: dict = {}
 BorderDistance: dict = {}
 FailedStates: set = set()
 _border_override = None
@@ -67,6 +69,137 @@ def get_block_ids(point):
     return [f"{x},{y},{z}" for x in xs for y in ys for z in zs]
 
 
+def height_mode_enabled():
+
+    return str(TEST.get("trackhammer_block_mode")) == "height"
+
+
+def height_going_down():
+
+    return str(TEST.get("trackhammer_height_direction")) == "down"
+
+
+def height_clearance():
+
+    """Exact vertical gap used by height mode, in map units.
+
+    Layers mode does not read this. Its gap is vertical_clearance(), two
+    block layers, because a point reserves a 2-long run of z layers.
+    """
+
+    return float(TEST.get("trackhammer_height_clearance"))
+
+
+def horizontal_cells(point):
+
+    """The same 2x2 of horizontal cells get_block_ids would reserve.
+
+    Height mode ignores the vertical pair and writes the rail's real z
+    into these cells instead.
+    """
+
+    x, y, _z = point
+    fx = float(x) / BlockHorizontal
+    fy = float(y) / BlockHorizontal
+    bx = math.floor(fx)
+    by = math.floor(fy)
+    xs = [bx, bx + 1] if fx - bx > 0.5 else [bx - 1, bx]
+    ys = [by, by + 1] if fy - by > 0.5 else [by - 1, by]
+    return [(cx, cy) for cx in xs for cy in ys]
+
+
+def _height_extreme(current, z):
+
+    if current is None:
+        return z
+    if height_going_down():
+        return min(current, z)
+    return max(current, z)
+
+
+def blocks_new_height(list_of_points):
+
+    """Reserve cells in the 2-D height table.
+
+    Each returned record is (cell_x, cell_y, prior). prior is None when the
+    cell was empty, otherwise the height this call replaced. A cell is
+    recorded once per call: later samples in the same piece only move the
+    stored extreme. Rollback restores `prior` and does not need another table.
+
+    That restore is exact when undos run newest-first, which is what
+    backtrack, the one-step pop, and update_blocks' backward walk all do.
+    If an older step were removed while a newer overwrite of the same cell
+    was still applied, restoring the older prior would wipe the newer height.
+    His removal order does not do that.
+    """
+
+    records = []
+    touched = set()
+
+    for point in list_of_points:
+        z = float(point[2])
+        for cell in horizontal_cells(point):
+            if cell in touched:
+                current = HeightTable.get(cell)
+                updated = _height_extreme(current, z)
+                if updated != current:
+                    HeightTable[cell] = updated
+                continue
+
+            prior = HeightTable.get(cell)
+            updated = _height_extreme(prior, z)
+            if prior is not None and updated == prior:
+                continue
+
+            HeightTable[cell] = updated
+            records.append((cell[0], cell[1], prior))
+            touched.add(cell)
+
+    return records
+
+
+def blocks_restore_height(records):
+
+    for cell_x, cell_y, prior in records:
+        cell = (cell_x, cell_y)
+        if prior is None:
+            HeightTable.pop(cell, None)
+        else:
+            HeightTable[cell] = prior
+
+
+def points_violate_height(list_of_points):
+
+    gap = height_clearance()
+    downward = height_going_down()
+
+    for point in list_of_points:
+        z = float(point[2])
+        for cell in horizontal_cells(point):
+            stored = HeightTable.get(cell)
+            if stored is None:
+                continue
+            if downward:
+                if z > stored - gap:
+                    return True
+            elif z < stored + gap:
+                return True
+
+    return False
+
+
+def clear_start_footprint(point):
+
+    # Same job as the old get_block_ids wipe: the start of a new main
+    # should not be blocked by whatever was already reserved there.
+    if height_mode_enabled():
+        for cell in horizontal_cells(point):
+            HeightTable.pop(cell, None)
+        return
+
+    blocks_remove(get_block_ids(point))
+
+
 def _split_block(block_id):
 
     parts = block_id.split(",")
@@ -106,6 +239,9 @@ def _height_release(block):
 # From a list of points, find all blocks that are NOT already spoken for and reserve them, returning a list of valid newly reserved blocks.
 def blocks_new(list_of_points):
 
+    if height_mode_enabled():
+        return blocks_new_height(list_of_points)
+
     new_blocks = []
     owned = set()
 
@@ -137,6 +273,9 @@ def exclude_existing():
 # For this specific point, does the 2x2 of closest blocks contain any reserved blocks? If so, this space is not legal.
 def are_points_blocked(list_of_points):
 
+    if height_mode_enabled():
+        return points_violate_height(list_of_points)
+
     for point in list_of_points:
         block_ids = get_block_ids(point)
         for block in block_ids:
@@ -150,6 +289,10 @@ def are_points_blocked(list_of_points):
 def blocks_remove(list_of_block_ids):
 
     global Blocks
+
+    if height_mode_enabled():
+        blocks_restore_height(list_of_block_ids)
+        return
 
     for entry in list_of_block_ids:
         if entry in Blocks:
@@ -435,7 +578,7 @@ def probe_from_node(node):
         seen.add(cell)
         if cell not in BorderDistance:
             break
-        top = HeightMap.get(cell)
+        top = _probe_hit_height(cell, z)
         if top is not None:
             hit_z = top
             hit_distance = i * float(BlockHorizontal)
@@ -451,8 +594,7 @@ def probe_from_node(node):
         if side not in BorderDistance:
             hugs += 1
             continue
-        top = HeightMap.get(side)
-        if top is not None and math.floor(float(top) / BlockVertical) < our_layer:
+        if _probe_side_is_clear(side, z, our_layer):
             hugs += 1
 
     return {
@@ -464,10 +606,59 @@ def probe_from_node(node):
     }
 
 
+def _probe_hit_height(cell, z):
+
+    """Height that still has to be cleared, or None if the cell is open.
+
+    Layers mode treats any reserved layer as a hit. Height mode uses the
+    stored rail height and only hits when this z does not already clear
+    trackhammer_height_clearance.
+    """
+
+    if height_mode_enabled():
+        stored = HeightTable.get(cell)
+        if stored is None:
+            return None
+        gap = height_clearance()
+        if height_going_down():
+            if float(z) > float(stored) - gap:
+                return stored
+            return None
+        if float(z) < float(stored) + gap:
+            return stored
+        return None
+
+    return HeightMap.get(cell)
+
+
+def _probe_side_is_clear(cell, z, our_layer):
+
+    # A side hug is a border (handled by the caller) or track that this
+    # rail already clears, so it can run alongside instead of into it.
+    if height_mode_enabled():
+        stored = HeightTable.get(cell)
+        if stored is None:
+            return False
+        gap = height_clearance()
+        if height_going_down():
+            return float(z) <= float(stored) - gap
+        return float(z) >= float(stored) + gap
+
+    top = HeightMap.get(cell)
+    return top is not None and math.floor(float(top) / BlockVertical) < our_layer
+
+
 def required_grade(probe, z):
 
     if probe["hit_z"] is None or not probe["hit_distance"]:
         return None
+    # Layers mode: H is two block layers. Height mode: the config gap,
+    # added above the stored top, or subtracted when direction is down.
+    if height_mode_enabled():
+        gap = height_clearance()
+        if height_going_down():
+            return (float(probe["hit_z"]) - gap - float(z)) / float(probe["hit_distance"])
+        return (float(probe["hit_z"]) + gap - float(z)) / float(probe["hit_distance"])
     return (float(probe["hit_z"]) + vertical_clearance() - float(z)) / float(
         probe["hit_distance"]
     )
@@ -487,8 +678,15 @@ def placement_cost(
 
     params = run_params or {}
     required = required_grade(probe, z)
-    if required is not None and slope + 1e-9 < required:
-        return None
+    if required is not None:
+        # Upward (and layers mode): the piece has to climb at least `required`.
+        # Downward height mode: `required` is a ceiling, and the piece has to
+        # descend to it or below.
+        if height_mode_enabled() and height_going_down():
+            if slope - 1e-9 > required:
+                return None
+        elif slope + 1e-9 < required:
+            return None
 
     floor = grade_level_mild_slope(params.get("min_grade", False))
     reference = floor if required is None else max(required, floor)
@@ -565,16 +763,21 @@ def select_scored_candidates(
 
 def clear_occupied():
 
-    global Blocks, HeightMap, HeightColumns, HeightCounts, FailedStates
+    global Blocks, HeightMap, HeightColumns, HeightCounts, HeightTable, FailedStates
 
     Blocks = {}
     HeightMap = {}
     HeightColumns = {}
     HeightCounts = {}
+    HeightTable = {}
     FailedStates = set()
 
 
 def display_blocks_in_vmf():
+
+    if height_mode_enabled():
+        _display_height_markers()
+        return
 
     # Converts a block to coordinates to create brushes with
     def block_id_to_coords(block_id):
@@ -607,6 +810,43 @@ def display_blocks_in_vmf():
         )
 
     print(f"Added {len(Blocks)} pathfinding blocks.")
+
+
+def _display_height_markers():
+
+    # One dev_measurewall brush per occupied cell, same texture and plan
+    # size as the layer cubes. The slab starts at the stored rail height
+    # and is one block-layer thick. Downward mode hangs the slab below the
+    # rail, which is the side the exclusion actually reserves.
+    thickness = float(BlockVertical)
+    downward = height_going_down()
+
+    for (cell_x, cell_y), stored in HeightTable.items():
+        x = cell_x * BlockHorizontal
+        y = cell_y * BlockHorizontal
+        if downward:
+            z0 = float(stored) - thickness
+            z1 = float(stored)
+        else:
+            z0 = float(stored)
+            z1 = float(stored) + thickness
+
+        vmfpy.add_brush(
+            [
+                x,
+                x + BlockHorizontal,
+                y,
+                y + BlockHorizontal,
+                z0,
+                z1,
+                "dev/dev_measurewall01d",
+                0,
+                0,
+                "24",
+            ]
+        )
+
+    print(f"Added {len(HeightTable)} height-mode block markers.")
 
 
 # From the block queue, push up to the block that corresponds with the standoff length, forward or backward, then return the current step
@@ -962,7 +1202,7 @@ def create_rail_path(start_node, cumulative_track_profile):
     tools.stopwatch_click("trackhammer")
 
     # Hollows out a little area near the start of the trackhammer, to prevent old rails from blocking the start of the mains
-    blocks_remove(get_block_ids(start_node[0]))
+    clear_start_footprint(start_node[0])
 
     # system for testing multiple variations of rollbacks and candidates, currently semi-disabled
     rollbacks = [5000]

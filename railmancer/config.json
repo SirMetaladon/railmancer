@@ -23,7 +23,10 @@
   "trackhammer_score_weight_hug": 3.0,
   "trackhammer_score_weight_heading": 1.5,
   "trackhammer_score_weight_reverse": 4.0,
-  "trackhammer_score_weight_jitter": 0.25, 
+  "trackhammer_score_weight_jitter": 0.25,
+  "trackhammer_block_mode": "layers",
+  "trackhammer_height_direction": "up",
+  "trackhammer_height_clearance": 1200, 
   "Biomes": {
     "tf2_alpine_snow": {
       "models": {
