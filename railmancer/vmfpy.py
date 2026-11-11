@@ -315,6 +315,7 @@ def synthesize_entities(Entities):
                 "gmod_allowtools" "advdupe2 tp3_node_editor tp3_node_chainer tp3_path_configurator"
                 "lever" "{Ent.get("lever","misconfigured")}"
                 "model" "{Ent.get("mdl","models/props_2fort/frog.mdl")}"
+                "model_div" "{Ent.get("model_div", Ent.get("mdl","models/props_2fort/frog.mdl"))}"
                 "skin" "{Ent.get("skin",0)}"
                 "origin" "{Ent["pos"][0]} {Ent["pos"][1]} {Ent["pos"][2]}"
                 editor

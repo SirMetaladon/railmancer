@@ -669,14 +669,29 @@ def straight_prop_yaw(direction, heading):
     return heading
 
 
+def _as_track_length(distance):
+
+    # Straights exist only on the 16-unit grid. A negative length means the
+    # filler was measured backwards; that is a placement bug, not a piece.
+    value = float(distance)
+    nearest = int(round(value))
+    if abs(value - nearest) > 1e-6:
+        print(distance)
+        raise ValueError(f"track length {distance} is not a whole number")
+    if nearest < 0:
+        print(nearest)
+        raise ValueError(f"track length {nearest} is negative")
+    if nearest % 16 != 0:
+        print(nearest)
+        raise ValueError(f"track length {nearest} is not a multiple of 16")
+    return nearest
+
+
 def create_straight(StartPosition, Distance, Direction, Heading):
 
-    if Distance < 0:
+    Distance = _as_track_length(Distance)
 
-        print(StartPosition, Distance, Direction, Heading)
-        raise ValueError()
-
-    elif Distance > 0:
+    if Distance > 0:
 
         # for each
         lengths = decompose_length_to_straights(Distance)
@@ -748,6 +763,38 @@ def write_track_from_trackhammer_steps(steps):
 
         # (array([-15232.,  -3664., -12556.]), '1rt', 90, True)
         # models/trakpak3_rsg/arcs/r4096/a1rt_2rt_right_-328pg_+1024x+0384x-036dn.mdl'
+
+        if step.get("tangent_fill"):
+            run_mode = prev_run[0] if prev_run else (0, 0)
+            for track_index in range(-int(run_mode[0]), int(run_mode[1]) + 1):
+                create_straight(
+                    updated_position(
+                        prev_node[0],
+                        move_in_trackspace(0, prev_node[1], track_index),
+                        prev_node[2],
+                    ),
+                    step["tangent_fill"],
+                    prev_node[1],
+                    prev_node[2],
+                )
+            prev_node = new_node
+            prev_run = step["current_run"]
+            continue
+
+        if step.get("switch_zone"):
+            from railmancer import switches
+
+            before, after = step["switch_zone"]
+            switches.place_transition(
+                prev_node[0],
+                prev_node[1],
+                prev_node[2],
+                before,
+                after,
+            )
+            prev_node = new_node
+            prev_run = step["current_run"]
+            continue
 
         if model == "":
             prev_node = new_node

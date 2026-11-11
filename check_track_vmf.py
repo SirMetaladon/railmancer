@@ -8,6 +8,10 @@ Open ends are checked against move_in_trackspace, one track apart.
 Frog and traffic-cone props count as endpoints. A marker on an open end
 makes that point count as 2. A marked map should have no leftover gaps.
 
+A parallel siding (`tp3_switch`, or a model under `/switches/sidings/`)
+counts as three endpoints: the point, the main-leg end, and the diverging
+end. Those still have to appear exactly twice. There are no flags.
+
 Usage:
     python3 check_track_vmf.py path/to/map.vmf
 """

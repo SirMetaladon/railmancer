@@ -36,14 +36,30 @@ def endpoint_key(point, tangent):
     return (position_key(point), canonical_tangent(tangent))
 
 
+def _shifted(origin, move, yaw):
+
+    rotated = tools.rot_orth(move, yaw)
+    return [float(origin[i]) + float(rotated[i]) for i in range(3)]
+
+
 def prop_endpoints(model_name, origin, yaw, library):
-    """Both ends of one prop, from its model, origin, and yaw."""
+    """Ends of one prop, from its model, origin, and yaw.
+
+    A straight or curve has two ends. A switch has three: the point, the
+    main-leg end, and the diverging-leg end. The point is one endpoint,
+    shared by both legs, so a neighbor plus the switch counts as two.
+    """
 
     data = library[model_name]
     yaw = float(yaw)
-    end = [
-        float(origin[i]) + float(tools.rot_orth(data["Move"], yaw)[i]) for i in range(3)
-    ]
+    if data.get("kind") == "switch":
+        tangent = tools.rot_orth(track.get_heading(data["StartDirection"]), yaw)
+        return (
+            endpoint_key(origin, tangent),
+            endpoint_key(_shifted(origin, data["MainMove"], yaw), tangent),
+            endpoint_key(_shifted(origin, data["DivMove"], yaw), tangent),
+        )
+    end = _shifted(origin, data["Move"], yaw)
     start_tangent = tools.rot_orth(track.get_heading(data["StartDirection"]), yaw)
     end_tangent = tools.rot_orth(track.get_heading(data["EndDirection"]), yaw)
     return (
@@ -317,10 +333,17 @@ def _quoted(block, field):
 
 def _prop_from_entity_block(block):
     model = _quoted(block, "model")
+    classname = (_quoted(block, "classname") or "").lower()
     if not model or "trakpak" not in model.replace("\\", "/").lower():
         return None
     lowered = model.replace("\\", "/").lower()
-    if "/arcs/" not in lowered and "/straights/" not in lowered and "/banked/" not in lowered:
+    is_switch = classname == "tp3_switch" or "/switches/sidings/" in lowered
+    if (
+        not is_switch
+        and "/arcs/" not in lowered
+        and "/straights/" not in lowered
+        and "/banked/" not in lowered
+    ):
         return None
     origin = _quoted(block, "origin")
     angles = _quoted(block, "angles")
@@ -328,7 +351,13 @@ def _prop_from_entity_block(block):
         return None
     origin_values = [float(part) for part in origin.split()]
     angle_values = [float(part) for part in angles.split()]
-    return {"mdl": model.replace("\\", "/"), "pos": origin_values, "ang": angle_values}
+    prop = {"mdl": model.replace("\\", "/"), "pos": origin_values, "ang": angle_values}
+    if is_switch:
+        prop["classname"] = "tp3_switch"
+        model_div = _quoted(block, "model_div")
+        if model_div:
+            prop["model_div"] = model_div.replace("\\", "/")
+    return prop
 
 
 def library_from_prop_names(props):
@@ -339,6 +368,11 @@ def library_from_prop_names(props):
     for prop in props:
         model = prop["mdl"]
         if model in library:
+            continue
+        if "/switches/sidings/" in model.replace("\\", "/"):
+            from railmancer.switches import geometry_from_model
+
+            library[model] = geometry_from_model(model)
             continue
         try:
             parsed = track.process_file(model)

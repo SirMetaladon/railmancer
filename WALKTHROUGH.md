@@ -32,7 +32,7 @@ On the Vancouver route the curve endpoints were already the same in the raw file
 
 ## (b) Diff against main, file by file
 
-Only `railmancer/track.py` changes placement. `trackhammer.py`, `tools.py`, `railmancer.py`, `get_addlength`, `move_in_trackspace`, and `valid_next_tracks` are untouched. The chooser is the same: `0fw` is not a stand-in for `8lt` or `8rt` when picking the next model. After an 8 piece the node direction is rewritten to `0fw`, which is what lets the next piece be chosen as `0fw`. Any `4` still chains with any other `4`, because the chooser compares the leading character.
+The shim and curve placement changes are in `railmancer/track.py`. `tools.py`, `railmancer.py`, `get_addlength`, `move_in_trackspace`, and `valid_next_tracks` are untouched. `trackhammer.py` inserts a ladder at a track-count change and does not change piece choice otherwise. The chooser is the same: `0fw` is not a stand-in for `8lt` or `8rt` when picking the next model. After an 8 piece the node direction is rewritten to `0fw`, which is what lets the next piece be chosen as `0fw`. Any `4` still chains with any other `4`, because the chooser compares the leading character.
 
 New files, no effect on placement: `railmancer/joincheck.py`, `check_track_vmf.py`, `tests/test_parallel_geometry.py`, `tests/test_hand_fixed_route.py`, this file.
 
@@ -78,7 +78,7 @@ Every reversed piece goes through `_place_reversed_piece` and does not also run 
 
 ### What did not change
 
-`valid_next_tracks` and the whole of `trackhammer.py`. The pathfinder, grade limits, radius limits, and block checks are the same. `move_in_trackspace` and `get_addlength` are the same functions as `main`.
+`valid_next_tracks` is untouched, so the pathfinder still chooses the same curves and straights. Grade limits, radius limits, and the block checks are the same. `move_in_trackspace` and `get_addlength` are the same functions as `main`. `trackhammer.py` only gained the ladder insertion described below. It does not change how a piece is chosen when the track count stays the same.
 
 ## (c) What is there now, and how to use it
 
@@ -94,7 +94,7 @@ Exit 0: every endpoint is shared by exactly two ends. If the file has no frog or
 
 It does not read model bytes. Geometry comes from the TrackPack 3 name:
 
-- The entity's `model` must contain `trakpak` and `/arcs/`, `/straights/`, or `/banked/`. Switches, sidings, wyes, and crossovers are skipped.
+- The entity's `model` must contain `trakpak` and `/arcs/`, `/straights/`, `/banked/`, or `/switches/sidings/`. A `tp3_switch` entity is read the same way. Wyes, turnouts that are not sidings, and crossovers are skipped.
 - A straight's direction is the second token (`s2048_0fw_...`). An arc's start is the first token without the leading `a`, and its end is the second token. Banked pieces drop the leading `ab`.
 - The displacement token `+2048x00000x+064up` becomes `Move = [-2048, 0, 64]`. X in the name is mirrored because a 0-yaw prop points down -X. Z is the first four digits of the third component.
 - The two endpoints are the origin, and the origin plus that Move rotated by the yaw. `rot_orth` only turns in 90° steps. A yaw that is not a multiple of 90 is truncated. Pitch and roll are ignored.
@@ -102,15 +102,18 @@ It does not read model bytes. Geometry comes from the TrackPack 3 name:
 
 Frog (`frog.mdl`) and traffic cone (`trafficcone001a.mdl`) origins are endpoints. A marker on a track end adds one to that end's count, which is how an open end of a finished run becomes 2. A marker that is not on a track end is reported on its own. A marker on a point that has two different headings is reported as ambiguous.
 
-Limits: if the filename does not match what `process_file` expects, the script prints the model and exits 1. It will not notice a mesh that disagrees with its own filename. It will not check props that are not arcs, straights, or banked.
+A parallel siding counts as three endpoints: the point, the end of the main leg, and the end of the diverging leg. The point is one endpoint, not one per leg, so the rail that arrives there plus the switch is two. Both leg ends have to meet something else.
+
+Limits: if the filename does not match what `process_file` or the siding parser expects, the script prints the model and exits 1. It will not notice a mesh that disagrees with its own filename. It will not check wyes or crossovers.
 
 ### Tests
 
-There is no pytest file and no extra suite. These two scripts are the suite. Both stub `turtle` themselves, because `lines.py` imports it and this environment has no Tk.
+There is no pytest file and no extra suite. These three scripts are the suite. They stub `turtle` themselves, because `lines.py` imports it and this environment has no Tk.
 
 ```bash
 python3 tests/test_parallel_geometry.py
 python3 tests/test_hand_fixed_route.py
+python3 tests/test_switch_ladders.py
 ```
 
 `test_parallel_geometry.py` builds synthetic arcs (no real mdl files) and checks every grid-legal direction change, both directions through the piece, headings 0/90/180/270, and every track count from 0 to 3 on each side. Consecutive pieces have to meet in position and heading. At each backbone node, track `t` has to sit on `move_in_trackspace`'s lateral for `t`. It also checks that the hand-tuned table did not drift. The run prints the case count, the failure count, and the rounded-stagger residuals. Last run on this branch: **8452 exact-join cases, 0 failures**.
@@ -153,6 +156,50 @@ Some direction pairs cannot meet exactly on the 16-unit grid. The geometry test 
 
 `8lt`↔`8rt` is worse. The two forwards point the same way in world space (both are 90° corners, opposite hands), so no pair of straight lengths can cancel the sideways step. That step is 384 units in X per track. The snap is `(0, 0)`, and the side track stays 384 off per track. A straight shim cannot fix it. It needs a curve between those two directions, or the pathfinder has to stop offering that pair as a straight-shim joint.
 
+### Switch ladders
+
+A ladder is added wherever the parallel count changes. Nothing in the offset table or the shim writer was replaced. `trackhammer.py` notices that the next chosen piece would pass a run boundary whose track count differs. If a shorter piece still fits before that boundary, it keeps looking. If nothing fits, it fills the gap with a level tangent straight (rounded up to the grid step for that direction) and then reserves the ladder. The ladder is flat: Z does not change. There is no flag to turn this off. Crossovers are not built.
+
+The hand comes from which side gained or lost tracks. The model is the condensed parallel siding of that direction and hand: the diverging leg is longer than the main leg, and both ends sit on `move_in_trackspace`. Extended sidings, where the two legs are the same length, are in the catalog and are not used. The catalog is `data/trakpak3_models.json`, a list of model paths. Lengths are not stored there. `geometry_from_model` reads the filename. The sibling branch `cursor/scored-track-selection-deec` did not have a scanner when this was written, so this list is the sparse catalog that scanner can replace later.
+
+Chosen models, smallest condensed siding that lands on the grid. Every one of these has main length 768 and diverging length 1536:
+
+| direction | hand | file |
+| --- | --- | --- |
+| `0fw` | left | `p0fw_left_minr2048_+0768x00000_+1536x-0192_dv.mdl` |
+| `0fw` | right | `p0fw_right_minr2048_+0768x00000_+1536x+0192_dv.mdl` |
+| `1lt` | left | `p1lt_left_minr2048_+0768x-0192_+1488x-0576_dv.mdl` |
+| `1lt` | right | `p1lt_right_minr2048_+0768x-0192_+1584x-0192_dv.mdl` |
+| `1rt` | left | `p1rt_left_minr2048_+0768x+0192_+1584x+0192_dv.mdl` |
+| `1rt` | right | `p1rt_right_minr2048_+0768x+0192_+1488x+0576_dv.mdl` |
+| `2lt` | left | `p2lt_left_minr3072_+0768x-0384_+1440x-0960_dv.mdl` |
+| `2lt` | right | `p2lt_right_minr3072_+0768x-0384_+1632x-0576_dv.mdl` |
+| `2rt` | left | `p2rt_left_minr3072_+0768x+0384_+1632x+0576_dv.mdl` |
+| `2rt` | right | `p2rt_right_minr3072_+0768x+0384_+1440x+0960_dv.mdl` |
+
+On a slope the larger filename component is not the along-track length. `p1lt_left` diverges `+1488x-0576`, and 1488 is the larger component, but that point is `move_in_trackspace(1536, "1lt", -1)`. The 1536 is what the ladder steps. For `0fw` the larger component and the station are the same number.
+
+How one ladder is built, for N switches on the left and none on the right. The zone is `N * 1536` long.
+
+1. Switch 0 sits on the current outermost left track, at the start of the zone. Its main leg runs 768 along that track. Its diverging leg ends 1536 ahead and one track further left.
+2. Switch 1 sits on that diverging end. Same pattern. The next switch's point is the previous diverging end, so those two endpoints meet with nothing between them.
+3. The last diverging end is the end of the zone, on the new outer track. No filler past it.
+4. Every other track that already existed gets a straight for the whole zone. A track that holds a switch gets a straight only for the part the main leg does not cover: zone minus the stations already taken. That is the owner's fill: main gets `total - short`, the next track gets `total - long - short`, and the last track is just the long leg.
+
+A merge is that ladder run backwards. The points sit at the far end, the heading is plus 180, and the model is the opposite hand, which puts the diverging leg back on the side that is going away. Filler straights still run forward in the direction of travel.
+
+Both sides at once, from a single track (`0L0R -> 1L1R`), share the root. The side with more switches goes first. The other side's first switch starts at the end of that first main leg (768), so the two switches do not stack on one point. When both sides add the same number, the zone is `N * 1536 + 768`. `3L0R -> 0L3R` is not that. It is two zones in a row: merge all three left tracks into the main, then split three right tracks off the main. `_phases` is the list that sets that order.
+
+One Hammer entity, `tp3_switch`, carries the `_mn` model and the `_dv` model. The checker counts that entity as three endpoints. `create_straight` now raises if the length is negative or not a multiple of 16. A 1-in-4 filler also has to be a multiple of 64, and a 1-in-2 filler a multiple of 32, or the sideways step leaves the 16-grid. The pathfinder rounds the gap fill up to that step.
+
+`4lt` and `4rt` sidings do not land on a parallel track. The condensed `4lt` diverging point is 32 units off `move_in_trackspace`. There is no `4rt` siding and no `8lt` / `8rt` siding. A run boundary in those directions does not get a ladder; the pathfinder prints the error and tries another piece. After an 8 piece the node direction is already `0fw`, so the boundary after a corner is a normal `0fw` ladder. A boundary while the train is still on `4lt` or `4rt` is unsolved.
+
+```bash
+python3 tests/test_switch_ladders.py
+```
+
+That run is 84 transitions (the count changes in the owner's list, both hands, on `0fw`, `1lt`, `2lt`, and `2rt`, at several headings) plus the writer hook, the length guards, and the model check. Latest run: **0 failures**. The other two scripts are unchanged: **8452** geometry cases, **0 failures**, and the fully fixed route **99 pieces, 6 markers, 0 failures**.
+
 ### A full Railmancer run
 
 ```bash
@@ -165,6 +212,6 @@ That is the normal entry point. On this machine it stops at import:
 ModuleNotFoundError: No module named 'noise'
 ```
 
-`heightmap.py` imports `pnoise3` from the `noise` package. Building that package here fails because `Python.h` is not installed. Past that, `lines.py` imports `turtle` (no Tk in this environment), the track library path in `railmancer.py` is a Windows Steam directory that is not on this machine, and `vmf inputs/vancouver_only.vmf` is not in the repo. The two scripts above are the runs that actually execute here. They do not need the mdl files, that VMF, or the noise package.
+`heightmap.py` imports `pnoise3` from the `noise` package. Building that package here fails because `Python.h` is not installed. Past that, `lines.py` imports `turtle` (no Tk in this environment), the track library path in `railmancer.py` is a Windows Steam directory that is not on this machine, and `vmf inputs/vancouver_only.vmf` is not in the repo. The three scripts above are the runs that actually execute here. They do not need the mdl files, that VMF, or the noise package.
 
-The numbers from the latest run of those two scripts, and of the checker on `c_fully_fixed.vmf`, are in the pull request description.
+The numbers from the latest run of those scripts, and of the checker on `c_fully_fixed.vmf`, are in the pull request description.
