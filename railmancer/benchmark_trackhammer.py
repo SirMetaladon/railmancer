@@ -45,6 +45,7 @@ import random
 import time
 
 from railmancer import cfg, tools, track, trackhammer
+from railmancer.trakpak_manifest import install_manifest_library
 
 BODY = ["4lt", "2lt", "1lt", "0fw", "1rt", "2rt", "4rt"]
 # Positive bands only. Negative pieces exist in real TrackPack, but a 4-direction
@@ -364,17 +365,26 @@ def print_summary(rows):
         )
 
 
-def self_check():
+def self_check(library):
 
     node = ([0, 0, 0], "0fw", 0, False)
-    model = "syn/s/0fw/1024/0.0"
+    if library == "manifest":
+        model = "models/trakpak3_rsg/straights/s1024_0fw_0pg_+1024x00000x0000.mdl"
+    else:
+        model = "syn/s/0fw/1024/0.0"
     result = trackhammer.iterate_backbone(model, node, (0, 0))
     if result is None:
         raise RuntimeError("synthetic straight was rejected at the origin")
     moved = float(result[0][0][0])
     if not moved < -500:
         raise RuntimeError(f"straight did not travel -X, ended at x={moved}")
-    quarter = "syn/q/0fw_8rt/r2048/0.0"
+    if library == "manifest":
+        quarter = (
+            "models/trakpak3_rsg/arcs/r2048/"
+            "a0fw_8rt_right_0pg_+2048x+2048x0000.mdl"
+        )
+    else:
+        quarter = "syn/q/0fw_8rt/r2048/0.0"
     turned = trackhammer.iterate_backbone(quarter, node, (0, 0))
     if turned is None:
         raise RuntimeError("quarter turn was rejected at the origin")
@@ -390,16 +400,28 @@ def main(argv=None):
     parser.add_argument("--miles", type=float, default=TARGET_MILES)
     parser.add_argument("--attempt-limit", type=int, default=ATTEMPT_LIMIT)
     parser.add_argument("--seeds", type=int, nargs="*", default=list(SEEDS))
+    parser.add_argument(
+        "--library",
+        choices=("manifest", "synthetic"),
+        default="manifest",
+        help="manifest uses data/trakpak3_models.json; synthetic is the old stand-in",
+    )
     args = parser.parse_args(argv)
 
     cfg.initialize("railmancer/config.json")
     # Scored weights stay at the config defaults. The flag is flipped per run.
     cfg.CFG["trackhammer_scored_selection"] = 0
     trackhammer.initialize()
-    count = install_mainline_library()
+    if args.library == "manifest":
+        count = install_manifest_library()
+    else:
+        count = install_mainline_library()
     # initialize() builds the square field; the cases below replace it.
-    self_check()
-    print(f"Synthetic library: {count} pieces. Block {trackhammer.BlockHorizontal} x {trackhammer.BlockVertical:.0f}.")
+    self_check(args.library)
+    print(
+        f"{args.library} library: {count} pieces. "
+        f"Block {trackhammer.BlockHorizontal} x {trackhammer.BlockVertical:.0f}."
+    )
     print(
         "Weights "
         f"grade={cfg.CFG['trackhammer_score_weight_grade']} "
