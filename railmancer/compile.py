@@ -345,7 +345,7 @@ def create_scenery_block(sector_data):
 
     vmfpy.floor(real_x, real_y, real_floor, sector_real_size)
     vmfpy.ceiling(real_x, real_y, real_ceiling, sector_real_size)
-    vmfpy.viscluster(real_x, real_y, real_floor, real_ceiling, sector_real_size, 128)
+    # vmfpy.viscluster(real_x, real_y, real_floor, real_ceiling, sector_real_size, 128)
 
     for dir in range(4):
 

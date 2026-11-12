@@ -377,6 +377,40 @@ def scored_selection_enabled():
     return int(TEST.get("trackhammer_scored_selection")) != 0
 
 
+def fit_run_length_enabled():
+
+    try:
+        return int(TEST.get("trackhammer_fit_run_length")) != 0
+    except Exception:
+        return True
+
+
+def corridor_is_blocked(origin, direction, heading, mode, distance):
+
+    """True when any parallel track in the stretch leaves the border or hits a block.
+
+    Switch zones and their tangent fill use this before they are accepted.
+    A rejected zone is not placed, and the pathfinder backtracks.
+    """
+
+    from railmancer import switches
+
+    if distance <= 0:
+        return False
+    samples = []
+    for start, end in switches.corridor_segments(origin, direction, heading, mode, distance):
+        samples.extend(
+            get_block_points_from_nodes(
+                (start, direction, heading, False),
+                (end, direction, heading, False),
+            )
+        )
+    for point in samples:
+        if not point_inside_border((int(point[0]), int(point[1]))):
+            return True
+    return are_points_blocked(samples)
+
+
 def point_inside_border(point_xy):
 
     # Same integer square test iterate_backbone used to call directly.
@@ -720,6 +754,7 @@ def select_scored_candidates(
     prev_turn_sign,
     length_so_far,
     run_profile,
+    max_length=None,
 ):
 
     # Best first. One iterate_backbone plus a short probe per legal model.
@@ -729,6 +764,8 @@ def select_scored_candidates(
 
     for model in possible:
         search_stats["score_checks"] += 1
+        if max_length is not None and track.get_length(model) > max_length + 1e-6:
+            continue
         result = iterate_backbone(model, node, lateral_mode)
         if result is None:
             continue
@@ -755,6 +792,15 @@ def select_scored_candidates(
         if cost is None:
             search_stats["grade_rejects"] += 1
             continue
+        # Near a run boundary, prefer the piece that leaves the least gap
+        # in front of the switch zone. Far from the boundary this stays off,
+        # so it does not bias the whole mainline toward the longest pieces.
+        if max_length is not None and max_length < 12000:
+            from railmancer import switches as _switches
+
+            quantum = _switches.grid_quantum(node[1]) or 16
+            shortfall = max_length - track.get_length(model)
+            cost += shortfall / float(quantum)
         ranked.append((cost, model))
 
     ranked.sort(key=lambda item: item[0])
@@ -1035,9 +1081,165 @@ def generation_process(
 
         return blocks_current_step_index
 
+    def next_count_boundary(length, run_id):
+
+        # The next run boundary that actually changes the track count.
+        for index in range(run_id, len(cumulative_track_profile) - 1):
+            boundary = cumulative_track_profile[index][1]
+            if boundary <= length:
+                continue
+            before = tuple(cumulative_track_profile[index][0])
+            after = tuple(cumulative_track_profile[index + 1][0])
+            if before != after:
+                return boundary, before, after, index + 1
+        return None
+
+    def _join_for_run(run_id):
+
+        params = cumulative_track_profile[run_id][2]
+        if isinstance(params, dict):
+            return params.get("join")
+        return None
+
+    def _parallel_points(start_node, end_node, mode):
+
+        from railmancer import switches
+
+        distance = float(
+            np.linalg.norm(
+                np.subtract(np.asarray(end_node[0])[:2], np.asarray(start_node[0])[:2])
+            )
+        )
+        points = []
+        for start, end in switches.corridor_segments(
+            start_node[0], start_node[1], start_node[2], mode, distance
+        ):
+            points.extend(
+                get_block_points_from_nodes(
+                    (start, start_node[1], start_node[2], False),
+                    (end, start_node[1], start_node[2], False),
+                )
+            )
+        return points
+
+    def fit_budget(length, limit, before, after, direction, join):
+
+        from railmancer import switches
+
+        try:
+            zone = switches.zone_length(before, after, direction, join)
+        except switches.SwitchGeometryError:
+            zone = 0
+        return limit - length - zone, zone
+
+    def append_switch_transition(
+        current_step, steps, before, after, budget, entered_run, join=None
+    ):
+
+        from railmancer import switches
+
+        node = current_step["node"]
+        try:
+            zone = switches.zone_length(before, after, node[1], join)
+        except switches.SwitchGeometryError as exc:
+            print(exc)
+            return False
+
+        quantum = switches.grid_quantum(node[1])
+        # Largest grid step that still leaves the zone inside the run.
+        # `budget` is the room in front of the zone. Rounding up would
+        # push the zone past the run target.
+        if budget <= 0 or quantum <= 0:
+            fill = 0
+        else:
+            fill = int(math.floor(budget / float(quantum)) * quantum)
+        span = (max(before[0], after[0]), max(before[1], after[1]))
+        if corridor_is_blocked(node[0], node[1], node[2], before, fill):
+            return False
+        cursor = node
+        length = current_step["length"]
+        if fill:
+            end = track.updated_position(
+                cursor[0], track.move_in_trackspace(fill, cursor[1]), cursor[2]
+            )
+            cursor = (end, cursor[1], cursor[2], False)
+            length += fill
+            steps.append(
+                {
+                    "node": cursor,
+                    "length": length,
+                    "candidate_tracks": [],
+                    "candidates_scored": True,
+                    "points": _parallel_points(node, cursor, before),
+                    "blocks_added": [],
+                    "model": "",
+                    "tangent_fill": fill,
+                    "current_run": current_step["current_run"],
+                    "current_run_id": current_step["current_run_id"],
+                    "turn_sign": current_step.get("turn_sign", 0),
+                }
+            )
+        if corridor_is_blocked(cursor[0], cursor[1], cursor[2], span, zone):
+            if fill:
+                steps.pop()
+            return False
+        end = track.updated_position(
+            cursor[0], track.move_in_trackspace(zone, cursor[1]), cursor[2]
+        )
+        end_node = (end, cursor[1], cursor[2], False)
+        length += zone
+        # Stay in the run this ladder entered. determine_current_run_id
+        # returns 0 once length passes the last marker, which would put the
+        # next pieces back on the first run's track count.
+        steps.extend(
+            new_step(
+                end_node,
+                entered_run,
+                cumulative_track_profile[entered_run],
+                length,
+                _parallel_points(cursor, end_node, span),
+                "",
+            )
+        )
+        steps[-1]["switch_zone"] = (before, after)
+        steps[-1]["switch_join"] = join
+        return True
+
     def try_candidates(current_step, steps, mode):
 
         if scored_selection_enabled() and not current_step.get("candidates_scored"):
+            max_length = None
+            if fit_run_length_enabled():
+                boundary = next_count_boundary(
+                    current_step["length"], current_step["current_run_id"]
+                )
+                if boundary is not None:
+                    limit, before, after, entered_run = boundary
+                    join = _join_for_run(entered_run)
+                    max_length, _zone = fit_budget(
+                        current_step["length"],
+                        limit,
+                        before,
+                        after,
+                        current_step["node"][1],
+                        join,
+                    )
+                    if max_length <= 0:
+                        if append_switch_transition(
+                            current_step,
+                            steps,
+                            before,
+                            after,
+                            0,
+                            entered_run,
+                            join,
+                        ):
+                            update_longest_fail(steps, steps[-1]["length"])
+                            return True
+                        # This heading has no ladder, or the zone leaves the
+                        # map. Pick pieces without the length cap so the line
+                        # can turn onto a direction that does have one.
+                        max_length = None
             current_step["candidate_tracks"] = select_scored_candidates(
                 current_step["node"],
                 current_step["current_run"][2],
@@ -1046,6 +1248,7 @@ def generation_process(
                 current_step.get("turn_sign", 0),
                 current_step["length"],
                 cumulative_track_profile,
+                max_length,
             )
             current_step["candidates_scored"] = True
 
@@ -1059,6 +1262,41 @@ def generation_process(
                 mdl_to_test = current_step["candidate_tracks"].pop()
 
             search_stats["attempts"] += 1
+            boundary = next_count_boundary(
+                current_step["length"], current_step["current_run_id"]
+            )
+            if boundary is not None and fit_run_length_enabled():
+                limit, before, after, entered_run = boundary
+                join = _join_for_run(entered_run)
+                budget, _zone = fit_budget(
+                    current_step["length"],
+                    limit,
+                    before,
+                    after,
+                    current_step["node"][1],
+                    join,
+                )
+                piece_length = track.get_length(mdl_to_test)
+                if budget <= 0 or piece_length > budget:
+                    shorter_remains = budget > 0 and any(
+                        track.get_length(candidate) <= budget
+                        for candidate in current_step["candidate_tracks"]
+                    )
+                    if shorter_remains:
+                        continue
+                    if append_switch_transition(
+                        current_step,
+                        steps,
+                        before,
+                        after,
+                        max(budget, 0),
+                        entered_run,
+                        join,
+                    ):
+                        update_longest_fail(steps, steps[-1]["length"])
+                        return True
+                    if budget > 0:
+                        continue
             result = iterate_backbone(mdl_to_test, current_step["node"], mode)
 
             if result is None:
@@ -1089,9 +1327,6 @@ def generation_process(
                         new_run_id,
                         current_step["current_run_id"],
                     )
-
-                # if new length is over a boundary
-                # add another step for the switch
 
                 steps += new_step(
                     result_node,

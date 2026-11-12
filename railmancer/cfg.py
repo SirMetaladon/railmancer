@@ -57,6 +57,7 @@ def initialize(path: str):
         ["trackhammer_score_weight_heading", 1.5, 0.0, 1000000.0, False],
         ["trackhammer_score_weight_reverse", 4.0, 0.0, 1000000.0, False],
         ["trackhammer_score_weight_jitter", 0.25, 0.0, 1000000.0, False],
+        ["trackhammer_fit_run_length", 1, 0, 1, True],
     ]
 
     # need a mechanism in here for double checking the following:

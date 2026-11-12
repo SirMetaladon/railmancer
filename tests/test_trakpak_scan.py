@@ -77,6 +77,20 @@ class TrakpakScanTests(unittest.TestCase):
         bend_names = [item["model"] for item in manifest["unparsed"] if item["family"] == "bends"]
         self.assertIn(BEND, bend_names)
 
+    def test_min_grade_zero_is_a_real_floor(self):
+
+        install_manifest_library()
+        track.valid_tracks_cache.clear()
+        models = track.valid_next_tracks(
+            "0fw", {"min_radius": 0, "min_grade": 0, "max_grade": 1}
+        )
+        self.assertTrue(models)
+        for model in models:
+            data = track.track_model_library[model]
+            if data["StartDirection"] == "0fw":
+                self.assertGreaterEqual(data["GradeLevel"], 0)
+                self.assertLessEqual(data["GradeLevel"], 1)
+
     def test_manifest_library_places_a_real_straight(self):
 
         count = install_manifest_library()

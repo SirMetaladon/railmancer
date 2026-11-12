@@ -20,7 +20,7 @@ from railmancer import (
 def main():
 
     # Some input information. One contains the directory for building the Track Library, the other is the VMF for the importer.
-    trackpack_directory = "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
+    trackpack_directory = "C:/Program Files (x86)/Steam/steamapps/common/GarrysMod/garrysmod/addons/trakpak/models/trakpak3_rsg"
     # vmf_input_path = "vmf inputs/squamish test.vmf"
     vmf_input_path = "vmf inputs/vancouver_only.vmf"
 
@@ -42,32 +42,52 @@ def main():
     trackhammer.exclude_existing()
 
     Vancouver_Start = [(7568, 3552, -13040), "0fw", -90, False]
+    # Each run is (tracks left, tracks right), miles, parameters.
+    # "join" says how this run attaches to the previous one. Leave it out
+    # and both sides get switches. "stub" ends or starts that side with no
+    # switch. A dict sets the sides separately, for example
+    # {"left": "stub", "right": "switch"}.
     trackhammer.generate_mainline(
         Vancouver_Start,
         [
             [
-                (random.randint(0, 2), random.randint(0, 2)),
-                1,
+                (random.randint(0, 5), random.randint(0, 5)),
+                0.3,
                 {"min_radius": 2, "min_grade": 3, "max_grade": 3},
             ],
             [
-                (random.randint(0, 2), random.randint(0, 2)),
-                1,
+                (random.randint(0, 5), random.randint(0, 5)),
+                0.3,
+                {"min_radius": 2, "min_grade": 3, "max_grade": 3, "join": "switch"},
+            ],
+            [
+                (random.randint(0, 5), random.randint(0, 5)),
+                0.3,
                 {"min_radius": 2, "min_grade": 3, "max_grade": 3},
             ],
             [
-                (random.randint(0, 2), random.randint(0, 2)),
-                1,
+                (random.randint(0, 5), random.randint(0, 5)),
+                0.3,
                 {"min_radius": 2, "min_grade": 3, "max_grade": 3},
             ],
             [
-                (random.randint(0, 2), random.randint(0, 2)),
-                1,
+                (random.randint(0, 5), random.randint(0, 5)),
+                0.3,
                 {"min_radius": 2, "min_grade": 3, "max_grade": 3},
             ],
             [
-                (random.randint(0, 2), random.randint(0, 2)),
-                1,
+                (random.randint(0, 5), random.randint(0, 5)),
+                0.3,
+                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
+            ],
+            [
+                (random.randint(0, 5), random.randint(0, 5)),
+                0.3,
+                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
+            ],
+            [
+                (random.randint(0, 5), random.randint(0, 5)),
+                0.3,
                 {"min_radius": 2, "min_grade": 3, "max_grade": 3},
             ],
         ],
@@ -159,7 +179,7 @@ def main():
     vmfpy.add_light_environment()'''
 
     # Compile brush, entity, and brushentity data into a VMF text file and save.
-    vmfpy.write_to_vmf(f"{"railmancer"}_{random.randint(4000,4999)}{".vmf"}")
+    vmfpy.write_to_vmf(f"{"railmancer"}_{random.randint(5000,5999)}{".vmf"}")
 
     tools.stopwatch_click("total", "Railmancer Finished")
 

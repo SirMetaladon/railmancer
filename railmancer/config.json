@@ -24,6 +24,7 @@
   "trackhammer_score_weight_heading": 1.5,
   "trackhammer_score_weight_reverse": 4.0,
   "trackhammer_score_weight_jitter": 0.25,
+  "trackhammer_fit_run_length": 1,
   "trackhammer_block_mode": "layers",
   "trackhammer_height_direction": "up",
   "trackhammer_height_clearance": 1200, 
@@ -106,30 +107,6 @@
     },
     "hl2_white_forest": {
       "models": {
-        "models/props_foliage/tree_pine06.mdl": {
-          "weight": 15,
-          "exclusion_radius": 128,
-          "base_radius": 40,
-          "steepness": 2
-        },
-        "models/props_foliage/tree_pine04.mdl": {
-          "weight": 15,
-          "exclusion_radius": 150,
-          "base_radius": 50,
-          "steepness": 2
-        },
-        "models/props_foliage/tree_pine05.mdl": {
-          "weight": 15,
-          "exclusion_radius": 175,
-          "base_radius": 60,
-          "steepness": 2
-        },
-        "models/props_foliage/tree_pine_large.mdl": {
-          "weight": 10,
-          "exclusion_radius": 200,
-          "base_radius": 70,
-          "steepness": 2
-        },
         "models/props_foliage/tree_pine_tall_01.mdl": {
           "weight": 15,
           "exclusion_radius": 128,
