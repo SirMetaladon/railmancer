@@ -351,12 +351,101 @@ def generation_process(
 
         return blocks_current_step_index
 
+    def next_count_boundary(length, run_id):
+
+        # The next run boundary that actually changes the track count.
+        for index in range(run_id, len(cumulative_track_profile) - 1):
+            boundary = cumulative_track_profile[index][1]
+            if boundary <= length:
+                continue
+            before = tuple(cumulative_track_profile[index][0])
+            after = tuple(cumulative_track_profile[index + 1][0])
+            if before != after:
+                return boundary, before, after, index + 1
+        return None
+
+    def append_switch_transition(current_step, steps, before, after, gap, entered_run):
+
+        from railmancer import switches
+
+        node = current_step["node"]
+        try:
+            zone = switches.zone_length(before, after, node[1])
+        except switches.SwitchGeometryError as exc:
+            print(exc)
+            return False
+
+        quantum = switches.grid_quantum(node[1])
+        fill = 0 if gap <= 0 else int(math.ceil(gap / float(quantum)) * quantum)
+        cursor = node
+        length = current_step["length"]
+        if fill:
+            end = track.updated_position(
+                cursor[0], track.move_in_trackspace(fill, cursor[1]), cursor[2]
+            )
+            cursor = (end, cursor[1], cursor[2], False)
+            length += fill
+            steps.append(
+                {
+                    "node": cursor,
+                    "length": length,
+                    "candidate_tracks": [],
+                    "points": get_block_points_from_nodes(node, cursor),
+                    "blocks_added": [],
+                    "model": "",
+                    "tangent_fill": fill,
+                    "current_run": current_step["current_run"],
+                    "current_run_id": current_step["current_run_id"],
+                }
+            )
+        end = track.updated_position(
+            cursor[0], track.move_in_trackspace(zone, cursor[1]), cursor[2]
+        )
+        end_node = (end, cursor[1], cursor[2], False)
+        length += zone
+        # Stay in the run this ladder entered. determine_current_run_id
+        # returns 0 once length passes the last marker, which would put the
+        # next pieces back on the first run's track count.
+        steps.extend(
+            new_step(
+                end_node,
+                entered_run,
+                cumulative_track_profile[entered_run],
+                length,
+                get_block_points_from_nodes(cursor, end_node),
+                "",
+            )
+        )
+        steps[-1]["switch_zone"] = (before, after)
+        return True
+
     def try_candidates(current_step, steps, mode):
 
         while current_step["candidate_tracks"]:
 
             mdl_to_test = current_step["candidate_tracks"][-1]
             current_step["candidate_tracks"].pop()
+
+            boundary = next_count_boundary(
+                current_step["length"], current_step["current_run_id"]
+            )
+            if boundary is not None:
+                limit, before, after, entered_run = boundary
+                gap = limit - current_step["length"]
+                piece_length = track.get_length(mdl_to_test)
+                if piece_length > gap:
+                    shorter_remains = any(
+                        track.get_length(candidate) <= gap
+                        for candidate in current_step["candidate_tracks"]
+                    )
+                    if gap > 0 and shorter_remains:
+                        continue
+                    if append_switch_transition(
+                        current_step, steps, before, after, gap, entered_run
+                    ):
+                        update_longest_fail(steps, steps[-1]["length"])
+                        return True
+                    continue
 
             result = iterate_backbone(mdl_to_test, current_step["node"], mode)
 
@@ -376,16 +465,6 @@ def generation_process(
                 new_length = current_step["length"] + track_length
 
                 new_run_id = determine_current_run_id(new_length)
-                if current_step["current_run_id"] != new_run_id:
-                    print(
-                        "Went over a boundary!",
-                        result_node,
-                        new_run_id,
-                        current_step["current_run_id"],
-                    )
-
-                # if new length is over a boundary
-                # add another step for the switch
 
                 steps += new_step(
                     result_node,

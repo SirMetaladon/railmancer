@@ -557,12 +557,21 @@ def move_in_trackspace(length_forward, direction, tracks_over_right=0):
 def get_end_direction(model, current_direction):
 
     track_data = track_model_library[model]
+    start_direction = track_data["StartDirection"]
+    end_direction = track_data["EndDirection"]
 
-    return (
-        track_data["StartDirection"]
-        if track_data["StartDirection"][:1] != current_direction[:1]
-        else track_data["EndDirection"]
-    )
+    # Any 4 chains with any other 4 (same diagonal, yaw differs by 90).
+    # 1lt is not 1rt, and 2lt is not 2rt — those are mirror curves, so an
+    # exact end has to win or the segment gap is computed for the wrong end.
+    if current_direction == start_direction:
+        return end_direction
+    if current_direction == end_direction and start_direction != end_direction:
+        return start_direction
+    if start_direction[:1] == "4" and current_direction[:1] == "4":
+        return end_direction
+    if end_direction[:1] == "4" and current_direction[:1] == "4":
+        return start_direction
+    return start_direction
 
 
 def get_new_node_from_node_and_model(
@@ -576,12 +585,18 @@ def get_new_node_from_node_and_model(
 
     NewDirection = get_end_direction(Model, current_direction)
 
-    # this will use the new heading rotation if it's a 45, and the old one if it's a 90
-    NewHand = (
-        track_data["StartDirection"][1:]
-        if track_data["StartDirection"][1:] != "fw"
-        else track_data["EndDirection"][1:]
-    )
+    # Hand of the authored end we are actually entering. On a reverse entry
+    # that is the piece's end (including the other 45° diagonal). Using the
+    # start hand there yaws the joint 90° off the previous segment.
+    if current_direction == track_data["StartDirection"] or (
+        track_data["StartDirection"][:1] == "4"
+        and current_direction[:1] == "4"
+        and current_direction != track_data["EndDirection"]
+    ):
+        entry_direction = track_data["StartDirection"]
+    else:
+        entry_direction = track_data["EndDirection"]
+    NewHand = entry_direction[1:] if entry_direction[1:] != "fw" else ""
     OldHand = current_direction[1:]
 
     IsReversed = (
@@ -607,8 +622,6 @@ def get_new_node_from_node_and_model(
             move_in_trackspace(AddEnd, NewDirection),
         )
 
-    final_move = np.add(final_move, additional_move)
-
     NewHeading = Heading
     if current_direction[:1] == "4" and (NewHand != OldHand):
         # if old hand is lt and
@@ -619,14 +632,26 @@ def get_new_node_from_node_and_model(
             NewHeading = Heading - 90
         # else, if 0fw, do nothing (as the heading has not changed)
 
-    NewPosition = updated_position(Position, final_move, NewHeading)
+    if IsReversed or NewHeading == Heading:
+        final_move = np.add(final_move, additional_move)
+        NewPosition = updated_position(Position, final_move, NewHeading)
+    else:
+        # 45° hand change: the entrance filler stays in the incoming frame so
+        # it meets the previous segment. The mesh and the exit filler use the
+        # turned heading.
+        entrance_move = move_in_trackspace(AddStart, current_direction)
+        exit_move = move_in_trackspace(AddEnd, NewDirection)
+        NewPosition = updated_position(Position, entrance_move, Heading)
+        NewPosition = updated_position(NewPosition, final_move, NewHeading)
+        NewPosition = updated_position(NewPosition, exit_move, NewHeading)
 
-    # this mechanism does so for 90 degree angles
-
+    # 90° exit, applied on top of any 45° hand change already in NewHeading.
+    # Using the original Heading here drops that hand change, so the next
+    # segment's sideways step is 90° off this one.
     if NewDirection == "8rt":
-        NewHeading = Heading - 90
+        NewHeading = NewHeading - 90
     elif NewDirection == "8lt":
-        NewHeading = Heading + 90
+        NewHeading = NewHeading + 90
 
     if NewDirection[:1] == "8":
         NewDirection = "0fw"
@@ -634,18 +659,44 @@ def get_new_node_from_node_and_model(
     return NewPosition, NewDirection, NewHeading, IsReversed
 
 
+def straight_prop_yaw(direction, heading):
+
+    # There is no 4rt straight; it would duplicate 4lt. Working in 4rt
+    # track space means the 4lt prop, turned 90° so its mesh follows the
+    # 4rt step. Origins are still stepped in 4rt space at `heading`.
+    if direction == "4rt":
+        return heading - 90
+    return heading
+
+
+def _as_track_length(distance):
+
+    # Straights exist only on the 16-unit grid. A negative length means the
+    # filler was measured backwards; that is a placement bug, not a piece.
+    value = float(distance)
+    nearest = int(round(value))
+    if abs(value - nearest) > 1e-6:
+        print(distance)
+        raise ValueError(f"track length {distance} is not a whole number")
+    if nearest < 0:
+        print(nearest)
+        raise ValueError(f"track length {nearest} is negative")
+    if nearest % 16 != 0:
+        print(nearest)
+        raise ValueError(f"track length {nearest} is not a multiple of 16")
+    return nearest
+
+
 def create_straight(StartPosition, Distance, Direction, Heading):
 
-    if Distance < 0:
+    Distance = _as_track_length(Distance)
 
-        print(StartPosition, Distance, Direction, Heading)
-        raise ValueError()
-
-    elif Distance > 0:
+    if Distance > 0:
 
         # for each
         lengths = decompose_length_to_straights(Distance)
         total = 0
+        prop_yaw = straight_prop_yaw(Direction, Heading)
 
         for length in lengths:
             move = move_in_trackspace(total, Direction)
@@ -654,13 +705,54 @@ def create_straight(StartPosition, Distance, Direction, Heading):
             write_track(
                 convert_length_to_mdl(length, Direction),
                 final_position,
-                Heading,
+                prop_yaw,
             )
+
+
+def _travel_stagger(direction_in, direction_out):
+
+    # Same low-to-high table as get_addlength, expressed along this traversal.
+    along_low, along_high = get_offset_forward_for_parallel_on_right(
+        direction_in, direction_out
+    )
+    if int(direction_in[0]) > int(direction_out[0]):
+        return -along_high, -along_low
+    return along_low, along_high
+
+
+def _place_reversed_piece(model, prev_node, new_node, yaw, track_mode):
+
+    track_data = track_model_library[model]
+    per_in, per_out = _travel_stagger(
+        track_data["EndDirection"], track_data["StartDirection"]
+    )
+    left, right = track_mode
+    indices = list(range(-int(left), int(right) + 1))
+    push_in = -min([0] + [per_in * track for track in indices])
+    push_out = -min([0] + [per_out * track for track in indices])
+    mesh = track_data["Move"]
+    h_in, h_out = prev_node[2], new_node[2]
+    d_in, d_out = prev_node[1], new_node[1]
+
+    for track in indices:
+        gap_in = int(push_in + per_in * track)
+        gap_out = int(push_out + per_out * track)
+        entrance = updated_position(
+            prev_node[0], move_in_trackspace(0, d_in, track), h_in
+        )
+        mesh_end = updated_position(entrance, move_in_trackspace(gap_in, d_in), h_in)
+        model_pos = np.subtract(mesh_end, tools.rot_orth(mesh, yaw))
+        write_track(model, model_pos, yaw)
+        if gap_in > 0:
+            create_straight(entrance, gap_in, d_in, h_in)
+        if gap_out > 0:
+            create_straight(model_pos, gap_out, d_out, h_out)
 
 
 def write_track_from_trackhammer_steps(steps):
 
     prev_node = ["", "0fw"]
+    prev_run = None
 
     for step in steps:
 
@@ -670,8 +762,41 @@ def write_track_from_trackhammer_steps(steps):
         # (array([-15232.,  -3664., -12556.]), '1rt', 90, True)
         # models/trakpak3_rsg/arcs/r4096/a1rt_2rt_right_-328pg_+1024x+0384x-036dn.mdl'
 
+        if step.get("tangent_fill"):
+            run_mode = prev_run[0] if prev_run else (0, 0)
+            for track_index in range(-int(run_mode[0]), int(run_mode[1]) + 1):
+                create_straight(
+                    updated_position(
+                        prev_node[0],
+                        move_in_trackspace(0, prev_node[1], track_index),
+                        prev_node[2],
+                    ),
+                    step["tangent_fill"],
+                    prev_node[1],
+                    prev_node[2],
+                )
+            prev_node = new_node
+            prev_run = step["current_run"]
+            continue
+
+        if step.get("switch_zone"):
+            from railmancer import switches
+
+            before, after = step["switch_zone"]
+            switches.place_transition(
+                prev_node[0],
+                prev_node[1],
+                prev_node[2],
+                before,
+                after,
+            )
+            prev_node = new_node
+            prev_run = step["current_run"]
+            continue
+
         if model == "":
             prev_node = new_node
+            prev_run = step["current_run"]
             continue
 
         IsReversed = new_node[3]  # if it's reversed AHA IT DOES DO SOMETHING
@@ -691,66 +816,98 @@ def write_track_from_trackhammer_steps(steps):
 
         TrackEndDirection = track_model_library[model]["EndDirection"]
 
-        ModelHeading = new_node[2] if TrackEndDirection[:1] != "8" else prev_node[2]
+        # Whichever authored direction we leave through, if it is an 8 the
+        # stored heading already includes that ±90. The prop is drawn in the
+        # frame before the turn. Undo it, then add 180 when the prop is reversed.
+        outgoing = (
+            track_model_library[model]["StartDirection"]
+            if IsReversed
+            else TrackEndDirection
+        )
+        if outgoing == "8rt":
+            ModelHeading = new_node[2] + 90
+        elif outgoing == "8lt":
+            ModelHeading = new_node[2] - 90
+        else:
+            ModelHeading = new_node[2]
 
         Heading = int(ModelHeading) + RotFix
-
-        alt_heading = (
-            Heading
-            - (90 if track_model_library[model]["EndDirection"] == "8rt" else 0)
-            + (90 if track_model_library[model]["EndDirection"] == "8lt" else 0)
-            - (
-                90
-                if (IsReversed and track_model_library[model]["EndDirection"] == "4rt")
-                else 0
-            )
-        )
-        # alt_heading = new_node[2] + 90 if (IsReversed and far_direction == "4rt") else 0
 
         forward_per_track, rear_per_track = get_offset_forward_for_parallel_on_right(
             track_model_library[model]["StartDirection"], TrackEndDirection
         )
+        # The table is stored low-angle to high-angle. A piece authored the
+        # other way (and not model-reversed) has to put that stagger on the
+        # opposite end, or it will not meet the segment on either side.
+        if not IsReversed and int(
+            track_model_library[model]["StartDirection"][0]
+        ) > int(TrackEndDirection[0]):
+            forward_per_track, rear_per_track = (
+                -rear_per_track,
+                -forward_per_track,
+            )
 
-        track_mode = step["current_run"][0]
+        # This piece was spaced while we were still in the previous step's
+        # run. The step we just arrived on may already be the next run.
+        track_mode = prev_run[0] if prev_run else (0, 0)
         # tuple like (1,3), which means 1 track to left, 3 tracks to right for a total of 5 including main
 
         tracks = tools.tuple_to_range_list(track_mode, IsReversed)
-        tracks_alt = tools.tuple_to_range_list(track_mode, not IsReversed)
 
         farthest_back = min(
             tracks[0] * forward_per_track, tracks[-1] * forward_per_track
         )
 
+        # A reversed prop is yawed 180° and its step-over index is mirrored.
+        # That lines the copy up with the previous segment only when both
+        # ends share a heading. Place every reversed piece from the incoming
+        # joint instead, so the straights meet the segment on either side.
+        if IsReversed:
+            _place_reversed_piece(
+                model,
+                prev_node,
+                new_node,
+                Heading,
+                track_mode,
+            )
+            prev_node = new_node
+            prev_run = step["current_run"]
+            continue
+
+        # Forward piece. Curves sit in the incoming frame so a 45° hand
+        # change does not swing the entrance step off the previous segment.
+        # Assembly order: center and parallel curves, shim at the start node,
+        # then the exit shim unless it is zero.
+        step_heading = prev_node[2]
+        join_heading = new_node[2]
         farthest_rear_back = min(
-            tracks_alt[0] * rear_per_track, tracks_alt[-1] * rear_per_track
+            tracks[0] * rear_per_track, tracks[-1] * rear_per_track
         )
-
-        for track in tracks_alt:
-
-            rear = -farthest_rear_back + rear_per_track * track
-
-            lateral_move = move_in_trackspace(
-                0,
-                track_model_library[model]["EndDirection"],
-                track + (1 if not IsReversed else -1),
-            )
-            final_position = updated_position(
-                base_of_far_side, lateral_move, alt_heading
-            )
-            create_straight(final_position, rear, far_direction, alt_heading + 180)
+        piece = track_model_library[model]
 
         for track in tracks:
 
             fore_aft = -farthest_back + forward_per_track * track
+            rear = -farthest_rear_back + rear_per_track * track
 
             final_move = move_in_trackspace(fore_aft, Direction, track)
+            curve_pos = updated_position(base_pos_of_section, final_move, step_heading)
+            write_track(model, curve_pos, Heading)
 
-            final_position = updated_position(base_pos_of_section, final_move, Heading)
-            write_track(model, final_position, Heading)
+            if fore_aft > 0:
+                station = updated_position(
+                    base_pos_of_section,
+                    move_in_trackspace(0, Direction, track),
+                    step_heading,
+                )
+                create_straight(station, fore_aft, Direction, step_heading)
 
-            create_straight(final_position, fore_aft, Direction, Heading + 180)
+            if rear > 0:
+                curve_end = np.add(curve_pos, tools.rot_orth(piece["Move"], Heading))
+                create_straight(curve_end, rear, far_direction, join_heading)
 
         prev_node = new_node
+        prev_run = step["current_run"]
 
 
 def valid_next_tracks(Direction, params={}):
@@ -894,28 +1051,35 @@ def decompose_length_to_straights(target):
 
 def convert_length_to_mdl(length, direction):
 
-    if direction == "8lt":
+    # 8lt/8rt straights are 0fw props; the heading carries the corner.
+    # 4rt is the 4lt prop (see straight_prop_yaw). The filename has to be
+    # the real 4lt piece, whose Y step is the opposite of 4rt's.
+    if direction == "8lt" or direction == "8rt":
         direction = "0fw"
-    elif direction == "8rt":
-        direction = "0fw"
+    elif direction == "4rt":
+        direction = "4lt"
     extra = "0" * (4 - len(str(length)))
     over = int(move_in_trackspace(length, direction)[1])
     minus = "-" if over < 0 else "+"
     extra2 = "0" * (4 - len(str(abs(over))))
     if over == 0:
         minus = "0"
-    if direction[0] == "4":
-        direction = "4lt"
-        minus = "-"
 
     return f"models/trakpak3_rsg/straights/s{extra}{length}_{direction}_0pg_+{extra}{length}x{minus}{extra2}{abs(over)}x0000.mdl"
 
 
 def get_offset_forward_for_parallel_on_right(start_direction, end_direction):
 
-    if start_direction[0] == end_direction[0]:
+    if start_direction == end_direction:
 
         return 0, 0
+
+    if start_direction[0] == end_direction[0]:
+
+        # Same angle number, other hand (1lt↔1rt, 4lt↔4rt, 8lt↔8rt).
+        # Not the same direction, so the sideways step changes. Snap that
+        # stagger onto the 16-unit grid. For 8lt↔8rt the nearest value is 0.
+        return _grid_stagger(start_direction, end_direction)
 
     first_direction, second_direction = (
         (start_direction, end_direction)
@@ -924,6 +1088,13 @@ def get_offset_forward_for_parallel_on_right(start_direction, end_direction):
     )
 
     handedness_mult = -1 if second_direction[1] == "r" else 1
+
+    # The table assumes one hand for the whole turn (or a start at 0fw).
+    # A mirror pair such as 1lt→4rt is a different stagger; snap that instead.
+    first_hand = "" if first_direction == "0fw" else first_direction[1:]
+    second_hand = "" if second_direction == "0fw" else second_direction[1:]
+    if first_hand and second_hand and first_hand != second_hand:
+        return _grid_stagger(first_direction, second_direction)
 
     if first_direction == "0fw":
 
@@ -958,8 +1129,36 @@ def get_offset_forward_for_parallel_on_right(start_direction, end_direction):
         if second_direction[0] == "4":
             return 0, 48 * handedness_mult
 
-    print("Invalid combination!", start_direction, end_direction)
-    return 0, 0
+    # Not in the hand-tuned table. Snap the same stagger equation onto the
+    # 16-unit grid the props have to sit on. Close is enough; it will not be exact.
+    return _grid_stagger(first_direction, second_direction)
+
+
+def _snap_track_grid(value):
+
+    return int(round(float(value) / 16.0) * 16)
+
+
+def _grid_stagger(start_direction, end_direction):
+
+    # (along start, along end) for one track to the right. Directions are
+    # already in the table's low-angle, high-angle order.
+    forward_start = move_in_trackspace(1, start_direction, 0)
+    forward_end = move_in_trackspace(1, end_direction, 0)
+    right_start = move_in_trackspace(0, start_direction, 1)
+    right_end = move_in_trackspace(0, end_direction, 1)
+    rhs_x = float(right_end[0] - right_start[0])
+    rhs_y = float(right_end[1] - right_start[1])
+    start_x, start_y = float(forward_start[0]), float(forward_start[1])
+    end_x, end_y = float(forward_end[0]), float(forward_end[1])
+    determinant = start_x * end_y - start_y * end_x
+    if abs(determinant) < 1e-8:
+        # Opposite orthogonals (8lt↔8rt): both tangents run the same way,
+        # so a straight filler cannot cancel the side step. Nearest grid is 0.
+        return 0, 0
+    along_start = (rhs_x * end_y - rhs_y * end_x) / determinant
+    along_end = (start_x * rhs_y - start_y * rhs_x) / determinant
+    return _snap_track_grid(along_start), _snap_track_grid(along_end)
 
 
 def get_addlength(start_direction, end_direction, mode):
