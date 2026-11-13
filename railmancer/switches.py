@@ -221,27 +221,6 @@ def _opposite(hand):
     return "right" if hand == "left" else "left"
 
 
-def _phases(before, after):
-    """Merges first, then splits. Each phase is non-overlapping.
-
-    3L0R -> 0L3R is a left merge followed by a right split. Both sides
-    growing or shrinking together stay one phase so the ladders can share
-    a root. The order is a list so it can be swapped later.
-    """
-
-    before_left, before_right = before
-    after_left, after_right = after
-    phases = []
-    mid_left, mid_right = before_left, before_right
-    if after_left < mid_left or after_right < mid_right:
-        merged = (min(after_left, mid_left), min(after_right, mid_right))
-        phases.append(((mid_left, mid_right), merged, True))
-        mid_left, mid_right = merged
-    if after_left > mid_left or after_right > mid_right:
-        phases.append(((mid_left, mid_right), (after_left, after_right), False))
-    return phases
-
-
 def _increase_layout(before, after, direction):
     """One forward ladder, station 0 at the switch points.
 
@@ -346,21 +325,6 @@ def _overlapped(before, after, direction):
     shrink = _increase_layout(after, peak, direction) if peak != after else None
     total = max(grow["total"] if grow else 0, shrink["total"] if shrink else 0)
     return grow, shrink, total
-
-
-def sequential_zone_length(before, after, direction):
-
-    """The old end-to-end length, kept so tests can show the overlap is shorter."""
-
-    if tuple(before) == tuple(after):
-        return 0
-    total = 0
-    for phase_before, phase_after, reverse in _phases(before, after):
-        small, large = (
-            (phase_after, phase_before) if reverse else (phase_before, phase_after)
-        )
-        total += _increase_layout(small, large, direction)["total"]
-    return total
 
 
 def zone_length(before, after, direction, join=None):

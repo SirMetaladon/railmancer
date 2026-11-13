@@ -2,7 +2,7 @@
 
 Railmancer reads track geometry from the model **filename**, not from the `.mdl` bytes. `tools/scan_trakpak3.py` lists those names and runs them through `railmancer.track.process_file`, the same parser `build_track_library` uses.
 
-The result is committed at `data/trakpak3_models.json`. Tests and `benchmark_trackhammer` load that file, so a normal run needs no network and no Steam install.
+The result is committed at `data/trakpak3_models.json`. Tests load that file, so a normal run needs no network and no Steam install.
 
 ## Refresh from GitHub
 
@@ -30,16 +30,9 @@ python tools/scan_trakpak3.py --check
 
 That prints counts by family, every name `process_file` could not parse, and the cross-check against hardcoded radii, straight slopes, and the hand-fixed route model list.
 
-## Use it from the benchmark
-
-Real pieces are the default:
+## Tests that load it
 
 ```
-python -m railmancer.benchmark_trackhammer
-```
-
-The old synthetic library is still there:
-
-```
-python -m railmancer.benchmark_trackhammer --library synthetic
+python -m unittest tests.test_trakpak_scan -v
+python3 tests/test_switch_ladders.py
 ```
