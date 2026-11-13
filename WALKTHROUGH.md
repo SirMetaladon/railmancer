@@ -192,6 +192,24 @@ Both sides at once, from a single track (`0L0R -> 1L1R`), share the root. The si
 
 One Hammer entity, `tp3_switch`, carries the `_mn` model and the `_dv` model. The checker counts that entity as three endpoints. `create_straight` now raises if the length is negative or not a multiple of 16. A 1-in-4 filler also has to be a multiple of 64, and a 1-in-2 filler a multiple of 32, or the sideways step leaves the 16-grid. The pathfinder rounds the gap fill up to that step.
 
+A side that is ending and a side that is starting share one zone. `3L0R -> 0L3R` used to be a full left merge and then a full right split, placed end to end. The merge ladder is now the same ladder run backwards in the same stretch the split occupies, so the zone is as long as the longer ladder instead of the sum. `0L0R -> 1L1R` was already one shared zone: both switches cannot sit on the same point, so the second starts at the end of the first main leg (768). That length did not get shorter. `2L1R -> 1L2R` did.
+
+The whole corridor, every parallel track, is bounds-checked before the fill or the zone is accepted. A corridor that leaves the border or hits a block is rejected and the pathfinder backtracks, the same way a normal piece is rejected.
+
+Each run can say how it joins the previous one. The key sits in the run's parameter dict in `railmancer.py`. Leave it out and every side gets switches, which is the old behavior.
+
+```python
+[
+    [(0, 0), 0.3, {"min_radius": 5, "min_grade": 0, "max_grade": 0}],
+    [(3, 0), 1.0, {"min_radius": 2, "min_grade": 3, "max_grade": 3, "join": "switch"}],
+    [(0, 3), 1.0, {"min_radius": 2, "min_grade": 3, "max_grade": 3, "join": {"left": "stub", "right": "switch"}}],
+]
+```
+
+`"stub"` on a side means those tracks just end or begin. Their endpoints stay unpaired, which the checker already allows at a run end. A per-track list would punch a hole in the ladder, because each switch's diverging end is the next switch's point, so the control is per side.
+
+As a run gets close to its length, pieces that would leave no room for the upcoming zone are skipped, and the gap in front of the zone is filled with a grid-snapped straight that does not round past the target. `trackhammer_fit_run_length` in `config.json` turns that off if you want the old "fill whatever is left, then add the zone" behavior. It works with the scored selector and with height mode, because the corridor check uses the same block test as a normal piece.
+
 `4lt` and `4rt` sidings do not land on a parallel track. The condensed `4lt` diverging point is 32 units off `move_in_trackspace`. There is no `4rt` siding and no `8lt` / `8rt` siding. A run boundary in those directions does not get a ladder; the pathfinder prints the error and tries another piece. After an 8 piece the node direction is already `0fw`, so the boundary after a corner is a normal `0fw` ladder. A boundary while the train is still on `4lt` or `4rt` is unsolved.
 
 ```bash

@@ -789,6 +789,7 @@ def write_track_from_trackhammer_steps(steps):
                 prev_node[2],
                 before,
                 after,
+                step.get("switch_join"),
             )
             prev_node = new_node
             prev_run = step["current_run"]
@@ -944,13 +945,16 @@ def valid_next_tracks(Direction, params={}):
         else:
             Reversed = 1
 
+        # `0 != False` is false in Python, so a min or max of 0 used to skip
+        # the test and a 0..1 band could run downhill. Identity keeps 0 as a
+        # real floor and still treats a missing limit (False) as unset.
         if (
-            MinimumGradeLevel != False
+            MinimumGradeLevel is not False
             and (Track[1]["GradeLevel"] * Reversed) < MinimumGradeLevel
         ):
             continue
         if (
-            MaximumGradeLevel != False
+            MaximumGradeLevel is not False
             and (Track[1]["GradeLevel"] * Reversed) > MaximumGradeLevel
         ):
             continue

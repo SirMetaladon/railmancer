@@ -307,6 +307,8 @@ def sprinkle_selector(list, count):
 
     output = []
     working = list[:]
+    if not working or count <= 0:
+        return output
     for _ in range(count):
         choice = random.choice(working)
         working.remove(choice)

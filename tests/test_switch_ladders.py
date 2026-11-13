@@ -22,22 +22,21 @@ from railmancer.switches import (
     place_transition,
     register_switch_library,
     select_switch,
+    sequential_zone_length,
     zone_length,
 )
 
-MODES = (
-    ((0, 0), (1, 0)),
-    ((1, 0), (0, 0)),
-    ((0, 0), (3, 0)),
-    ((3, 0), (0, 0)),
-    ((0, 0), (0, 1)),
-    ((0, 1), (0, 0)),
-    ((0, 0), (0, 3)),
-    ((0, 3), (0, 0)),
-    ((0, 0), (1, 1)),
-    ((1, 1), (0, 0)),
-    ((2, 1), (1, 2)),
+def _all_modes():
+    counts = [(left, right) for left in range(4) for right in range(4)]
+    return [(before, after) for before in counts for after in counts if before != after]
+
+
+MODES = _all_modes()
+SHORTER = (
     ((3, 0), (0, 3)),
+    ((2, 1), (1, 2)),
+    ((3, 1), (1, 3)),
+    ((2, 0), (0, 2)),
 )
 
 ORIENTATIONS = (
@@ -99,8 +98,13 @@ def _transition_case(before, after, direction, heading):
     name = f"{before[0]}L{before[1]}R->{after[0]}L{after[1]}R {direction} h{heading}"
     origin = (0.0, 0.0, 0.0)
     total = zone_length(before, after, direction)
+    old_total = sequential_zone_length(before, after, direction)
     if total <= 0 or total % 16 != 0:
         return [f"{name}: zone length {total}"]
+    if total > old_total:
+        return [f"{name}: overlapped {total} is longer than sequential {old_total}"]
+    if (before, after) in SHORTER and total >= old_total:
+        return [f"{name}: overlapped {total} should be shorter than {old_total}"]
     placed = []
     vmfpy.add_entity = placed.append
     place_transition(origin, direction, heading, before, after)
@@ -210,9 +214,32 @@ def _writer_hook():
     return failures
 
 
+def _bounds_case():
+    from railmancer import cfg, trackhammer
+
+    cfg.initialize(os.path.join(ROOT, "railmancer", "config.json"))
+    trackhammer.initialize()
+    trackhammer.set_border_override(lambda point: abs(point[0]) < 500 and abs(point[1]) < 500)
+    trackhammer.BlockHorizontal = 200
+    trackhammer.rebuild_border_distance()
+    zone = zone_length((0, 0), (0, 3), "0fw")
+    outside = trackhammer.corridor_is_blocked((0, 0, 0), "0fw", 0, (0, 3), zone)
+    inside = not trackhammer.corridor_is_blocked((0, 0, 0), "0fw", 0, (0, 0), 256)
+    failures = []
+    if not outside:
+        failures.append("a 3-right ladder inside a 500-unit border was accepted")
+    if not inside:
+        failures.append("the mainline itself was rejected inside the border")
+    stub = zone_length((3, 0), (0, 1), "0fw", {"left": "stub", "right": "switch"})
+    full = zone_length((3, 0), (0, 1), "0fw")
+    if stub >= full:
+        failures.append(f"stubbing the merge did not shorten the zone ({stub} vs {full})")
+    return failures
+
+
 def main():
     _install_library()
-    failures = _length_guards() + _model_choice() + _writer_hook()
+    failures = _length_guards() + _model_choice() + _writer_hook() + _bounds_case()
     cases = 0
     for before, after in MODES:
         for direction, heading in ORIENTATIONS:

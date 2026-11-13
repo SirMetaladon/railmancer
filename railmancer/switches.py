@@ -9,7 +9,6 @@ condensed models (diverging leg longer than the main leg) are the ones
 used. Extended models, where both legs are the same length, are ignored.
 """
 
-import json
 import os
 
 from railmancer import track, vmfpy
@@ -32,8 +31,19 @@ def catalog_models():
 
     global _CATALOG
     if _CATALOG is None:
-        with open(_catalog_path(), "r", encoding="utf-8") as handle:
-            _CATALOG = json.load(handle)["models"]
+        # The committed manifest is the full pack. Sidings are one family
+        # inside it. An older catalog was a bare list of the same paths.
+        from railmancer.trakpak_manifest import load_manifest
+
+        models = load_manifest(_catalog_path())["models"]
+        if isinstance(models, dict):
+            _CATALOG = [
+                name
+                for name, entry in models.items()
+                if entry.get("family") == "sidings" or "/switches/sidings/" in name
+            ]
+        else:
+            _CATALOG = list(models)
     return list(_CATALOG)
 
 
@@ -159,8 +169,51 @@ def select_switch(direction, hand):
         raise SwitchGeometryError(
             f"no condensed parallel siding for {direction} {hand} lands on the parallel grid"
         )
-    matches.sort(key=lambda record: (record["long"], record["radius"], record["dv"]))
+    # Smallest radius first, then the shortest diverging leg. That is the
+    # condensed parallel siding, not the extended equal-leg model.
+    matches.sort(key=lambda record: (record["radius"], record["long"], record["dv"]))
     return matches[0]
+
+
+def normalize_join(spec):
+
+    """How a run boundary attaches the side tracks.
+
+    Missing or "switch" means every side gets a ladder, which is what the
+    generator did before this key existed. "stub" leaves that side's new or
+    ending tracks unpaired. A dict sets the two sides independently. A stub
+    in the middle of one side is not supported: each switch's diverging end
+    is the next switch's point, so a gap in the ladder is not a ladder.
+    """
+
+    def one(value):
+        if value in ("switch", "stub"):
+            return value
+        return "switch"
+
+    if spec is None or spec == "switch":
+        return {"left": "switch", "right": "switch"}
+    if spec == "stub":
+        return {"left": "stub", "right": "stub"}
+    if isinstance(spec, dict):
+        return {"left": one(spec.get("left", "switch")), "right": one(spec.get("right", "switch"))}
+    return {"left": "switch", "right": "switch"}
+
+
+def switched_counts(before, after, join):
+
+    """Counts the ladders actually build. A stub side keeps its old count."""
+
+    join = normalize_join(join)
+    before = (int(before[0]), int(before[1]))
+    after = (int(after[0]), int(after[1]))
+    return (
+        before,
+        (
+            after[0] if join["left"] == "switch" else before[0],
+            after[1] if join["right"] == "switch" else before[1],
+        ),
+    )
 
 
 def _opposite(hand):
@@ -276,7 +329,28 @@ def grid_quantum(direction):
     return 16
 
 
-def zone_length(before, after, direction):
+def _overlapped(before, after, direction):
+
+    """One zone that holds every ladder, instead of a merge zone then a split zone.
+
+    Tracks that appear are a forward ladder rooted on the count at the start.
+    Tracks that disappear are that same kind of ladder built on the count at
+    the end, then run backwards. The zone is as long as the longer ladder,
+    so the two sides share the mainline instead of sitting end to end.
+    """
+
+    before = (int(before[0]), int(before[1]))
+    after = (int(after[0]), int(after[1]))
+    peak = (max(before[0], after[0]), max(before[1], after[1]))
+    grow = _increase_layout(before, peak, direction) if peak != before else None
+    shrink = _increase_layout(after, peak, direction) if peak != after else None
+    total = max(grow["total"] if grow else 0, shrink["total"] if shrink else 0)
+    return grow, shrink, total
+
+
+def sequential_zone_length(before, after, direction):
+
+    """The old end-to-end length, kept so tests can show the overlap is shorter."""
 
     if tuple(before) == tuple(after):
         return 0
@@ -287,6 +361,14 @@ def zone_length(before, after, direction):
         )
         total += _increase_layout(small, large, direction)["total"]
     return total
+
+
+def zone_length(before, after, direction, join=None):
+
+    if tuple(before) == tuple(after):
+        return 0
+    _before, switched_after = switched_counts(before, after, join)
+    return _overlapped(before, switched_after, direction)[2]
 
 
 def _travel(station, total, reverse):
@@ -308,33 +390,96 @@ def _station(origin, direction, heading, station, track_index):
     )
 
 
-def place_transition(origin, direction, heading, before, after):
-    """Write the ladders from `before` to `after` and return the end node position."""
+def place_transition(origin, direction, heading, before, after, join=None):
+    """Write the overlapped ladders and return the end node position."""
 
     if tuple(before) == tuple(after):
         return origin
     register_switch_library()
-    cursor = origin
-    for phase_before, phase_after, reverse in _phases(before, after):
-        small, large = (
-            (phase_after, phase_before) if reverse else (phase_before, phase_after)
+    _before, switched_after = switched_counts(before, after, join)
+    grow, shrink, total = _overlapped(before, switched_after, direction)
+    if total <= 0:
+        return origin
+    _place_overlapped(
+        origin,
+        direction,
+        heading,
+        grow,
+        shrink,
+        total,
+        before,
+        after,
+    )
+    return _station(origin, direction, heading, total, 0)
+
+
+def corridor_segments(origin, direction, heading, mode, distance):
+    """Start/end positions of every parallel track across a straight stretch."""
+
+    segments = []
+    if distance <= 0:
+        return segments
+    for index in range(-int(mode[0]), int(mode[1]) + 1):
+        segments.append(
+            (
+                _station(origin, direction, heading, 0, index),
+                _station(origin, direction, heading, distance, index),
+            )
         )
-        layout = _increase_layout(small, large, direction)
-        _place_layout(
-            cursor, direction, heading, layout, reverse, phase_before, phase_after
-        )
-        cursor = _station(cursor, direction, heading, layout["total"], 0)
-    return cursor
+    return segments
 
 
-def _place_layout(origin, direction, heading, layout, reverse, incoming, outgoing):
+def _place_overlapped(origin, direction, heading, grow, shrink, total, incoming, outgoing):
 
-    total = layout["total"]
+    _place_layout(
+        origin,
+        direction,
+        heading,
+        [pair for pair in ((grow, False), (shrink, True)) if pair[0]],
+        total,
+        incoming,
+        outgoing,
+    )
+
+
+def _place_layout(origin, direction, heading, layouts, total, incoming, outgoing):
+
     points = {}
     occupied = {}
 
     def mark(track_index, station):
         points.setdefault(track_index, set()).add(int(station))
+
+    for layout, reverse in layouts:
+        _mark_switches(
+            origin, direction, heading, layout, reverse, total, mark, occupied
+        )
+
+    for track_index in _indices(incoming):
+        mark(track_index, 0)
+    for track_index in _indices(outgoing):
+        mark(track_index, total)
+
+    for track_index, stations in points.items():
+        ordered = sorted(stations)
+        blocked = occupied.get(track_index, [])
+        for start, end in zip(ordered, ordered[1:]):
+            if any(lo == start and hi == end for lo, hi in blocked):
+                continue
+            gap = end - start
+            if gap < 0:
+                raise ValueError(f"negative switch fill {gap} on track {track_index}")
+            if gap == 0:
+                continue
+            track.create_straight(
+                _station(origin, direction, heading, start, track_index),
+                gap,
+                direction,
+                heading,
+            )
+
+
+def _mark_switches(origin, direction, heading, layout, reverse, total, mark, occupied):
 
     for switch in layout["switches"]:
         hand = _opposite(switch["side"]) if reverse else switch["side"]
@@ -359,29 +504,6 @@ def _place_layout(origin, direction, heading, layout, reverse, incoming, outgoin
         mark(switch["div_track"], div_s)
         lo, hi = sorted((int(origin_s), int(main_s)))
         occupied.setdefault(switch["track"], []).append((lo, hi))
-
-    for track_index in _indices(incoming):
-        mark(track_index, 0)
-    for track_index in _indices(outgoing):
-        mark(track_index, total)
-
-    for track_index, stations in points.items():
-        ordered = sorted(stations)
-        blocked = occupied.get(track_index, [])
-        for start, end in zip(ordered, ordered[1:]):
-            if any(lo == start and hi == end for lo, hi in blocked):
-                continue
-            gap = end - start
-            if gap < 0:
-                raise ValueError(f"negative switch fill {gap} on track {track_index}")
-            if gap == 0:
-                continue
-            track.create_straight(
-                _station(origin, direction, heading, start, track_index),
-                gap,
-                direction,
-                heading,
-            )
 
 
 def describe_selection():

@@ -42,48 +42,18 @@ def main():
     trackhammer.exclude_existing()
 
     Vancouver_Start = [(7568, 3552, -13040), "0fw", -90, False]
+    # Each run is (tracks left, tracks right), miles, parameters.
+    # "join" says how this run attaches to the previous one. Leave it out
+    # and both sides get switches. "stub" ends or starts that side with no
+    # switch. A dict sets the sides separately, for example
+    # {"left": "stub", "right": "switch"}.
     trackhammer.generate_mainline(
         Vancouver_Start,
         [
             [
-                (random.randint(0, 5), random.randint(0, 5)),
-                0.3,
-                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
-            ],
-            [
-                (random.randint(0, 5), random.randint(0, 5)),
-                0.3,
-                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
-            ],
-            [
-                (random.randint(0, 5), random.randint(0, 5)),
-                0.3,
-                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
-            ],
-            [
-                (random.randint(0, 5), random.randint(0, 5)),
-                0.3,
-                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
-            ],
-            [
-                (random.randint(0, 5), random.randint(0, 5)),
-                0.3,
-                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
-            ],
-            [
-                (random.randint(0, 5), random.randint(0, 5)),
-                0.3,
-                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
-            ],
-            [
-                (random.randint(0, 5), random.randint(0, 5)),
-                0.3,
-                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
-            ],
-            [
-                (random.randint(0, 5), random.randint(0, 5)),
-                0.3,
-                {"min_radius": 2, "min_grade": 3, "max_grade": 3},
+                (0, 0),
+                30,
+                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
             ],
         ],
     )

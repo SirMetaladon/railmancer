@@ -42,6 +42,24 @@ def initialize(path: str):
         ["trackhammer_block_size_horizontal", 1, 6000, 2000],
     ]
 
+    # Scored trackhammer. Integers and floats are clamped separately so a
+    # weight of 1.5 does not get truncated. Selection stays off unless the
+    # config asks for it, which keeps the random sampler bit-for-bit.
+    Scored = [
+        ["trackhammer_scored_selection", 0, 0, 1, True],
+        ["trackhammer_score_top_k", 3, 1, 100, True],
+        ["trackhammer_score_probe_cells", 5, 1, 64, True],
+        ["trackhammer_score_pop_limit", 8, 0, 100000, True],
+        ["trackhammer_attempt_limit", 250000, 1, 100000000, True],
+        ["trackhammer_score_weight_grade", 100.0, 0.0, 1000000.0, False],
+        ["trackhammer_score_weight_runway", 2.0, 0.0, 1000000.0, False],
+        ["trackhammer_score_weight_hug", 3.0, 0.0, 1000000.0, False],
+        ["trackhammer_score_weight_heading", 1.5, 0.0, 1000000.0, False],
+        ["trackhammer_score_weight_reverse", 4.0, 0.0, 1000000.0, False],
+        ["trackhammer_score_weight_jitter", 0.25, 0.0, 1000000.0, False],
+        ["trackhammer_fit_run_length", 1, 0, 1, True],
+    ]
+
     # need a mechanism in here for double checking the following:
     # Is sector size a multiple of snap size?
     # Is wall height a multiple of snap size?
@@ -50,6 +68,48 @@ def initialize(path: str):
     for Entry in Expecting:
 
         CFG[Entry[0]] = int(min(max(CFG.get(Entry[0], Entry[1]), Entry[2]), Entry[3]))
+
+    for Entry in Scored:
+
+        name, default, lo, hi, as_int = Entry
+        try:
+            value = float(CFG.get(name, default))
+        except (TypeError, ValueError):
+            value = float(default)
+        value = min(max(value, lo), hi)
+        CFG[name] = int(value) if as_int else value
+
+    # "layers" is the 3-D on/off block grid. "height" stores one absolute
+    # rail height per horizontal cell. Anything else falls back to layers
+    # so a typo cannot silently change a map.
+    block_mode = str(CFG.get("trackhammer_block_mode", "layers")).strip().lower()
+    CFG["trackhammer_block_mode"] = (
+        block_mode if block_mode in ("layers", "height") else "height"
+    )
+
+    # Height mode only. "down" keeps the lowest rail in the cell and requires
+    # the next track to pass at least trackhammer_height_clearance underneath it.
+    height_direction = (
+        str(CFG.get("trackhammer_height_direction", "up")).strip().lower()
+    )
+    CFG["trackhammer_height_direction"] = (
+        height_direction if height_direction in ("up", "down") else "up"
+    )
+
+    # Exact vertical gap for height mode, in map units. Defaults to one
+    # sector_minimum_height (1200 in the shipped config). That is the same
+    # floor-to-ceiling the terrain sectors already use, and it replaces the
+    # layers-mode gap of two block layers (2 * sector_minimum_height * 1.05,
+    # about 2520) with a distance the next rail can clear exactly.
+    try:
+        clearance = float(
+            CFG.get("trackhammer_height_clearance", CFG["sector_minimum_height"])
+        )
+    except (TypeError, ValueError):
+        clearance = float(CFG["sector_minimum_height"])
+    CFG["trackhammer_height_clearance"] = int(
+        min(max(clearance, 0), CFG["max_mapsize"])
+    )
 
     CFG["sector_real_size"] = int(math.floor(CFG["sector_real_size"] / 16) * 16)
     for Biome in CFG["Biomes"].values():
