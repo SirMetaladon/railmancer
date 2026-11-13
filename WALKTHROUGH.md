@@ -54,13 +54,7 @@ This is behavior beyond the shims. A piece that both changes 4-hand and leaves t
 
 The hand-tuned rows are the same numbers, for one track to the right, low angle then high angle. `get_addlength` still consumes them.
 
-Three cases that used to return `(0, 0)` now go through `_grid_stagger` and `_snap_track_grid` (nearest multiple of 16):
-
-- Same angle number, other hand (`1lt`↔`1rt`, `2lt`↔`2rt`, `4lt`↔`4rt`). `8lt`↔`8rt` is singular and snaps to `(0, 0)`.
-- Both ends have a hand and the hands differ (`1lt`↔`4rt`, `1rt`↔`4lt`, and `1`↔`8` cross-hand). `main` applied the same-hand table row to those.
-- A pair the table does not list. `main` printed `Invalid combination!` and returned `(0, 0)`.
-
-Because `get_addlength` is the backbone push, these three cases move the next node, not only the filler. The families that are not an exact multiple of 16 are listed under residuals below.
+A direction pair that is not in that hand-tuned table raises `ValueError`. The message names both directions and says to add a hand-made offset in `get_offset_forward_for_parallel_on_right`. Same direction is still `(0, 0)`. That covers same angle number with the other hand (`1lt`↔`1rt`, `4lt`↔`4rt`, `8lt`↔`8rt`), mixed hands (`1lt`↔`4rt`), and anything else the table does not list (`2rt`↔`8rt`, `4rt`↔`8rt`). There is no stagger guess and no snap to the 16-unit grid. New pieces that need a new pair get a row in the table by hand.
 
 ### `straight_prop_yaw`, `create_straight`, `convert_length_to_mdl`
 
@@ -116,7 +110,7 @@ python3 tests/test_hand_fixed_route.py
 python3 tests/test_switch_ladders.py
 ```
 
-`test_parallel_geometry.py` builds synthetic arcs (no real mdl files) and checks every grid-legal direction change, both directions through the piece, headings 0/90/180/270, and every track count from 0 to 3 on each side. Consecutive pieces have to meet in position and heading. At each backbone node, track `t` has to sit on `move_in_trackspace`'s lateral for `t`. It also checks that the hand-tuned table did not drift. The run prints the case count, the failure count, and the rounded-stagger residuals. Last run on this branch: **8452 exact-join cases, 0 failures**.
+`test_parallel_geometry.py` builds synthetic arcs (no real mdl files) and checks direction changes that are in the hand-tuned offset table, both directions through the piece, headings 0/90/180/270, and every track count from 0 to 3 on each side. Consecutive pieces have to meet in position and heading. At each backbone node, track `t` has to sit on `move_in_trackspace`'s lateral for `t`. It also checks that the hand-tuned table did not drift, and that a pair missing from the table (`2rt`→`8rt`) raises. The run prints the case count and the failure count.
 
 `test_hand_fixed_route.py` rebuilds the fully fixed route. The backbone model list is the center track from that VMF, in order, with mode `(2, 0)` and the Vancouver start node. It asserts:
 
@@ -142,25 +136,15 @@ Read `unpaired points`. 0 means every rail end and every frog or cone meets some
 4. Generate once, print each prop's two endpoints with `prop_endpoints` in `railmancer/joincheck.py`, sort the pair, and store them. Store frog and cone origins the same way.
 5. The assertion compares those sets. Do not compare origin or yaw. Re-run the script. It exits 1 if any endpoint is only in the file or only in the generated route.
 
-### Residuals
+### Pairs the table does not list
 
-Some direction pairs cannot meet exactly on the 16-unit grid. The geometry test prints the distance from a perfect joint. Outermost of 3 tracks on each side:
-
-| pair | per track | at 3 tracks |
-| --- | --- | --- |
-| `1`↔`8` | 4 | 12 |
-| `1lt`↔`4rt` and `1rt`↔`4lt` | 4 | 12 |
-| `8lt`↔`8rt` | 384 | 1152 |
-
-`1`↔`8` and the crossed `1`↔`4` pairs have an exact stagger that is not a multiple of 16 (about 4 units per track). `_snap_track_grid` rounds each component to the nearest 16, which is the closest the props can sit. Closing them exactly means leaving the 16-grid, and the straight models are not authored that way. A kinked filler, not collinear with either tangent, would be a different design.
-
-`8lt`↔`8rt` is worse. The two forwards point the same way in world space (both are 90° corners, opposite hands), so no pair of straight lengths can cancel the sideways step. That step is 384 units in X per track. The snap is `(0, 0)`, and the side track stays 384 off per track. A straight shim cannot fix it. It needs a curve between those two directions, or the pathfinder has to stop offering that pair as a straight-shim joint.
+`1`↔`8`, the crossed `1`↔`4` pairs, and `8lt`↔`8rt` are not exact on the 16-unit grid, and they are not in the hand-tuned table. Asking for one of them raises, instead of snapping to the nearest 16 or returning `(0, 0)`. A new offset is a hand-made row. The real arc library does not author those pairs, so the pathfinder does not reach them.
 
 ### Switch ladders
 
 A ladder is added wherever the parallel count changes. Nothing in the offset table or the shim writer was replaced. `trackhammer.py` notices that the next chosen piece would pass a run boundary whose track count differs. If a shorter piece still fits before that boundary, it keeps looking. If nothing fits, it fills the gap with a level tangent straight (rounded up to the grid step for that direction) and then reserves the ladder. The ladder is flat: Z does not change. There is no flag to turn this off. Crossovers are not built.
 
-The hand comes from which side gained or lost tracks. The model is the condensed parallel siding of that direction and hand: the diverging leg is longer than the main leg, and both ends sit on `move_in_trackspace`. Extended sidings, where the two legs are the same length, are in the catalog and are not used. The catalog is `data/trakpak3_models.json`, a list of model paths. Lengths are not stored there. `geometry_from_model` reads the filename. The sibling branch `cursor/scored-track-selection-deec` did not have a scanner when this was written, so this list is the sparse catalog that scanner can replace later.
+The hand comes from which side gained or lost tracks. The model is the condensed parallel siding of that direction and hand: the diverging leg is longer than the main leg, and both ends sit on `move_in_trackspace`. Extended sidings, where the two legs are the same length, are in the catalog and are not used. The catalog is `data/trakpak3_models.json`. Lengths are not stored there. `geometry_from_model` reads the filename.
 
 Chosen models, smallest condensed siding that lands on the grid. Every one of these has main length 768 and diverging length 1536:
 
@@ -188,7 +172,7 @@ How one ladder is built, for N switches on the left and none on the right. The z
 
 A merge is that ladder run backwards. The points sit at the far end, the heading is plus 180, and the model is the opposite hand, which puts the diverging leg back on the side that is going away. Filler straights still run forward in the direction of travel.
 
-Both sides at once, from a single track (`0L0R -> 1L1R`), share the root. The side with more switches goes first. The other side's first switch starts at the end of that first main leg (768), so the two switches do not stack on one point. When both sides add the same number, the zone is `N * 1536 + 768`. `3L0R -> 0L3R` is not that. It is two zones in a row: merge all three left tracks into the main, then split three right tracks off the main. `_phases` is the list that sets that order.
+Both sides at once, from a single track (`0L0R -> 1L1R`), share one zone. The two switches cannot sit on the same point, so the second starts at the end of the first main leg (768). On `0fw` that zone is 2304. A side that is ending and a side that is starting also share one zone: the merge ladder runs backwards in the same stretch the split occupies, so the zone is as long as the longer ladder. On `0fw`, `3L0R -> 0L3R` is 4608 and `2L1R -> 1L2R` is 1536.
 
 One Hammer entity, `tp3_switch`, carries the `_mn` model and the `_dv` model. The checker counts that entity as three endpoints. `create_straight` now raises if the length is negative or not a multiple of 16. A 1-in-4 filler also has to be a multiple of 64, and a 1-in-2 filler a multiple of 32, or the sideways step leaves the 16-grid. The pathfinder rounds the gap fill up to that step.
 
@@ -208,7 +192,7 @@ Each run can say how it joins the previous one. The key sits in the run's parame
 
 `"stub"` on a side means those tracks just end or begin. Their endpoints stay unpaired, which the checker already allows at a run end. A per-track list would punch a hole in the ladder, because each switch's diverging end is the next switch's point, so the control is per side.
 
-As a run gets close to its length, pieces that would leave no room for the upcoming zone are skipped, and the gap in front of the zone is filled with a grid-snapped straight that does not round past the target. `trackhammer_fit_run_length` in `config.json` turns that off if you want the old "fill whatever is left, then add the zone" behavior. It works with the scored selector and with height mode, because the corridor check uses the same block test as a normal piece.
+As a run gets close to its length, pieces that would leave no room for the upcoming zone are skipped, and the gap in front of the zone is filled with a grid-snapped straight that does not round past the target. `trackhammer_fit_run_length` in `config.json` turns that off if you want the old "fill whatever is left, then add the zone" behavior. It works with height mode, because the corridor check uses the same block test as a normal piece.
 
 `4lt` and `4rt` sidings do not land on a parallel track. The condensed `4lt` diverging point is 32 units off `move_in_trackspace`. There is no `4rt` siding and no `8lt` / `8rt` siding. A run boundary in those directions does not get a ladder; the pathfinder prints the error and tries another piece. After an 8 piece the node direction is already `0fw`, so the boundary after a corner is a normal `0fw` ladder. A boundary while the train is still on `4lt` or `4rt` is unsolved.
 
@@ -216,7 +200,7 @@ As a run gets close to its length, pieces that would leave no room for the upcom
 python3 tests/test_switch_ladders.py
 ```
 
-That run is 84 transitions (the count changes in the owner's list, both hands, on `0fw`, `1lt`, `2lt`, and `2rt`, at several headings) plus the writer hook, the length guards, and the model check. Latest run: **0 failures**. The other two scripts are unchanged: **8452** geometry cases, **0 failures**, and the fully fixed route **99 pieces, 6 markers, 0 failures**.
+That run is 84 transitions (the count changes in the owner's list, both hands, on `0fw`, `1lt`, `2lt`, and `2rt`, at several headings) plus the writer hook, the length guards, and the model check.
 
 ### A full Railmancer run
 
