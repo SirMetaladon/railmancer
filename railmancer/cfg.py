@@ -31,6 +31,8 @@ def initialize(path: str):
         ["sector_minimum_height", 1824, 0, CFG["max_mapsize"]],
         ["sector_maximum_height", 4000, 0, CFG["max_mapsize"]],
         ["sector_minimum_track_depth", 128, 0, CFG["max_mapsize"]],
+        ["sector_corkscrew_track_clearance", 250, 0, CFG["max_mapsize"]],
+        ["sector_corkscrew_prefer_height", 0, 0, 1],
         ["noise_floor_ceiling_spillover_slope", 2, 0, 100],
         [
             "trackhammer_minimum_allowed_distance_from_edge_of_map",
@@ -68,6 +70,20 @@ def initialize(path: str):
     for Entry in Expecting:
 
         CFG[Entry[0]] = int(min(max(CFG.get(Entry[0], Entry[1]), Entry[2]), Entry[3]))
+
+    # convert_bezier_to_points uses np.linspace(0, 1, int(chord/d)+1), so the
+    # worst sample gap is just under 2*d. A track can cross a wall midway
+    # between samples; warn when 1.5 * (worst_gap/2) exceeds clearance.
+    poll_distance = CFG["line_maximum_poll_point_distance"]
+    worst_gap = 2 * poll_distance
+    if (worst_gap / 2) * 1.5 > CFG["sector_corkscrew_track_clearance"]:
+        print(
+            "WARNING: sector_corkscrew_track_clearance "
+            f"({CFG['sector_corkscrew_track_clearance']}) is below 1.5 * half the "
+            "worst track-sample gap. line_maximum_poll_point_distance is "
+            f"{poll_distance} (worst gap {worst_gap}). A rail crossing a sector "
+            "wall can be missed, and a corkscrew link may be cut under it."
+        )
 
     for Entry in Scored:
 

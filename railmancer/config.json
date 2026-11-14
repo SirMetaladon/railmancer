@@ -7,6 +7,8 @@
   "sector_minimum_height": 1200,
   "sector_maximum_height": 4000,
   "sector_minimum_track_depth": 300,
+  "sector_corkscrew_track_clearance": 250,
+  "sector_corkscrew_prefer_height": 0,
   "sector_connection_maximum_cliff": 1000,
   "sector_connection_maximum_rise": 1000,
   "sector_minimum_track_to_edge_distance": 700,
