@@ -12,6 +12,7 @@ from railmancer import (
     track,
     trackhammer,
     cfg,
+    consolidate_straights,
 )
 
 # This is where it all comes together. Each step of the process accomplishes a major part of the overall product. Mostly for clarity of flow.
@@ -142,6 +143,11 @@ def main():
     tools.stopwatch_click("submodule", "Frogging the Track, done")"""
 
     vmfpy.add_light_environment()'''
+
+    # Merge collinear fragmented straights into longer stock pieces so the
+    # final VMF carries fewer props. Pass smooth_grade=True to redistribute
+    # rise over a whole collinear run using mixed grade versions.
+    consolidate_straights.consolidate_inplace(smooth_grade=False)
 
     # Compile brush, entity, and brushentity data into a VMF text file and save.
     vmfpy.write_to_vmf(f"{"railmancer"}_{random.randint(5000,5999)}{".vmf"}")

@@ -36,3 +36,15 @@ That prints counts by family, every name `process_file` could not parse, and the
 python -m unittest tests.test_trakpak_scan -v
 python3 tests/test_switch_ladders.py
 ```
+
+## Consolidate fragmented straights
+
+`tools/consolidate_vmf_straights.py` rewrites adjacent straight props into longer stock pieces (same lengths / grade tokens as the straight generator). Railmancer also calls `consolidate_straights.consolidate_inplace()` before the final VMF write.
+
+```
+python3 tools/consolidate_vmf_straights.py map.vmf
+python3 tools/consolidate_vmf_straights.py map.vmf --smooth-grade -o map_merged.vmf
+python3 check_track_vmf.py map_consolidated.vmf
+```
+
+Without `--smooth-grade`, flat (`0pg`) runs and each graded token run merge separately. With it, collinear same-direction straights may mix grade versions so the total rise still matches the original endpoints.
