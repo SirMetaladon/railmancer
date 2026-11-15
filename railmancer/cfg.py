@@ -42,21 +42,9 @@ def initialize(path: str):
         ["trackhammer_block_size_horizontal", 1, 6000, 2000],
     ]
 
-    # Scored trackhammer. Integers and floats are clamped separately so a
-    # weight of 1.5 does not get truncated. Selection stays off unless the
-    # config asks for it, which keeps the random sampler bit-for-bit.
-    Scored = [
-        ["trackhammer_scored_selection", 0, 0, 1, True],
-        ["trackhammer_score_top_k", 3, 1, 100, True],
-        ["trackhammer_score_probe_cells", 5, 1, 64, True],
-        ["trackhammer_score_pop_limit", 8, 0, 100000, True],
+    # Integers and floats are clamped separately so a 1.5 does not get truncated.
+    TrackLimits = [
         ["trackhammer_attempt_limit", 250000, 1, 100000000, True],
-        ["trackhammer_score_weight_grade", 100.0, 0.0, 1000000.0, False],
-        ["trackhammer_score_weight_runway", 2.0, 0.0, 1000000.0, False],
-        ["trackhammer_score_weight_hug", 3.0, 0.0, 1000000.0, False],
-        ["trackhammer_score_weight_heading", 1.5, 0.0, 1000000.0, False],
-        ["trackhammer_score_weight_reverse", 4.0, 0.0, 1000000.0, False],
-        ["trackhammer_score_weight_jitter", 0.25, 0.0, 1000000.0, False],
         ["trackhammer_fit_run_length", 1, 0, 1, True],
     ]
 
@@ -69,7 +57,7 @@ def initialize(path: str):
 
         CFG[Entry[0]] = int(min(max(CFG.get(Entry[0], Entry[1]), Entry[2]), Entry[3]))
 
-    for Entry in Scored:
+    for Entry in TrackLimits:
 
         name, default, lo, hi, as_int = Entry
         try:

@@ -1081,9 +1081,8 @@ def get_offset_forward_for_parallel_on_right(start_direction, end_direction):
     if start_direction[0] == end_direction[0]:
 
         # Same angle number, other hand (1lt↔1rt, 4lt↔4rt, 8lt↔8rt).
-        # Not the same direction, so the sideways step changes. Snap that
-        # stagger onto the 16-unit grid. For 8lt↔8rt the nearest value is 0.
-        return _grid_stagger(start_direction, end_direction)
+        # That stagger is not in the hand-tuned table.
+        _missing_parallel_offset(start_direction, end_direction)
 
     first_direction, second_direction = (
         (start_direction, end_direction)
@@ -1094,11 +1093,11 @@ def get_offset_forward_for_parallel_on_right(start_direction, end_direction):
     handedness_mult = -1 if second_direction[1] == "r" else 1
 
     # The table assumes one hand for the whole turn (or a start at 0fw).
-    # A mirror pair such as 1lt→4rt is a different stagger; snap that instead.
+    # A mirror pair such as 1lt→4rt is not in the table.
     first_hand = "" if first_direction == "0fw" else first_direction[1:]
     second_hand = "" if second_direction == "0fw" else second_direction[1:]
     if first_hand and second_hand and first_hand != second_hand:
-        return _grid_stagger(first_direction, second_direction)
+        _missing_parallel_offset(start_direction, end_direction)
 
     if first_direction == "0fw":
 
@@ -1133,36 +1132,15 @@ def get_offset_forward_for_parallel_on_right(start_direction, end_direction):
         if second_direction[0] == "4":
             return 0, 48 * handedness_mult
 
-    # Not in the hand-tuned table. Snap the same stagger equation onto the
-    # 16-unit grid the props have to sit on. Close is enough; it will not be exact.
-    return _grid_stagger(first_direction, second_direction)
+    _missing_parallel_offset(start_direction, end_direction)
 
 
-def _snap_track_grid(value):
+def _missing_parallel_offset(start_direction, end_direction):
 
-    return int(round(float(value) / 16.0) * 16)
-
-
-def _grid_stagger(start_direction, end_direction):
-
-    # (along start, along end) for one track to the right. Directions are
-    # already in the table's low-angle, high-angle order.
-    forward_start = move_in_trackspace(1, start_direction, 0)
-    forward_end = move_in_trackspace(1, end_direction, 0)
-    right_start = move_in_trackspace(0, start_direction, 1)
-    right_end = move_in_trackspace(0, end_direction, 1)
-    rhs_x = float(right_end[0] - right_start[0])
-    rhs_y = float(right_end[1] - right_start[1])
-    start_x, start_y = float(forward_start[0]), float(forward_start[1])
-    end_x, end_y = float(forward_end[0]), float(forward_end[1])
-    determinant = start_x * end_y - start_y * end_x
-    if abs(determinant) < 1e-8:
-        # Opposite orthogonals (8lt↔8rt): both tangents run the same way,
-        # so a straight filler cannot cancel the side step. Nearest grid is 0.
-        return 0, 0
-    along_start = (rhs_x * end_y - rhs_y * end_x) / determinant
-    along_end = (start_x * rhs_y - start_y * rhs_x) / determinant
-    return _snap_track_grid(along_start), _snap_track_grid(along_end)
+    raise ValueError(
+        f"no hand-made parallel offset for {start_direction} -> {end_direction}. "
+        "Add this pair to the table in get_offset_forward_for_parallel_on_right."
+    )
 
 
 def get_addlength(start_direction, end_direction, mode):
