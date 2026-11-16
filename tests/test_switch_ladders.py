@@ -22,7 +22,6 @@ from railmancer.switches import (
     place_transition,
     register_switch_library,
     select_switch,
-    sequential_zone_length,
     zone_length,
 )
 
@@ -32,12 +31,12 @@ def _all_modes():
 
 
 MODES = _all_modes()
-SHORTER = (
-    ((3, 0), (0, 3)),
-    ((2, 1), (1, 2)),
-    ((3, 1), (1, 3)),
-    ((2, 0), (0, 2)),
-)
+# Overlapped zone length on 0fw. short=768, long=1536 from the condensed siding.
+EXPECTED_0FW = {
+    ((3, 0), (0, 3)): 4608,
+    ((2, 1), (1, 2)): 1536,
+    ((0, 0), (1, 1)): 2304,
+}
 
 ORIENTATIONS = (
     ("0fw", 0),
@@ -98,13 +97,12 @@ def _transition_case(before, after, direction, heading):
     name = f"{before[0]}L{before[1]}R->{after[0]}L{after[1]}R {direction} h{heading}"
     origin = (0.0, 0.0, 0.0)
     total = zone_length(before, after, direction)
-    old_total = sequential_zone_length(before, after, direction)
     if total <= 0 or total % 16 != 0:
         return [f"{name}: zone length {total}"]
-    if total > old_total:
-        return [f"{name}: overlapped {total} is longer than sequential {old_total}"]
-    if (before, after) in SHORTER and total >= old_total:
-        return [f"{name}: overlapped {total} should be shorter than {old_total}"]
+    if direction == "0fw" and (before, after) in EXPECTED_0FW:
+        expected = EXPECTED_0FW[(before, after)]
+        if total != expected:
+            return [f"{name}: zone {total}, expected {expected}"]
     placed = []
     vmfpy.add_entity = placed.append
     place_transition(origin, direction, heading, before, after)
@@ -221,7 +219,6 @@ def _bounds_case():
     trackhammer.initialize()
     trackhammer.set_border_override(lambda point: abs(point[0]) < 500 and abs(point[1]) < 500)
     trackhammer.BlockHorizontal = 200
-    trackhammer.rebuild_border_distance()
     zone = zone_length((0, 0), (0, 3), "0fw")
     outside = trackhammer.corridor_is_blocked((0, 0, 0), "0fw", 0, (0, 3), zone)
     inside = not trackhammer.corridor_is_blocked((0, 0, 0), "0fw", 0, (0, 0), 256)

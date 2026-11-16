@@ -16,12 +16,6 @@ class HeightBlockTests(unittest.TestCase):
         cfg.CFG["trackhammer_block_mode"] = "height"
         cfg.CFG["trackhammer_height_direction"] = "up"
         cfg.CFG["trackhammer_height_clearance"] = 50
-        cfg.CFG["trackhammer_score_weight_jitter"] = 0
-        cfg.CFG["trackhammer_score_weight_grade"] = 0
-        cfg.CFG["trackhammer_score_weight_runway"] = 0
-        cfg.CFG["trackhammer_score_weight_hug"] = 0
-        cfg.CFG["trackhammer_score_weight_heading"] = 0
-        cfg.CFG["trackhammer_score_weight_reverse"] = 0
         trackhammer.BlockHorizontal = 1000
         trackhammer.BlockVertical = 1000
         trackhammer.Block_Standoff_Distance = 3000
@@ -175,36 +169,6 @@ class HeightBlockTests(unittest.TestCase):
         trackhammer.display_blocks_in_vmf()
         self.assertEqual(vmfpy.Brushes[0][4], 150.0)
         self.assertEqual(vmfpy.Brushes[0][5], 250.0)
-
-    def test_probe_uses_exact_clearance_instead_of_two_layers(self):
-
-        cfg.CFG["trackhammer_score_probe_cells"] = 5
-        cfg.CFG["trackhammer_border"] = 30000
-        trackhammer.set_border_override(None)
-        trackhammer.rebuild_border_distance()
-        trackhammer.blocks_new([[-3000, 0, 400]])
-        probe = trackhammer.probe_from_node(([0, 0, 0], "0fw", 0, False))
-        self.assertEqual(probe["hit_z"], 400.0)
-        self.assertEqual(probe["hit_distance"], 3000)
-        # clearance 50, not 2 * BlockVertical (2000)
-        self.assertAlmostEqual(trackhammer.required_grade(probe, 0), 450 / 3000)
-
-        cfg.CFG["trackhammer_height_direction"] = "down"
-        cfg.CFG["trackhammer_height_clearance"] = 100
-        trackhammer.clear_occupied()
-        trackhammer.blocks_new([[-3000, 0, 400]])
-        probe = trackhammer.probe_from_node(([0, 0, 500], "0fw", 0, False))
-        self.assertEqual(probe["hit_z"], 400.0)
-        self.assertAlmostEqual(
-            trackhammer.required_grade(probe, 500),
-            (400 - 100 - 500) / 3000,
-        )
-        self.assertIsNone(
-            trackhammer.placement_cost(0.0, probe, 500, {"min_grade": 0}, 0, 0, 0)
-        )
-        self.assertIsNotNone(
-            trackhammer.placement_cost(-1.0, probe, 500, {"min_grade": 0}, 0, 0, 0)
-        )
 
     def test_layers_mode_still_reserves_block_ids(self):
 

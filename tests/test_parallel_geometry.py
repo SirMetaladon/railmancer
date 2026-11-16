@@ -4,9 +4,9 @@ Hammer models are not required. Backbone pieces are synthetic arcs with the
 same direction vectors and Move convention as Trakpak3, and straight fillers
 are built from the filenames ``convert_length_to_mdl`` already emits.
 
-What is checked, for every grid-legal direction change, both ways through the
-piece, at headings 0/90/180/270, and for every track count from 0 to 3 on
-each side:
+What is checked, for every direction change in the hand-tuned offset table,
+both ways through the piece, at headings 0/90/180/270, and for every track
+count from 0 to 3 on each side:
 
 * consecutive pieces meet in position
 * the centerline heading is continuous across each joint
@@ -437,9 +437,21 @@ def _entry_directions(start_direction, end_direction):
     return entries
 
 
+def _in_hand_table(start_direction, end_direction):
+
+    if start_direction == end_direction:
+        return True
+    return (start_direction, end_direction) in LEGACY_OFFSETS or (
+        end_direction,
+        start_direction,
+    ) in LEGACY_OFFSETS
+
+
 def single_piece_cases(models):
     cases = []
     for authored, _name in models.items():
+        if not _in_hand_table(*authored):
+            continue
         along_start, _along_end, exact = grid_offset(*authored)
         if along_start is None:
             # 8lt↔8rt: tangents are opposite, so the snap cannot close the joint.
@@ -512,6 +524,8 @@ def chain_cases(models):
             for chain_name, authored_steps in chains.items():
                 if chain_name == "run-boundary":
                     continue
+                if any(not _in_hand_table(*step) for step in authored_steps):
+                    continue
                 missing = [step for step in authored_steps if step not in models]
                 if missing:
                     continue
@@ -549,67 +563,16 @@ def check_legacy_table():
     return failures
 
 
-def _code_stagger(start_direction, end_direction):
-    """Stagger the placer actually uses, along this traversal."""
+def check_unlisted_pair_raises():
 
-    along_low, along_high = track.get_offset_forward_for_parallel_on_right(
-        start_direction, end_direction
-    )
-    if int(start_direction[0]) > int(end_direction[0]):
-        return -along_high, -along_low
-    return along_low, along_high
-
-
-def rounded_residuals(outer_tracks=3):
-    """How far the outermost parallel track sits from a perfect (non-grid) stagger.
-
-    Reported for pairs the table does not hit exactly: the snap to 16 units,
-    and 8lt↔8rt, where the tangents are opposite so the nearest grid value is 0.
-    """
-
-    rows = []
-    worst = 0.0
-    worst_name = ""
-    for start_direction in ALL_DIRS:
-        for end_direction in ALL_DIRS:
-            if start_direction == end_direction:
-                continue
-            exact_start, exact_end, exact = grid_offset(start_direction, end_direction)
-            used_start, used_end = _code_stagger(start_direction, end_direction)
-            if exact_start is None:
-                right_start = track.move_in_trackspace(0, start_direction, 1)
-                right_end = track.move_in_trackspace(0, end_direction, 1)
-                forward_start = track.move_in_trackspace(1, start_direction, 0)
-                forward_end = track.move_in_trackspace(1, end_direction, 0)
-                remain_x = (right_end[0] - right_start[0]) - (
-                    used_start * forward_start[0] + used_end * forward_end[0]
-                )
-                remain_y = (right_end[1] - right_start[1]) - (
-                    used_start * forward_start[1] + used_end * forward_end[1]
-                )
-                per_track = math.hypot(remain_x, remain_y)
-                note = "opposite tangents, snap is 0"
-            else:
-                if exact and (used_start, used_end) == (exact_start, exact_end):
-                    continue
-                forward_start = track.move_in_trackspace(1, start_direction, 0)
-                forward_end = track.move_in_trackspace(1, end_direction, 0)
-                delta_start = used_start - exact_start
-                delta_end = used_end - exact_end
-                remain_x = delta_start * forward_start[0] + delta_end * forward_end[0]
-                remain_y = delta_start * forward_start[1] + delta_end * forward_end[1]
-                per_track = math.hypot(remain_x, remain_y)
-                note = (
-                    f"exact ({exact_start:.1f}, {exact_end:.1f}) "
-                    f"used ({used_start}, {used_end})"
-                )
-            miss = per_track * outer_tracks
-            rows.append((miss, f"{start_direction}->{end_direction}", note, per_track))
-            if miss > worst:
-                worst = miss
-                worst_name = f"{start_direction}->{end_direction}"
-    rows.sort(reverse=True)
-    return rows, worst, worst_name
+    try:
+        track.get_offset_forward_for_parallel_on_right("2rt", "8rt")
+    except ValueError as exc:
+        text = str(exc)
+        if "2rt" in text and "8rt" in text and "hand-made" in text:
+            return []
+        return [f"unlisted pair raised the wrong error: {exc}"]
+    return ["2rt -> 8rt did not raise"]
 
 
 def main():
@@ -619,9 +582,8 @@ def main():
     if (int(right[0]), int(right[1])) != (0, 192):
         print(f"0fw lateral offset is {right}, expected (0, 192)")
         return 1
-    failures = check_legacy_table()
+    failures = check_legacy_table() + check_unlisted_pair_raises()
     cases = single_piece_cases(models) + chain_cases(models)
-    residuals, worst, worst_name = rounded_residuals()
     log = io.StringIO()
     with contextlib.redirect_stdout(log):
         for name, start, pieces in cases:
@@ -633,18 +595,6 @@ def main():
         f"parallel geometry: {len(cases)} exact-join cases, "
         f"{len(failures)} failures"
     )
-    print(
-        f"rounded-stagger residual, outermost of 3 tracks each side: "
-        f"{worst:.1f} units on {worst_name}"
-    )
-    print("rounded families (ideal joint vs 16-unit snap):")
-    shown = set()
-    for miss, name, note, per_track in residuals:
-        family = tuple(sorted(name.split("->")))
-        if family in shown:
-            continue
-        shown.add(family)
-        print(f"  {name}: {miss:.1f} units at 3 tracks ({per_track:.1f} per track); {note}")
     noise = [
         line
         for line in log.getvalue().splitlines()
