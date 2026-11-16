@@ -21,6 +21,26 @@
   "trackhammer_height_direction": "up",
   "trackhammer_height_clearance": 1500,
   "trackhammer_block_standoff_distance": 3500, 
+  "prop_group_subdivisions": 4,
+  "prop_group_categories": {
+    "trees": [
+      "models/props_foliage/tree_pine_tall_01.mdl",
+      "models/props_foliage/tree_pine_tall_02.mdl",
+      "models/props_foliage/tree_pine_02.mdl",
+      "models/props_foliage/tree_pine_extrasmall_snow.mdl",
+      "models/props_foliage/tree_pine_small_snow.mdl",
+      "models/props_foliage/tree_pine_huge_snow.mdl"
+    ],
+    "rocks": [
+      "models/props_wasteland/rockcliff_cluster01b.mdl",
+      "models/props_wasteland/rockcliff_cluster02a.mdl",
+      "models/props_wasteland/rockcliff_cluster02b.mdl",
+      "models/props_forest/rock001.mdl",
+      "models/props_forest/rock002.mdl",
+      "models/props_forest/rock003.mdl",
+      "models/props_forest/rock004.mdl"
+    ]
+  },
   "Biomes": {
     "hl2_white_forest": {
       "models": {

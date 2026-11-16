@@ -220,6 +220,7 @@ def distribute(min_distance, TotalPoints, sector_data):
             if CurrentSteepness < LowestSteepnessAllowed:
                 continue
 
+            # Grouped at VMF write. sector_id is the sector this scatter already has.
             vmfpy.add_entity(
                 {
                     "pos": (
@@ -236,6 +237,7 @@ def distribute(min_distance, TotalPoints, sector_data):
                     "shadows": "noself",
                     "visgroup": "22",
                     "disablevertexlighting": "1",
+                    "sector_id": sector_data["id"],
                 }
             )
 
