@@ -40,15 +40,14 @@ def initialize(path: str):
             0,
             CFG["max_mapsize"],
         ],
-        ["trackhammer_block_standoff_distance", 1, 99999, 3000],
-        ["trackhammer_block_size_horizontal", 1, 6000, 2000],
+        ["trackhammer_block_standoff_distance", 3000, 1, 99999],
+        ["trackhammer_block_size_horizontal", 2000, 100, 6000],
+        ["trackhammer_attempt_limit", 250000, 1, 10000000000000000],
+        ["trackhammer_fit_run_length", 1, 0, 1],
     ]
 
     # Integers and floats are clamped separately so a 1.5 does not get truncated.
-    TrackLimits = [
-        ["trackhammer_attempt_limit", 250000, 1, 100000000, True],
-        ["trackhammer_fit_run_length", 1, 0, 1, True],
-    ]
+    TrackLimits = []
 
     # need a mechanism in here for double checking the following:
     # Is sector size a multiple of snap size?
@@ -72,16 +71,6 @@ def initialize(path: str):
             f"{poll_distance} (worst gap {worst_gap}). A rail crossing a sector "
             "wall can be missed, and a corkscrew link may be cut under it."
         )
-
-    for Entry in TrackLimits:
-
-        name, default, lo, hi, as_int = Entry
-        try:
-            value = float(CFG.get(name, default))
-        except (TypeError, ValueError):
-            value = float(default)
-        value = min(max(value, lo), hi)
-        CFG[name] = int(value) if as_int else value
 
     # "layers" is the 3-D on/off block grid. "height" stores one absolute
     # rail height per horizontal cell. Anything else falls back to layers

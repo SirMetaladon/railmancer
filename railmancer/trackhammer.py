@@ -352,7 +352,6 @@ def set_border_override(predicate):
     _border_override = predicate
 
 
-
 def clear_occupied():
 
     global Blocks, HeightTable
@@ -890,6 +889,8 @@ def create_rail_path(start_node, cumulative_track_profile):
 
     # Hollows out a little area near the start of the trackhammer, to prevent old rails from blocking the start of the mains
     clear_start_footprint(start_node[0])
+    # hardcoded fix
+    clear_start_footprint((7568, 4552, -14040))
 
     # system for testing multiple variations of rollbacks and candidates, currently semi-disabled
     rollbacks = [5000]
@@ -941,7 +942,7 @@ def generate_mainline(start_node, simple_track_profile):
 
     print(
         "Began working on generating "
-        + str(tools.miles(cumulative_track_profile[-1][1]))
+        + str(round(tools.miles(cumulative_track_profile[-1][1]), 3))
         + " mile mainline :",
         start_node,
     )

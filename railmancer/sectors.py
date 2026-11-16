@@ -294,7 +294,7 @@ def break_corkscrews():
             left["neighbors"][slot] = False
             right["neighbors"][(slot + 2) % 4] = False
             print(
-                f"Broke corkscrew {left['id']} {slot_names[slot]} to {right['id']}, clearance {clearance}."
+                f"Broke corkscrew {left['id']} {slot_names[slot]} to {right['id']}, clearance {round(clearance,0)}."
             )
 
 
@@ -700,7 +700,7 @@ def distance_to_line(pos, sector_data=None):
         if sector_id in Sectors:
             sector_data = Sectors[sector_id]
         else:
-            print(pos, sector_id, "failed!")
+            # print(pos, sector_id, "failed!")
             return 9999999999, [100000, 10000, 100000]
 
     KDTree = sector_data["kdtree"]

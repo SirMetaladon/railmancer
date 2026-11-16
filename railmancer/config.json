@@ -8,94 +8,20 @@
   "sector_maximum_height": 4000,
   "sector_minimum_track_depth": 300,
   "sector_corkscrew_track_clearance": 250,
-  "sector_corkscrew_prefer_height": 0,
+  "sector_corkscrew_prefer_height": 1,
   "sector_connection_maximum_cliff": 1000,
   "sector_connection_maximum_rise": 1000,
   "sector_minimum_track_to_edge_distance": 700,
   "noise_floor_ceiling_spillover_slope": 2,
   "trackhammer_minimum_allowed_distance_from_edge_of_map": 1000,
+  "trackhammer_attempt_limit": 1000000000000,
   "trackhammer_fit_run_length": 1,
+  "trackhammer_block_size_horizontal": 2500,
   "trackhammer_block_mode": "layers",
   "trackhammer_height_direction": "up",
-  "trackhammer_height_clearance": 1200,
-  "trackhammer_block_standoff_distance": 3000, 
+  "trackhammer_height_clearance": 1500,
+  "trackhammer_block_standoff_distance": 3500, 
   "Biomes": {
-    "tf2_alpine_snow": {
-      "models": {
-        "models/props_foliage/tree_pine_extrasmall_snow.mdl": {
-          "weight": 15,
-          "exclusion_radius": 250,
-          "base_radius": 55,
-          "steepness": 0.8
-        },
-        "models/props_foliage/tree_pine_small_snow.mdl": {
-          "weight": 25,
-          "exclusion_radius": 300,
-          "base_radius": 55,
-          "steepness": 0.8
-        },
-        "models/props_foliage/tree_pine_huge_snow.mdl": {
-          "weight": 35,
-          "exclusion_radius": 350,
-          "base_radius": 75,
-          "steepness": 0.8
-        },
-        "models/props_forest/rock001.mdl": {
-          "weight": 5,
-          "exclusion_radius": 350,
-          "base_radius": 170,
-          "steepness": 2,
-          "min_steep": 0.4
-        },
-        "models/props_forest/rock002.mdl": {
-          "weight": 5,
-          "exclusion_radius": 350,
-          "base_radius": 120,
-          "steepness": 2,
-          "min_steep": 0.4
-        },
-        "models/props_forest/rock003.mdl": {
-          "weight": 5,
-          "exclusion_radius": 350,
-          "base_radius": 140,
-          "steepness": 2,
-          "min_steep": 0.4
-        },
-        "models/props_forest/rock004.mdl": {
-          "weight": 5,
-          "exclusion_radius": 350,
-          "base_radius": 120,
-          "steepness": 3,
-          "min_steep": 0.4
-        }
-      },
-      "terrain": {
-        "texture_ground":"nature/blendgroundtosnow001",
-        "height_terrain_transition_to_tracks_distance": 500,
-        "height_terrain_flat_in_radius_around_track": 150,
-        "cut_power": 3,
-        "cut_scale": 65,
-        "cut_basewidth": 220,
-        "cut_slump": 0.9,
-        "height_track_to_terrain": -24,
-        "terrain_max": 5000,
-        "terrain_min": -2000,
-        "track_max": 150,
-        "track_min": -150,
-        "too_steep_alpha": 0.75,
-        "alpha_multiplier": 1,
-        "ballast_alpha_distance": 150,
-        
-        "maximum_models_per_1kx1k": 50,
-        "noise_hill_resolution": 17,
-        "noise_persistence": 0.2,
-        "noise_lacunarity": 4,
-        "noise_octaves": 2,
-        "noise_deviation_multiplier": 1, 
-        "height_terrain_minimum_to_ceiling": 430,
-        "height_terrain_minimum_to_floor": 15
-      }
-    },
     "hl2_white_forest": {
       "models": {
         "models/props_foliage/tree_pine_tall_01.mdl": {
@@ -117,7 +43,7 @@
           "steepness": 2
         },
         "models/props_wasteland/rockcliff_cluster01b.mdl":{
-          "weight": 1,
+          "weight": 0,
           "exclusion_radius": 500,
           "base_radius": 400,
           "min_steep": 0.6,
@@ -125,7 +51,7 @@
           "height_offset": 270
         },
         "models/props_wasteland/rockcliff_cluster02a.mdl":{
-          "weight": 1,
+          "weight": 0,
           "exclusion_radius": 300,
           "base_radius": 300,
           "min_steep": 0.6,
@@ -133,7 +59,7 @@
           "height_offset": 270
         },
         "models/props_wasteland/rockcliff_cluster02b.mdl":{
-          "weight": 1,
+          "weight": 0,
           "exclusion_radius": 300,
           "base_radius": 300,
           "min_steep": 0.6,
@@ -159,8 +85,8 @@
         "ballast_alpha_distance": 200,
         "ballast_alpha_slope": 50,
         "height_track_to_terrain": -35,
-        "maximum_models_per_1kx1k": 25,
-        "noise_hill_resolution": 30,
+        "maximum_models_per_1kx1k": 5,
+        "noise_hill_resolution": 50,
         "noise_persistence": 0.3,
         "noise_lacunarity": 4,
         "noise_octaves": 3,
@@ -259,6 +185,82 @@
         "noise_lacunarity": 4,
         "noise_octaves": 2,
         "noise_deviation_multiplier": 1,
+        "height_terrain_minimum_to_ceiling": 430,
+        "height_terrain_minimum_to_floor": 15
+      }
+    },
+    "tf2_alpine_snow": {
+      "models": {
+        "models/props_foliage/tree_pine_extrasmall_snow.mdl": {
+          "weight": 15,
+          "exclusion_radius": 250,
+          "base_radius": 55,
+          "steepness": 0.8
+        },
+        "models/props_foliage/tree_pine_small_snow.mdl": {
+          "weight": 25,
+          "exclusion_radius": 300,
+          "base_radius": 55,
+          "steepness": 0.8
+        },
+        "models/props_foliage/tree_pine_huge_snow.mdl": {
+          "weight": 35,
+          "exclusion_radius": 350,
+          "base_radius": 75,
+          "steepness": 0.8
+        },
+        "models/props_forest/rock001.mdl": {
+          "weight": 5,
+          "exclusion_radius": 350,
+          "base_radius": 170,
+          "steepness": 2,
+          "min_steep": 0.4
+        },
+        "models/props_forest/rock002.mdl": {
+          "weight": 5,
+          "exclusion_radius": 350,
+          "base_radius": 120,
+          "steepness": 2,
+          "min_steep": 0.4
+        },
+        "models/props_forest/rock003.mdl": {
+          "weight": 5,
+          "exclusion_radius": 350,
+          "base_radius": 140,
+          "steepness": 2,
+          "min_steep": 0.4
+        },
+        "models/props_forest/rock004.mdl": {
+          "weight": 5,
+          "exclusion_radius": 350,
+          "base_radius": 120,
+          "steepness": 3,
+          "min_steep": 0.4
+        }
+      },
+      "terrain": {
+        "texture_ground":"nature/blendgroundtosnow001",
+        "height_terrain_transition_to_tracks_distance": 500,
+        "height_terrain_flat_in_radius_around_track": 150,
+        "cut_power": 3,
+        "cut_scale": 65,
+        "cut_basewidth": 220,
+        "cut_slump": 0.9,
+        "height_track_to_terrain": -24,
+        "terrain_max": 5000,
+        "terrain_min": -2000,
+        "track_max": 150,
+        "track_min": -150,
+        "too_steep_alpha": 0.75,
+        "alpha_multiplier": 1,
+        "ballast_alpha_distance": 150,
+        
+        "maximum_models_per_1kx1k": 50,
+        "noise_hill_resolution": 17,
+        "noise_persistence": 0.2,
+        "noise_lacunarity": 4,
+        "noise_octaves": 2,
+        "noise_deviation_multiplier": 1, 
         "height_terrain_minimum_to_ceiling": 430,
         "height_terrain_minimum_to_floor": 15
       }

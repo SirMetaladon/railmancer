@@ -42,7 +42,7 @@ def main():
     trackhammer.initialize()
     trackhammer.exclude_existing()
 
-    Vancouver_Start = [(7568, 3552, -13040), "0fw", -90, False]
+    Vancouver_Start = [(7568, 3552, -14040), "0fw", -90, False]
     # Each run is (tracks left, tracks right), miles, parameters.
     # "join" says how this run attaches to the previous one. Leave it out
     # and both sides get switches. "stub" ends or starts that side with no
@@ -53,7 +53,37 @@ def main():
         [
             [
                 (0, 0),
-                30,
+                2,
+                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+            ],
+            [
+                (0, 1),
+                0.4,
+                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+            ],
+            [
+                (0, 2),
+                0.07,
+                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+            ],
+            [
+                (0, 0),
+                0.75,
+                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+            ],
+            [
+                (0, 1),
+                0.6,
+                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+            ],
+            [
+                (0, 2),
+                0.07,
+                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+            ],
+            [
+                (0, 0),
+                2,
                 {"min_radius": 2, "min_grade": 1, "max_grade": 2},
             ],
         ],
@@ -88,14 +118,14 @@ def main():
     # 3rd number is minumum radius, 1 = 3072
     # 4th number is minimum grade level, in this case 0 is level
     # 5th number is maximum grade level, in this case 2.5%
-    '''
+
     # Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
     lines.encode_lines()
     # these values are stored as global variables in the lines module.
 
     # Scan all entities for switch stands, determine which side of them is less blocked, place accordingly
     sectors.collapse_quantum_switchstands()
-    
+
     # takes staged building foundation points and makes them ignore sector creation while still being a part of sectors
     lines.insert_staged_points()
 
@@ -113,10 +143,10 @@ def main():
     sectors.merge_edges()
 
     # Blur heightmaps according to Gaussian blurring mechanisms, constraining min and max grids.
-    profile.start()
+    # profile.start()
     sectors.blur_min_max_grids(5)
     # iteration count
-    profile.end()
+    # profile.end()
 
     # Apply the cut and fill relative to track that ensures terrain is not occluded.
     heightmap.cut_and_fill_sector_heightmaps()
@@ -127,13 +157,13 @@ def main():
     # Apply cut-and-fill process again to prevent smoothing from occluding the rails.
     heightmap.cut_and_fill_sector_heightmaps()
 
-    profile.start()
+    # profile.start()
     # Turn the raw sector and heightmap data into brushes and displacements.
     compile.compile_sectors_to_brushes()
-    profile.end()
+    # profile.end()
 
     # For each sector, apply the scattering algorithm that places trees, rocks, bushes, etc.
-    compile.scatter_placables()
+    # compile.scatter_placables()
 
     """points = lines.get_all_track_points()
     for entry in points:
@@ -142,12 +172,12 @@ def main():
     # Places Frogs at all track-points around the map, for debugging purposes.
     tools.stopwatch_click("submodule", "Frogging the Track, done")"""
 
-    vmfpy.add_light_environment()'''
+    vmfpy.add_light_environment()
 
     # Merge collinear fragmented straights into longer stock pieces so the
     # final VMF carries fewer props. Pass smooth_grade=True to redistribute
     # rise over a whole collinear run using mixed grade versions.
-    consolidate_straights.consolidate_inplace(smooth_grade=False)
+    consolidate_straights.consolidate_inplace(smooth_grade=True)
 
     # Compile brush, entity, and brushentity data into a VMF text file and save.
     vmfpy.write_to_vmf(f"{"railmancer"}_{random.randint(5000,5999)}{".vmf"}")
