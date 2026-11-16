@@ -155,7 +155,147 @@ def link():
 
                 Sector_Data["neighbors"][Direction_ID] = False
 
+    # a 4-step loop onto a stacked sector pinches the shared corner
+    break_corkscrews()
+
     tools.stopwatch_click("submodule", "Sectors Linked")
+
+
+def corkscrew_link_clearance(left, right, slot, buckets):
+
+    # nearest sampled track point in either sector, measured to the shared wall.
+    # east/west walls sit at x = (west sector x + 1) * sector size. north/south
+    # walls are the same idea on y. no points in either sector means infinite.
+
+    size = cfg.get("sector_real_size")
+
+    if slot % 2 == 1:
+        wall = (min(left["x"], right["x"]) + 1) * size
+        axis = 0
+    else:
+        wall = (min(left["y"], right["y"]) + 1) * size
+        axis = 1
+
+    best = None
+
+    for sector in (left, right):
+
+        for point in buckets.get(sector["id"], ()):
+
+            dist = abs(point[axis] - wall)
+
+            if best is None or dist < best:
+                best = dist
+
+    if best is None:
+        return float("inf")
+
+    return best
+
+
+def break_corkscrews():
+
+    # slots 0..3 are north, east, south, west. walk d, d+1, d+2, d+3.
+    # finishing on a different sector at the same x,y is a corkscrew.
+    # a walk that comes back to the same sector is a plain square (or part
+    # of a wider loop) and is left alone.
+
+    buckets = None
+    limit = cfg.get("sector_corkscrew_track_clearance")
+    prefer_height = cfg.get("sector_corkscrew_prefer_height")
+    size = cfg.get("sector_real_size")
+    slot_names = ("north", "east", "south", "west")
+
+    for start in Sectors.values():
+
+        for d in range(4):
+
+            current = start
+            links = []
+            blocked = False
+
+            for step in range(4):
+
+                slot = (d + step) % 4
+                neighbor_id = current["neighbors"][slot]
+
+                if neighbor_id is False:
+                    blocked = True
+                    break
+
+                neighbor = Sectors[neighbor_id]
+                links.append((current, neighbor, slot))
+                current = neighbor
+
+            if blocked:
+                continue
+
+            if current["id"] == start["id"]:
+                continue
+
+            if current["x"] != start["x"] or current["y"] != start["y"]:
+                continue
+
+            # track points are only needed once a corkscrew actually exists
+            if buckets is None:
+
+                buckets = {}
+
+                for point in lines.get_all_track_points():
+
+                    sector_id = get_sector_id_at_position(point)
+
+                    if sector_id is False:
+                        continue
+
+                    if buckets.get(sector_id, False):
+                        buckets[sector_id].append(point)
+                    else:
+                        buckets[sector_id] = [point]
+
+            chosen = None
+
+            for left, right, slot in links:
+
+                clearance = corkscrew_link_clearance(left, right, slot, buckets)
+
+                if clearance < limit:
+                    continue
+
+                floor_gap = abs(left["floor"] - right["floor"])
+
+                if chosen is None:
+                    chosen = (floor_gap, clearance, left, right, slot)
+                    continue
+
+                if prefer_height:
+                    better = floor_gap > chosen[0]
+                else:
+                    better = clearance > chosen[1]
+
+                if better:
+                    chosen = (floor_gap, clearance, left, right, slot)
+
+            if chosen is None:
+
+                corner_x = max(item[0]["x"] for item in links) * size
+                corner_y = max(item[0]["y"] for item in links) * size
+                print(
+                    "!!! CORKSCREW ERROR !!! build continues, this corner stays pinched."
+                )
+                print(
+                    f"corner x={corner_x} y={corner_y} (map units). "
+                    f"stacked {start['id']} floor {start['floor'] * 16} ceiling {start['ceiling'] * 16}; "
+                    f"{current['id']} floor {current['floor'] * 16} ceiling {current['ceiling'] * 16}."
+                )
+                continue
+
+            _, clearance, left, right, slot = chosen
+            left["neighbors"][slot] = False
+            right["neighbors"][(slot + 2) % 4] = False
+            print(
+                f"Broke corkscrew {left['id']} {slot_names[slot]} to {right['id']}, clearance {clearance}."
+            )
 
 
 def get_expanded_points(startpoints, offset):
