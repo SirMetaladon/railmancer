@@ -1,0 +1,21 @@
+{
+  "note": "Parallel sidings shipped with the gm_cascadia map addon, not part of TrakPak3. They mount at the stock models/trakpak3_rsg/switches/sidings/ paths. This file is hand-maintained; tools/scan_trakpak3.py --refresh rewrites data/trakpak3_models.json and would drop these.",
+  "models": [
+    "models/trakpak3_rsg/switches/sidings/p2lt_left_minr2048_+0704x-0352_+1184x-0832_dv.mdl",
+    "models/trakpak3_rsg/switches/sidings/p2lt_left_minr2048_+0704x-0352_+1184x-0832_mn.mdl",
+    "models/trakpak3_rsg/switches/sidings/p2lt_right_minr2048_+0704x-0352_+1376x-0448_dv.mdl",
+    "models/trakpak3_rsg/switches/sidings/p2lt_right_minr2048_+0704x-0352_+1376x-0448_mn.mdl",
+    "models/trakpak3_rsg/switches/sidings/p2rt_left_minr2048_+0704x+0352_+1376x+0448_dv.mdl",
+    "models/trakpak3_rsg/switches/sidings/p2rt_left_minr2048_+0704x+0352_+1376x+0448_mn.mdl",
+    "models/trakpak3_rsg/switches/sidings/p2rt_right_minr2048_+0704x+0352_+1184x+0832_dv.mdl",
+    "models/trakpak3_rsg/switches/sidings/p2rt_right_minr2048_+0704x+0352_+1184x+0832_mn.mdl",
+    "models/trakpak3_rsg/switches/sidings/p4lt_left_minr2048_+0512x-0512_+0880x-1168_dv.mdl",
+    "models/trakpak3_rsg/switches/sidings/p4lt_left_minr2048_+0512x-0512_+0880x-1168_mn.mdl",
+    "models/trakpak3_rsg/switches/sidings/p4lt_right_minr2048_+0512x-0512_+1168x-0880_dv.mdl",
+    "models/trakpak3_rsg/switches/sidings/p4lt_right_minr2048_+0512x-0512_+1168x-0880_mn.mdl",
+    "models/trakpak3_rsg/switches/sidings/p4rt_left_minr2048_+0512x+0512_+1168x+0880_dv.mdl",
+    "models/trakpak3_rsg/switches/sidings/p4rt_left_minr2048_+0512x+0512_+1168x+0880_mn.mdl",
+    "models/trakpak3_rsg/switches/sidings/p4rt_right_minr2048_+0512x+0512_+0880x+1168_dv.mdl",
+    "models/trakpak3_rsg/switches/sidings/p4rt_right_minr2048_+0512x+0512_+0880x+1168_mn.mdl"
+  ]
+}

@@ -4,11 +4,13 @@ A ladder is inserted wherever the track count changes. The offset table,
 step-over, and straight shims are unchanged. This module only adds the
 level tangent zone those pieces already know how to leave and enter.
 
-Switch geometry comes from TrackPack 3 parallel-siding filenames. The
-condensed models (diverging leg longer than the main leg) are the ones
-used. Extended models, where both legs are the same length, are ignored.
+Switch geometry comes from TrackPack 3 parallel-siding filenames, plus
+the gm_cascadia sidings in data/cascadia_models.json. The condensed
+models (diverging leg longer than the main leg) are the ones used.
+Extended models, where both legs are the same length, are ignored.
 """
 
+import json
 import os
 
 from railmancer import track, vmfpy
@@ -27,6 +29,16 @@ def _catalog_path():
     return os.path.join(os.path.dirname(here), "data", "trakpak3_models.json")
 
 
+def _cascadia_models():
+
+    # Not in the TrakPak3 manifest. scan_trakpak3.py --refresh rewrites
+    # that file from the TP3 repo and would drop these.
+    path = os.path.join(os.path.dirname(_catalog_path()), "cascadia_models.json")
+    with open(path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    return [name.replace("\\", "/") for name in payload["models"]]
+
+
 def catalog_models():
 
     global _CATALOG
@@ -37,13 +49,19 @@ def catalog_models():
 
         models = load_manifest(_catalog_path())["models"]
         if isinstance(models, dict):
-            _CATALOG = [
+            names = [
                 name
                 for name, entry in models.items()
                 if entry.get("family") == "sidings" or "/switches/sidings/" in name
             ]
         else:
-            _CATALOG = list(models)
+            names = list(models)
+        seen = set(names)
+        for name in _cascadia_models():
+            if name not in seen:
+                names.append(name)
+                seen.add(name)
+        _CATALOG = names
     return list(_CATALOG)
 
 
@@ -324,7 +342,33 @@ def _overlapped(before, after, direction):
     grow = _increase_layout(before, peak, direction) if peak != before else None
     shrink = _increase_layout(after, peak, direction) if peak != after else None
     total = max(grow["total"] if grow else 0, shrink["total"] if shrink else 0)
+    if grow and shrink and _mains_overlap(grow, shrink, total):
+        # The reversed ladder is flipped around the zone end. Stock condensed
+        # sidings are 2:1, so the main legs already abut. A shorter diverging
+        # leg (the gm_cascadia 2-slope pieces are 704/1280) makes those spans
+        # cross; extending the zone to both main legs puts the joint between them.
+        total = max(total, grow["short"] + shrink["short"])
     return grow, shrink, total
+
+
+def _mains_overlap(grow, shrink, total):
+
+    def spans(layout, reverse):
+        found = {}
+        for switch in layout["switches"]:
+            origin = _travel(switch["origin_s"], total, reverse)
+            main = _travel(switch["main_s"], total, reverse)
+            lo, hi = sorted((int(origin), int(main)))
+            found.setdefault(switch["track"], []).append((lo, hi))
+        return found
+
+    backward = spans(shrink, True)
+    for track, forward in spans(grow, False).items():
+        for lo, hi in forward:
+            for blo, bhi in backward.get(track, ()):
+                if lo < bhi and blo < hi:
+                    return True
+    return False
 
 
 def zone_length(before, after, direction, join=None):
