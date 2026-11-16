@@ -18,7 +18,6 @@ sys.modules.setdefault("turtle", types.ModuleType("turtle"))
 from railmancer import lines, track, tools, vmfpy
 from railmancer.joincheck import audit_props, endpoint_key, position_key
 from railmancer.switches import (
-    SwitchGeometryError,
     place_transition,
     register_switch_library,
     select_switch,
@@ -152,19 +151,14 @@ def _model_choice():
         failures.append(
             f"0fw right lengths {right['short']}/{right['long']} delta {right['track_delta']}"
         )
-    for direction in ("1lt", "1rt", "2lt", "2rt"):
+    # 2lt/2rt/4lt/4rt select the smaller gm_cascadia sidings.
+    for direction in ("1lt", "1rt"):
         for hand in ("left", "right"):
             spec = select_switch(direction, hand)
             if not spec["condensed"] or spec["short"] != 768 or spec["long"] != 1536:
                 failures.append(
                     f"{direction} {hand} -> short {spec['short']} long {spec['long']} {spec['dv']}"
                 )
-    try:
-        select_switch("4lt", "left")
-    except SwitchGeometryError:
-        pass
-    else:
-        failures.append("4lt left was accepted; its diverging end is off the parallel grid")
     return failures
 
 
