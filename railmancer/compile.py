@@ -220,26 +220,27 @@ def distribute(min_distance, TotalPoints, sector_data):
             if CurrentSteepness < LowestSteepnessAllowed:
                 continue
 
-            # Grouped at VMF write. sector_id is the sector this scatter already has.
-            vmfpy.add_entity(
-                {
-                    "pos": (
-                        Point[0],
-                        Point[1],
-                        min(HeightSamples) + Model.get("height_offset", 0),
-                    ),
-                    "mdl": ModelPath,
-                    "ang": (
-                        random.randrange(-4, 4),
-                        random.randrange(-180, 180),
-                        random.randrange(-4, 4),
-                    ),
-                    "shadows": "noself",
-                    "visgroup": "22",
-                    "disablevertexlighting": "1",
-                    "sector_id": sector_data["id"],
-                }
-            )
+            # grouping comes from this model's own entry. No field means ungrouped.
+            placed = {
+                "pos": (
+                    Point[0],
+                    Point[1],
+                    min(HeightSamples) + Model.get("height_offset", 0),
+                ),
+                "mdl": ModelPath,
+                "ang": (
+                    random.randrange(-4, 4),
+                    random.randrange(-180, 180),
+                    random.randrange(-4, 4),
+                ),
+                "shadows": "noself",
+                "visgroup": "22",
+                "disablevertexlighting": "1",
+                "sector_id": sector_data["id"],
+            }
+            if Model.get("grouping"):
+                placed["grouping"] = Model["grouping"]
+            vmfpy.add_entity(placed)
 
 
 def compile_displacement(raw_displacement, sector_data):

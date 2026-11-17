@@ -59,11 +59,6 @@ def initialize(path: str):
 
         CFG[Entry[0]] = int(min(max(CFG.get(Entry[0], Entry[1]), Entry[2]), Entry[3]))
 
-    # Expecting only clamps numbers. Categories are a dict of name -> model
-    # paths (or substrings), read straight from the JSON.
-    categories = CFG.get("prop_group_categories", {})
-    CFG["prop_group_categories"] = categories if isinstance(categories, dict) else {}
-
     # convert_bezier_to_points uses np.linspace(0, 1, int(chord/d)+1), so the
     # worst sample gap is just under 2*d. A track can cross a wall midway
     # between samples; warn when 1.5 * (worst_gap/2) exceeds clearance.

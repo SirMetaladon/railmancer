@@ -557,19 +557,9 @@ def _static_prop(entity):
     return kind in (None, False, "", "prop_static")
 
 
-def _category_for_model(model, categories):
-    # Configured path or substring. First category in config order wins.
-    model = str(model or "").replace("\\", "/")
-    if not isinstance(categories, dict):
-        return None
-    for name, patterns in categories.items():
-        if not isinstance(patterns, (list, tuple)):
-            continue
-        for pattern in patterns:
-            text = str(pattern).replace("\\", "/")
-            if text and text in model:
-                return str(name)
-    return None
+# get_ID() starts at 1000 and counts solids, sides, and entities.
+# Group ids live up here so a cell per sector cannot collide with that counter.
+GROUP_ID_BASE = 1000000000
 
 
 def _clamp_index(value, count):
@@ -580,7 +570,7 @@ def _clamp_index(value, count):
     return value
 
 
-# (sector id, subsector ix, iy, category), or None if the prop stays loose.
+# (sector id, subsector ix, iy, grouping), or None if the prop stays loose.
 # The sector id already separates stacked floors. Subsectors cut x/y.
 def scatter_bucket(entity):
     if not _static_prop(entity):
@@ -588,10 +578,11 @@ def scatter_bucket(entity):
 
     from railmancer import cfg, sectors
 
-    category = _category_for_model(entity.get("mdl"), cfg.get("prop_group_categories"))
+    grouping = entity.get("grouping")
     pos = entity.get("pos")
-    if not category or not pos or len(pos) < 3:
+    if not grouping or not pos or len(pos) < 3:
         return None
+    grouping = str(grouping)
 
     # Prefer the sector scatter recorded. Fall back to the position lookup.
     sector_id = entity.get("sector_id")
@@ -612,11 +603,12 @@ def scatter_bucket(entity):
     sub = size / n
     ix = _clamp_index(math.floor((pos[0] - sector["x"] * size) / sub), n)
     iy = _clamp_index(math.floor((pos[1] - sector["y"] * size) / sub), n)
-    return (sector_id, ix, iy, category)
+    return (sector_id, ix, iy, grouping)
 
 
-# One Hammer group per bucket with 2+ props. Lone props are skipped.
-# Ids come from get_ID(); call this after solids and before entities.
+# One group per occupied (sector, cell x, cell y, grouping), including a lone prop.
+# Id is GROUP_ID_BASE plus the key's rank in sorted order, so it does not
+# depend on prop order or on how many solids were written.
 def assign_scatter_groups(entities):
     buckets = {}
     for entity in entities:
@@ -628,12 +620,10 @@ def assign_scatter_groups(entities):
         buckets.setdefault(key, []).append(entity)
 
     group_ids = []
-    for members in buckets.values():
-        if len(members) < 2:
-            continue
-        group_id = get_ID()
+    for index, key in enumerate(sorted(buckets)):
+        group_id = str(GROUP_ID_BASE + index)
         group_ids.append(group_id)
-        for entity in members:
+        for entity in buckets[key]:
             entity["groupid"] = group_id
     return group_ids
 
