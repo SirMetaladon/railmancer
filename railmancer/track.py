@@ -449,9 +449,9 @@ def build_track_library(directory, extension):
 
                 track_data = process_file(model)
 
-                if len(track_data) == 1:
+                if len(track_data) == 1 or len(track_data) == 2:
                     # more than 1 is a switch, less than 1 is an invalid model
-                    track_model_library[model] = track_data[0]
+                    track_model_library[model] = track_data
 
     tools.stopwatch_click("submodule", "Track Library init complete")
 
@@ -464,16 +464,18 @@ def length_to_model_straight(length, direction, gradelevel):
     return track_straight_cache.get(f"{length}|{direction}", {}).get(gradelevel, "")
 
 
-def add_lines_from_track(pos, track_object, heading):
+def add_lines_from_track(pos, track_objects, heading):
 
-    EndPos = pos + tools.rot_orth(track_object["Move"], heading)
+    for object in [track_objects]:
 
-    lines.write_bezier_points(
-        pos,
-        EndPos,
-        tools.rot_orth(get_heading(track_object["StartDirection"]), heading),
-        tools.rot_orth(get_heading(track_object["EndDirection"]), heading + 180),
-    )
+        EndPos = pos + tools.rot_orth(object["Move"], heading)
+
+        lines.write_bezier_points(
+            pos,
+            EndPos,
+            tools.rot_orth(get_heading(object["StartDirection"]), heading),
+            tools.rot_orth(get_heading(object["EndDirection"]), heading + 180),
+        )
 
 
 def write_track(model, pos, yaw):
@@ -556,7 +558,7 @@ def move_in_trackspace(length_forward, direction, tracks_over_right=0):
 
 def get_end_direction(model, current_direction):
 
-    track_data = track_model_library[model]
+    track_data = track_model_library[model][0]  # shouldn't have to deal with switches?
     start_direction = track_data["StartDirection"]
     end_direction = track_data["EndDirection"]
 
@@ -581,7 +583,7 @@ def get_new_node_from_node_and_model(
     Position, current_direction, Heading, _ = Node  # I don't even use it here what
     # EDITORS NOTE THE 4th SLOT IS FOR MODEL REVERSING (does not effect the jump, only rotation of the model)
 
-    track_data = track_model_library[Model]
+    track_data = track_model_library[Model][0]  # shouldn't have to deal with switches
 
     NewDirection = get_end_direction(Model, current_direction)
 
@@ -722,7 +724,7 @@ def _travel_stagger(direction_in, direction_out):
 
 def _place_reversed_piece(model, prev_node, new_node, yaw, track_mode):
 
-    track_data = track_model_library[model]
+    track_data = track_model_library[model][0]  # should not have to deal with switches
     per_in, per_out = _travel_stagger(
         track_data["EndDirection"], track_data["StartDirection"]
     )
@@ -815,13 +817,17 @@ def write_track_from_trackhammer_steps(steps):
             far_direction = new_node[1]
             base_of_far_side = new_node[0]
 
-        TrackEndDirection = track_model_library[model]["EndDirection"]
+        TrackEndDirection = track_model_library[model][0][
+            "EndDirection"
+        ]  # should not have to deal with switches
 
         # Whichever authored direction we leave through, if it is an 8 the
         # stored heading already includes that ±90. The prop is drawn in the
         # frame before the turn. Undo it, then add 180 when the prop is reversed.
         outgoing = (
-            track_model_library[model]["StartDirection"]
+            track_model_library[model][0][
+                "StartDirection"
+            ]  # should not have to deal with switches
             if IsReversed
             else TrackEndDirection
         )
@@ -835,13 +841,15 @@ def write_track_from_trackhammer_steps(steps):
         Heading = int(ModelHeading) + RotFix
 
         forward_per_track, rear_per_track = get_offset_forward_for_parallel_on_right(
-            track_model_library[model]["StartDirection"], TrackEndDirection
-        )
+            track_model_library[model][0]["StartDirection"], TrackEndDirection
+        )  # should not have to deal with switches
         # The table is stored low-angle to high-angle. A piece authored the
         # other way (and not model-reversed) has to put that stagger on the
         # opposite end, or it will not meet the segment on either side.
         if not IsReversed and int(
-            track_model_library[model]["StartDirection"][0]
+            track_model_library[model][0]["StartDirection"][
+                0
+            ]  # should not have to deal with switches
         ) > int(TrackEndDirection[0]):
             forward_per_track, rear_per_track = (
                 -rear_per_track,
@@ -884,7 +892,7 @@ def write_track_from_trackhammer_steps(steps):
         farthest_rear_back = min(
             tracks[0] * rear_per_track, tracks[-1] * rear_per_track
         )
-        piece = track_model_library[model]
+        piece = track_model_library[model]  # should not have to deal with switches
 
         for track in tracks:
 
@@ -988,7 +996,9 @@ def valid_next_tracks(Direction, params={}):
 
 def get_length(model):
 
-    return track_model_library[model]["Length"]
+    return track_model_library[model][0][
+        "Length"
+    ]  # should not have to deal with switches?
 
 
 def decompose_length_to_straights(target):
