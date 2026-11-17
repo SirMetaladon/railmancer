@@ -24,6 +24,7 @@ def initialize(path: str):
     # this is the default CFG data, format label, default, min, max
     Expecting = [
         ["sector_real_size", 4080, 16, CFG["max_mapsize"]],
+        ["prop_group_subdivisions", 4, 1, 64],
         ["noise_grid_per_sector", 25, 1, 1000],
         ["line_maximum_poll_point_distance", 25, 1, 1000],
         ["sector_displacement_subdivision_rate", 3, 1, 50],

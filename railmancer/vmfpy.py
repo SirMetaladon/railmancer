@@ -1,4 +1,4 @@
-import os, re
+import os, re, math
 from railmancer import vmfpy
 
 # Interface between VMFs as a file type and the system of blocks, entities, etc. Intended to be generic.
@@ -393,6 +393,10 @@ def synthesize_entities(Entities):
                 Shadows = '''"disableselfshadowing" "1"
 	                            "disableshadows" "1"'''
 
+            GroupData = ""
+            if Ent.get("groupid"):
+                GroupData = f'\n                    "groupid" "{Ent.get("groupid")}"'
+
             EntityString += f"""entity
             {{
                 "id" "{get_ID()}"
@@ -410,7 +414,7 @@ def synthesize_entities(Entities):
                 {{
                     "color" "200 200 150"
                     "visgroupshown" "1"
-                    "visgroupautoshown" "1"{VisgroupData}
+                    "visgroupautoshown" "1"{VisgroupData}{GroupData}
                     "logicalpos" "[0 0]"
                 }}
             }}"""
@@ -545,8 +549,104 @@ def wall(
     )
 
 
-# Assemble the brushes, entities, and brush-entity strings along with header information and save to file.
-def write_to_vmf(filename):
+def _static_prop(entity):
+    # Scatter omits classname; synthesize_entities then writes prop_static.
+    if not isinstance(entity, dict):
+        return False
+    kind = entity.get("classname", "prop_static")
+    return kind in (None, False, "", "prop_static")
+
+
+# get_ID() starts at 1000 and counts solids, sides, and entities.
+# Group ids live up here so a cell per sector cannot collide with that counter.
+GROUP_ID_BASE = 1000000000
+
+
+def _clamp_index(value, count):
+    if value < 0:
+        return 0
+    if value >= count:
+        return count - 1
+    return value
+
+
+# (sector id, subsector ix, iy, grouping), or None if the prop stays loose.
+# The sector id already separates stacked floors. Subsectors cut x/y.
+def scatter_bucket(entity):
+    if not _static_prop(entity):
+        return None
+
+    from railmancer import cfg, sectors
+
+    grouping = entity.get("grouping")
+    pos = entity.get("pos")
+    if not grouping or not pos or len(pos) < 3:
+        return None
+    grouping = str(grouping)
+
+    # Prefer the sector scatter recorded. Fall back to the position lookup.
+    sector_id = entity.get("sector_id")
+    sector = sectors.get(sector_id) if sector_id else None
+    if not sector:
+        sector_id = sectors.get_sector_id_at_position(pos)
+        sector = sectors.get(sector_id) if sector_id else None
+    if not sector:
+        return None
+
+    size = cfg.get("sector_real_size")
+    n = int(cfg.get("prop_group_subdivisions"))
+    if size <= 0:
+        return None
+    if n < 1:
+        n = 1
+
+    sub = size / n
+    ix = _clamp_index(math.floor((pos[0] - sector["x"] * size) / sub), n)
+    iy = _clamp_index(math.floor((pos[1] - sector["y"] * size) / sub), n)
+    return (sector_id, ix, iy, grouping)
+
+
+# One group per occupied (sector, cell x, cell y, grouping), including a lone prop.
+# Id is GROUP_ID_BASE plus the key's rank in sorted order, so it does not
+# depend on prop order or on how many solids were written.
+def assign_scatter_groups(entities):
+    buckets = {}
+    for entity in entities:
+        if _static_prop(entity):
+            entity.pop("groupid", None)
+        key = scatter_bucket(entity)
+        if key is None:
+            continue
+        buckets.setdefault(key, []).append(entity)
+
+    group_ids = []
+    for index, key in enumerate(sorted(buckets)):
+        group_id = str(GROUP_ID_BASE + index)
+        group_ids.append(group_id)
+        for entity in buckets[key]:
+            entity["groupid"] = group_id
+    return group_ids
+
+
+def format_prop_groups(group_ids):
+    blocks = ""
+    for group_id in group_ids:
+        blocks += f"""
+    group
+    {{
+        "id" "{group_id}"
+        editor
+        {{
+            "color" "122 179 0"
+            "visgroupshown" "1"
+            "visgroupautoshown" "1"
+        }}
+    }}"""
+    return blocks
+
+
+# Assemble the brushes, entities, and brush-entity strings along with header information.
+def assemble_vmf():
 
     global ID
     ID = 1000
@@ -685,10 +785,26 @@ def write_to_vmf(filename):
     }"""
 
     BrushString = synthesize_brushes()
+    group_ids = assign_scatter_groups(get_entities())
+    GroupString = format_prop_groups(group_ids)
     EntityString = synthesize_entities(get_entities())
     BrushEntityString = synthesize_brush_entities()
 
-    content = Start + BrushString + "}" + EntityString + BrushEntityString + End
+    return (
+        Start
+        + BrushString
+        + GroupString
+        + "}"
+        + EntityString
+        + BrushEntityString
+        + End
+    )
+
+
+# Save the assembled VMF. Group blocks sit inside world, after the solids.
+def write_to_vmf(filename):
+
+    content = assemble_vmf()
 
     directory = "C:/Users/Metaladon/Desktop/Model Data/VMFS/railmancer"
     full_file_path = os.path.join(directory, filename)
