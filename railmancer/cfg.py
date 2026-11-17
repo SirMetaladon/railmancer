@@ -44,6 +44,8 @@ def initialize(path: str):
         ["trackhammer_block_size_horizontal", 2000, 100, 6000],
         ["trackhammer_attempt_limit", 250000, 1, 10000000000000000],
         ["trackhammer_fit_run_length", 1, 0, 1],
+        # Plain track between ladders may finish this far short or long.
+        ["run_length_tolerance", 1000, 0, CFG["max_mapsize"]],
     ]
 
     # Integers and floats are clamped separately so a 1.5 does not get truncated.

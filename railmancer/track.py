@@ -1031,13 +1031,25 @@ def decompose_length_to_straights(target):
         8192,
     ]
 
+    # The shortest straight is 32. A 16-unit fill used to stay in the
+    # search forever, because every piece overshoots and the queue never
+    # empties. Stop before that, and never enqueue an overshoot.
+    if target < lengths[0]:
+        print(f"Invalid decomposition length: {target}")
+        return []
+
     # Initialize the starting state
     initial_state = (0, [])
     cards = [(initial_state, 0)]
 
     while cards and cards[0][0][0] != target:
         current_state = cards.pop(0)
+        current_total = current_state[0][0]
+        if current_total > target:
+            continue
         for length in lengths:
+            if current_total + length > target:
+                continue
             new_card = create_new_card(current_state[0], length, target)
 
             tools.heuristic_inserter(cards, new_card)

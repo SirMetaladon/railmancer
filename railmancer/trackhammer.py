@@ -228,22 +228,164 @@ def blocks_remove(list_of_block_ids):
             Blocks.pop(entry)
 
 
-# From a pair of track nodes reprensenting a piece of rail, guess at the intermediate shape and return a short list of points to check with the block occlusion algorithm.
-def get_block_points_from_nodes(current_node, next_node):
+def _unit_xy(x, y):
+
+    length = math.hypot(x, y)
+    if length < 1e-9:
+        return 0.0, 0.0
+    return x / length, y / length
+
+
+def _node_forward(node):
+
+    # Same rotation the piece itself is placed with, so the tangent matches the step.
+    local = track.move_in_trackspace(1024.0, node[1])
+    world = tools.rot_orth((float(local[0]), float(local[1]), 0.0), node[2])
+    return _unit_xy(float(world[0]), float(world[1]))
+
+
+def _chord_fractions(start, end):
+
+    # Same stations the old chord walk used. The count stays tied to the
+    # block size, so a long piece still costs a handful of samples.
+    dist = float(distance.euclidean(start, end))
+    cutoff = BlockHorizontal * 0.85
+    if cutoff <= 0:
+        return []
+    iterations = math.floor(dist / cutoff)
+    if iterations <= 1:
+        return []
+    return [step / (iterations + 1) for step in range(1, iterations)]
+
+
+def _chord_block_points(current_node, next_node):
 
     extras = []
-    cutoff = BlockHorizontal * 0.85  # horizontal block dist
-    dist = distance.euclidean(current_node[0], next_node[0])
-    iterations = math.floor(dist / cutoff)
-
     start = np.asarray(current_node[0])
     end = np.asarray(next_node[0])
-
-    if iterations > 1:
-        for iter in range(1, iterations):
-            extras += [tools.linterp(start, end, iter / (iterations + 1))]
-
+    for fraction in _chord_fractions(start, end):
+        extras.append(tools.linterp(start, end, fraction))
     return [next_node[0]] + extras
+
+
+def _arc_frame(start, end, forward_s, forward_e):
+
+    # Circle implied by the two tangents and the chord. A 90° piece bulges
+    # off that chord by R*(1-cos(θ/2)); the old samples walked the chord.
+    sx, sy = float(start[0]), float(start[1])
+    ex, ey = float(end[0]), float(end[1])
+    fsx, fsy = forward_s
+    fex, fey = forward_e
+    theta = math.atan2(fsx * fey - fsy * fex, fsx * fex + fsy * fey)
+    chord = math.hypot(ex - sx, ey - sy)
+    sin_half = math.sin(abs(theta) / 2.0)
+    if abs(theta) < 1e-3 or chord < 1.0 or sin_half < 1e-6:
+        return None
+    radius = (chord / 2.0) / sin_half
+    sign = 1.0 if theta > 0.0 else -1.0
+    cx = sx + sign * (-fsy) * radius
+    cy = sy + sign * (fsx) * radius
+    phi0 = math.atan2(sy - cy, sx - cx)
+    return theta, radius, cx, cy, phi0, sign
+
+
+def _arc_sample(frame, start, end, fraction):
+
+    theta, radius, cx, cy, phi0, sign = frame
+    phi = phi0 + theta * fraction
+    z0 = float(start[2])
+    z1 = float(end[2])
+    if fraction >= 1.0:
+        point = end
+    else:
+        point = (
+            cx + radius * math.cos(phi),
+            cy + radius * math.sin(phi),
+            z0 + (z1 - z0) * fraction,
+        )
+    tangent = _unit_xy(-math.sin(phi) * sign, math.cos(phi) * sign)
+    return point, tangent
+
+
+def _outer_indices(mode):
+
+    if not mode:
+        return ()
+    left, right = int(mode[0]), int(mode[1])
+    found = []
+    if left > 0:
+        found.append(-left)
+    if right > 0:
+        found.append(right)
+    return tuple(found)
+
+
+def _shift_track(point, forward, index, spacing):
+
+    # Right of the tangent, one track spacing (192 on 0fw) per index.
+    fx, fy = forward
+    offset = spacing * index
+    return (
+        float(point[0]) + fy * offset,
+        float(point[1]) - fx * offset,
+        float(point[2]),
+    )
+
+
+def _piece_samples(current_node, next_node):
+
+    start = np.asarray(current_node[0], dtype=float)
+    end = np.asarray(next_node[0], dtype=float)
+    forward_s = _node_forward(current_node)
+    forward_e = _node_forward(next_node)
+    fractions = _chord_fractions(start, end)
+    frame = _arc_frame(start, end, forward_s, forward_e)
+    if frame is not None:
+        theta, radius = frame[0], frame[1]
+        sagitta = radius * (1.0 - math.cos(abs(theta) / 2.0))
+        # No chord sample near the middle: one bulge point is the whole nudge.
+        if sagitta > 16.0 and not any(abs(fraction - 0.5) <= 0.2 for fraction in fractions):
+            fractions.append(0.5)
+    samples = [(current_node[0], forward_s)]
+    if frame is None:
+        for fraction in fractions:
+            samples.append((tools.linterp(start, end, fraction), forward_s))
+        samples.append((next_node[0], forward_e))
+        return samples
+    for fraction in fractions:
+        samples.append(_arc_sample(frame, start, end, fraction))
+    samples.append((next_node[0], forward_e))
+    return samples
+
+
+def _samples_clear(points):
+
+    for point in points:
+        if not point_inside_border((int(point[0]), int(point[1]))):
+            return False
+    return not are_points_blocked(points)
+
+
+# From a pair of track nodes representing a piece of rail, return a short list
+# of points for the block check. Straights stay on the chord. A curve samples
+# the arc those tangents actually follow. `mode` adds the outermost parallel
+# track on each side that has one, not every track in between.
+def get_block_points_from_nodes(current_node, next_node, mode=None):
+
+    outers = _outer_indices(mode)
+    curved = current_node[1] != next_node[1] or current_node[2] != next_node[2]
+    if not curved and not outers:
+        return _chord_block_points(current_node, next_node)
+
+    samples = _piece_samples(current_node, next_node)
+    # The centerline check never included the start joint; the previous piece owned it.
+    points = [sample[0] for sample in samples[1:]]
+    if outers:
+        spacing = float(track.move_in_trackspace(0, "0fw", 1)[1])
+        for index in outers:
+            for point, forward in samples:
+                points.append(_shift_track(point, forward, index, spacing))
+    return points
 
 
 # From a model and a current node, return the resulting node, and whether the track is valid according to blocking and maximum border size.
@@ -264,17 +406,10 @@ def iterate_backbone(model, prev_node, mode):
     points = get_block_points_from_nodes(
         prev_node,
         current_node,
+        mode,
     )
 
-    end = (
-        int(current_node[0][0]),
-        int(current_node[0][1]),
-    )
-
-    if not point_inside_border(end):
-        return None
-
-    if are_points_blocked(points):
+    if not _samples_clear(points):
         return None
 
     median_extra_length = 0
@@ -311,8 +446,8 @@ def fit_run_length_enabled():
 def corridor_is_blocked(origin, direction, heading, mode, distance):
     """True when any parallel track in the stretch leaves the border or hits a block.
 
-    Switch zones and their tangent fill use this before they are accepted.
-    A rejected zone is not placed, and the pathfinder backtracks.
+    A switch zone uses this before it is accepted. A rejected zone is not
+    placed, and the pathfinder backtracks.
     """
 
     from railmancer import switches
@@ -522,6 +657,8 @@ def generation_process(
 
     global debug_overall_count, logLength, search_stats
 
+    # The attempt limit is per search. A previous call must not spend it.
+    debug_overall_count = 0
     search_stats = _fresh_stats()
 
     blocks_current_step_index = 0
@@ -570,6 +707,8 @@ def generation_process(
                 "model": step_model,
                 "current_run": current_run,
                 "current_run_id": current_run_id,
+                # Plain track since the previous ladder. Ladders stay at 0.
+                "run_plain": 0,
             }
         ]
 
@@ -618,19 +757,6 @@ def generation_process(
 
         return blocks_current_step_index
 
-    def next_count_boundary(length, run_id):
-
-        # The next run boundary that actually changes the track count.
-        for index in range(run_id, len(cumulative_track_profile) - 1):
-            boundary = cumulative_track_profile[index][1]
-            if boundary <= length:
-                continue
-            before = tuple(cumulative_track_profile[index][0])
-            after = tuple(cumulative_track_profile[index + 1][0])
-            if before != after:
-                return boundary, before, after, index + 1
-        return None
-
     def _join_for_run(run_id):
 
         params = cumulative_track_profile[run_id][2]
@@ -659,20 +785,39 @@ def generation_process(
             )
         return points
 
-    def fit_budget(length, limit, before, after, direction, join):
+    def _run_target(run_id):
 
-        from railmancer import switches
+        # Specified plain length of this run, not a cumulative total.
+        if run_id <= 0:
+            return float(cumulative_track_profile[0][1])
+        return float(
+            cumulative_track_profile[run_id][1] - cumulative_track_profile[run_id - 1][1]
+        )
 
-        try:
-            zone = switches.zone_length(before, after, direction, join)
-        except switches.SwitchGeometryError:
-            zone = 0
-        return limit - length - zone, zone
+    def _tolerance():
+
+        return float(TEST.get("run_length_tolerance"))
+
+    def _in_window(plain, target):
+
+        tol = _tolerance()
+        return (target - tol) <= plain <= (target + tol)
+
+    def _route_finished(step):
+
+        if not fit_run_length_enabled():
+            return step["length"] >= cumulative_track_profile[-1][1]
+        last = len(cumulative_track_profile) - 1
+        if step["current_run_id"] != last:
+            return False
+        return _in_window(float(step.get("run_plain", 0)), _run_target(last))
 
     def append_switch_transition(
-        current_step, steps, before, after, budget, entered_run, join=None
+        current_step, steps, before, after, entered_run, join=None
     ):
 
+        # The ladder sits after the plain track. Its length is not part of
+        # either run, so a direction-dependent zone cannot blow the budget.
         from railmancer import switches
 
         node = current_step["node"]
@@ -682,135 +827,158 @@ def generation_process(
             print(exc)
             return False
 
-        quantum = switches.grid_quantum(node[1])
-        # Largest grid step that still leaves the zone inside the run.
-        # `budget` is the room in front of the zone. Rounding up would
-        # push the zone past the run target.
-        if budget <= 0 or quantum <= 0:
-            fill = 0
-        else:
-            fill = int(math.floor(budget / float(quantum)) * quantum)
         span = (max(before[0], after[0]), max(before[1], after[1]))
-        if corridor_is_blocked(node[0], node[1], node[2], before, fill):
+        if zone > 0 and corridor_is_blocked(node[0], node[1], node[2], span, zone):
+            # Off the map, in a block, or the outer tracks leave the border.
             return False
-        cursor = node
-        length = current_step["length"]
-        if fill:
+        if zone > 0:
             end = track.updated_position(
-                cursor[0], track.move_in_trackspace(fill, cursor[1]), cursor[2]
+                node[0], track.move_in_trackspace(zone, node[1]), node[2]
             )
-            cursor = (end, cursor[1], cursor[2], False)
-            length += fill
-            steps.append(
-                {
-                    "node": cursor,
-                    "length": length,
-                    "candidate_tracks": [],
-                    "points": _parallel_points(node, cursor, before),
-                    "blocks_added": [],
-                    "model": "",
-                    "tangent_fill": fill,
-                    "current_run": current_step["current_run"],
-                    "current_run_id": current_step["current_run_id"],
-                }
-            )
-        if corridor_is_blocked(cursor[0], cursor[1], cursor[2], span, zone):
-            if fill:
-                steps.pop()
-            return False
-        end = track.updated_position(
-            cursor[0], track.move_in_trackspace(zone, cursor[1]), cursor[2]
-        )
-        end_node = (end, cursor[1], cursor[2], False)
-        length += zone
-        # Stay in the run this ladder entered. determine_current_run_id
-        # returns 0 once length passes the last marker, which would put the
-        # next pieces back on the first run's track count.
+            end_node = (end, node[1], node[2], False)
+            points = _parallel_points(node, end_node, span)
+            length = current_step["length"] + zone
+        else:
+            # A stub join can have nothing to build. Still enter the run.
+            end_node = node
+            points = []
+            length = current_step["length"]
         steps.extend(
             new_step(
                 end_node,
                 entered_run,
                 cumulative_track_profile[entered_run],
                 length,
-                _parallel_points(cursor, end_node, span),
+                points,
                 "",
             )
         )
         steps[-1]["switch_zone"] = (before, after)
         steps[-1]["switch_join"] = join
+        steps[-1]["run_plain"] = 0
         return True
 
-    def try_candidates(current_step, steps, mode):
+    def _settle(step, steps):
 
-        while current_step["candidate_tracks"]:
+        # A run already inside its window gets its ladder now, or the next
+        # run's parameters when the count does not change. Failure here is
+        # a dead end: the caller backtracks. Nothing is laid past the boundary.
+        run_id = step["current_run_id"]
+        if run_id >= len(cumulative_track_profile) - 1:
+            return "building"
+        plain = float(step.get("run_plain", 0))
+        target = _run_target(run_id)
+        if plain < target - _tolerance():
+            return "building"
+        if plain > target + _tolerance():
+            return "blocked"
+        entered = run_id + 1
+        before = tuple(cumulative_track_profile[run_id][0])
+        after = tuple(cumulative_track_profile[entered][0])
+        if before != after:
+            if not append_switch_transition(
+                step, steps, before, after, entered, _join_for_run(entered)
+            ):
+                return "blocked"
+            return "advanced"
+        step["current_run_id"] = entered
+        step["current_run"] = cumulative_track_profile[entered]
+        step["run_plain"] = 0
+        step["candidate_tracks"] = generate_selection_of_possible_tracks(
+            step["node"], candidates_to_generate, step["current_run"]
+        )
+        return "advanced"
 
-            mdl_to_test = current_step["candidate_tracks"].pop()
+    def _reject(steps, step):
 
-            search_stats["attempts"] += 1
-            boundary = next_count_boundary(
-                current_step["length"], current_step["current_run_id"]
+        search_stats["rejected"] += 1
+        debug_logger(steps, step["length"])
+
+    def _place_piece(current_step, steps, mode, mdl_to_test):
+
+        result = iterate_backbone(mdl_to_test, current_step["node"], mode)
+        if result is None:
+            _reject(steps, current_step)
+            return False
+        result_node, points, track_length = result
+        landed = float(current_step.get("run_plain", 0)) + float(track_length)
+        steps.extend(
+            new_step(
+                result_node,
+                current_step["current_run_id"],
+                current_step["current_run"],
+                current_step["length"] + track_length,
+                points,
+                mdl_to_test,
             )
-            if boundary is not None and fit_run_length_enabled():
-                limit, before, after, entered_run = boundary
-                join = _join_for_run(entered_run)
-                budget, _zone = fit_budget(
-                    current_step["length"],
-                    limit,
-                    before,
-                    after,
-                    current_step["node"][1],
-                    join,
-                )
-                piece_length = track.get_length(mdl_to_test)
-                if budget <= 0 or piece_length > budget:
-                    shorter_remains = budget > 0 and any(
-                        track.get_length(candidate) <= budget
-                        for candidate in current_step["candidate_tracks"]
-                    )
-                    if shorter_remains:
-                        continue
-                    if append_switch_transition(
-                        current_step,
-                        steps,
-                        before,
-                        after,
-                        max(budget, 0),
-                        entered_run,
-                        join,
-                    ):
-                        update_longest_fail(steps, steps[-1]["length"])
-                        return True
-                    if budget > 0:
-                        continue
-            result = iterate_backbone(mdl_to_test, current_step["node"], mode)
+        )
+        steps[-1]["run_plain"] = landed
+        search_stats["placements"] += 1
+        return True
 
-            if result is None:
+    def _try_within_tolerance(current_step, steps, mode):
 
-                search_stats["rejected"] += 1
-                debug_logger(steps, current_step["length"])
+        state = _settle(current_step, steps)
+        if state == "advanced":
+            update_longest_fail(steps, steps[-1]["length"])
+            return True
+        if state == "blocked":
+            # The run is finished and the ladder will not fit here. More
+            # pieces would only cross the boundary. Drop the candidates so
+            # a start node that cannot backtrack dies instead of spinning.
+            current_step["candidate_tracks"] = []
+            _reject(steps, current_step)
+            return False
+
+        target = _run_target(current_step["current_run_id"])
+        tol = _tolerance()
+        while current_step["candidate_tracks"]:
+            mdl_to_test = current_step["candidate_tracks"].pop()
+            search_stats["attempts"] += 1
+            plain = float(current_step.get("run_plain", 0))
+            piece_length = float(track.get_length(mdl_to_test))
+            # Past the far side of the window there is no legal ladder site.
+            # A shorter candidate may still land; if none can, this is a dead end.
+            if plain + piece_length > target + tol:
+                _reject(steps, current_step)
                 continue
+            if not _place_piece(current_step, steps, mode, mdl_to_test):
+                continue
+            landed = float(steps[-1]["run_plain"])
+            if landed >= target - tol:
+                state = _settle(steps[-1], steps)
+                if state == "blocked":
+                    steps.pop()
+                    search_stats["placements"] -= 1
+                    _reject(steps, current_step)
+                    continue
+            update_longest_fail(steps, steps[-1]["length"])
+            return True
+        return False
 
-            else:
+    def _try_unfitted(current_step, steps, mode):
 
-                (
+        # trackhammer_fit_run_length is off: place pieces, no ladders.
+        while current_step["candidate_tracks"]:
+            mdl_to_test = current_step["candidate_tracks"].pop()
+            search_stats["attempts"] += 1
+            result = iterate_backbone(mdl_to_test, current_step["node"], mode)
+            if result is None:
+                _reject(steps, current_step)
+                continue
+            result_node, points, track_length = result
+            new_length = current_step["length"] + track_length
+            search_stats["placements"] += 1
+            new_run_id = determine_current_run_id(new_length)
+            if current_step["current_run_id"] != new_run_id:
+                print(
+                    "Went over a boundary!",
                     result_node,
-                    points,
-                    track_length,
-                ) = result
-
-                new_length = current_step["length"] + track_length
-                search_stats["placements"] += 1
-
-                new_run_id = determine_current_run_id(new_length)
-                if current_step["current_run_id"] != new_run_id:
-                    print(
-                        "Went over a boundary!",
-                        result_node,
-                        new_run_id,
-                        current_step["current_run_id"],
-                    )
-
-                steps += new_step(
+                    new_run_id,
+                    current_step["current_run_id"],
+                )
+            steps.extend(
+                new_step(
                     result_node,
                     new_run_id,
                     cumulative_track_profile[new_run_id],
@@ -818,19 +986,23 @@ def generation_process(
                     points,
                     mdl_to_test,
                 )
-
-                update_longest_fail(steps, new_length)
-
-                return True
-
+            )
+            update_longest_fail(steps, new_length)
+            return True
         return False
+
+    def try_candidates(current_step, steps, mode):
+
+        if fit_run_length_enabled():
+            return _try_within_tolerance(current_step, steps, mode)
+        return _try_unfitted(current_step, steps, mode)
 
     # START OF PROCESS
     steps = new_step(start_node, 0, cumulative_track_profile[0])
 
     while (
         len(steps) > 0
-        and steps[-1]["length"] < cumulative_track_profile[-1][1]
+        and not _route_finished(steps[-1])
         and debug_overall_count < debug_maximum_count
     ):
 
