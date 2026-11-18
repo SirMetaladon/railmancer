@@ -141,6 +141,12 @@ def geometry_from_model(model_path):
         "dv": dv,
         "mn": mn,
         "model": dv,
+        # valid_next_tracks reads these off every library entry. A switch
+        # record without them raises KeyError the second time a mainline
+        # is generated in one process.
+        "GradeLevel": 0,
+        "Radius": 0,
+        "Length": 0,
     }
     if exact:
         record["MainMove"] = track.move_in_trackspace(short, direction, 0)
@@ -157,13 +163,54 @@ def _parsed_catalog():
     return _PARSED
 
 
+def _routes_for(record, previous):
+
+    # build_track_library stores both legs as a list. Prefer that list.
+    # Otherwise read the filename the same way a parsed switch does.
+    if isinstance(previous, list) and len(previous) >= 2:
+        return previous
+    parsed = track.process_file(record["dv"])
+    if len(parsed) >= 2:
+        return parsed
+    direction = record["StartDirection"]
+
+    def one(move):
+        move = list(move)
+        if len(move) < 3:
+            move.append(0)
+        return {
+            "Length": 0,
+            "Radius": 0,
+            "StartDirection": direction,
+            "EndDirection": direction,
+            "GradeLevel": 0,
+            "Move": move,
+            "ApproxGrade": 0,
+            "RealGrade": 0,
+        }
+
+    if "MainMove" not in record:
+        return parsed
+    return [one(record["MainMove"]), one(record["DivMove"])]
+
+
 def register_switch_library(library=None):
-    """Make every catalog model resolvable as a three-ended switch."""
+    """Make every catalog model resolvable as a three-ended switch.
+
+    The geometry record replaces whatever build_track_library stored under
+    the model name. The two route dicts have to ride along on the record,
+    or the point pass later only has the main-leg Move.
+    """
 
     target = track.track_model_library if library is None else library
     for record in _parsed_catalog():
-        target[record["dv"]] = record
-        target[record["mn"]] = record
+        previous = target.get(record["dv"])
+        if not isinstance(previous, list):
+            previous = target.get(record["mn"])
+        stored = dict(record)
+        stored["routes"] = _routes_for(record, previous)
+        target[record["dv"]] = stored
+        target[record["mn"]] = stored
     return target
 
 
@@ -506,6 +553,11 @@ def _mark_switches(origin, direction, heading, layout, reverse, total, mark, occ
                 "model_div": spec["dv"],
                 "visgroup": "23",
             }
+        )
+        # Both legs. The record's "routes" list is what a parsed switch of
+        # this model would have been walked as, one Bezier chain per leg.
+        track.add_lines_from_track(
+            position, track.track_model_library[spec["mn"]], yaw
         )
         mark(switch["track"], origin_s)
         mark(switch["track"], main_s)

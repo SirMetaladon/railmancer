@@ -395,15 +395,132 @@ def process_wye(path):
     ]
 
 
+def _direction_token(text):
+
+    # 0fw, or a digit plus rt/lt. Same tokens get_heading already understands.
+    if text == "0fw" or (
+        len(text) == 3 and text[0].isdigit() and text[1:] in ("rt", "lt")
+    ):
+        return text
+    return None
+
+
+def _offset_xyz(token):
+
+    # "+0640x+0032x0000", or a turnout's "+0832x+0416" with no Z.
+    # The Z slice is the same one straights use, so "up"/"dn" falls off.
+    parts = token.split("x")
+    change_z = int(parts[2][:4]) if len(parts) > 2 else 0
+    return int(parts[0]), int(parts[1]), change_z
+
+
+def process_track_end(path):
+
+    # end_ang1rt.mdl — 128 units of straight track in that direction, and
+    # then the rail stops. The prop origin and yaw from the map are the
+    # placement. Nothing goes in the straight cache.
+    stem = path[-1][:-4] if path[-1].endswith(".mdl") else path[-1]
+    if not stem.startswith("end_ang"):
+        return []
+    Direction = _direction_token(stem[len("end_ang") :])
+    if Direction is None:
+        return []
+
+    Heading = get_heading(Direction)
+    Scale = 128.0 / math.hypot(Heading[0], Heading[1])
+
+    return [
+        {
+            "Length": 128,
+            "Radius": 0,
+            "StartDirection": Direction,
+            "EndDirection": Direction,
+            "GradeLevel": 0,
+            "Move": [Heading[0] * Scale, Heading[1] * Scale, 0],
+            "ApproxGrade": 0,
+            "RealGrade": 0,
+        }
+    ]
+
+
+def process_bend(path):
+
+    # b0fw_right_minr2048_0pg_+0640x+0032x0000.mdl
+    # Same direction at both ends. The XYZ in the name is the jog, and the
+    # existing Bezier fitter draws the curve between those tangents.
+    data = list(path[-1].split("_"))
+    Direction = data[0][1:]
+    Radius = int(extract_digits(data[2]))
+    RealGrade = determine_real_grade(data[3])
+    GradeLevel = determine_grade_level(RealGrade)
+    ChangeX, ChangeY, ChangeZ = _offset_xyz(data[4])
+
+    Length = math.sqrt(ChangeX**2 + ChangeY**2 + ChangeZ**2)
+    ApproxGrade = round((ChangeZ / Length) * 100, 2) if Length else 0
+
+    return [
+        {
+            "Length": Length,
+            "Radius": Radius,
+            "StartDirection": Direction,
+            "EndDirection": Direction,
+            "GradeLevel": GradeLevel,
+            "Move": [-ChangeX, ChangeY, ChangeZ],
+            "ApproxGrade": ApproxGrade,
+            "RealGrade": RealGrade,
+        }
+    ]
+
+
+def process_m_turnout(path):
+
+    # switches/str_bez/m2rt_4rt_right_minr2048_+0832x+0416_+0736x+0512_dv.mdl
+    # First direction and the first XY are the straight leg. Second direction
+    # and the second XY are the diverging leg. _dv and _mn are one shape.
+    data = list(path[-1].split("_"))
+    if len(data) < 6:
+        return []
+    Straight = _direction_token(data[0][1:])
+    Diverging = _direction_token(data[1])
+    if Straight is None or Diverging is None:
+        return []
+
+    ChangeX, ChangeY, _ = _offset_xyz(data[4])
+    ChangeX2, ChangeY2, _ = _offset_xyz(data[5])
+
+    return [
+        {
+            "Length": 0,
+            "Radius": 0,
+            "StartDirection": Straight,
+            "EndDirection": Straight,
+            "GradeLevel": 0,
+            "Move": [-ChangeX, ChangeY, 0],
+            "ApproxGrade": 0,
+            "RealGrade": 0,
+        },
+        {
+            "Length": 0,
+            "Radius": 0,
+            "StartDirection": Straight,
+            "EndDirection": Diverging,
+            "GradeLevel": 0,
+            "Move": [-ChangeX2, ChangeY2, 0],
+            "ApproxGrade": 0,
+            "RealGrade": 0,
+        },
+    ]
+
+
 def process_file(model):
 
     path = model.split("/")
 
-    if path[2] == "arcs":
+    if len(path) > 2 and path[2] == "arcs":
 
         return process_arc(path)
 
-    elif path[2] == "banked":
+    elif len(path) > 2 and path[2] == "banked":
 
         return process_banked(path)
 
@@ -411,25 +528,44 @@ def process_file(model):
 
         return process_straight(path, model)
 
-    elif path[3] == "turnouts":
+    elif len(path) > 3 and path[3] == "turnouts":
 
         return process_turnout(path)
 
-    elif path[3] == "sidings":
+    elif len(path) > 3 and path[3] == "sidings":
 
         return process_siding(path)
 
-    elif path[3] == "xovers":
+    elif len(path) > 3 and path[3] == "xovers":
 
         return process_xover(path)
 
-    elif path[3] == "wyes":
+    elif len(path) > 3 and path[3] == "wyes":
 
         return process_wye(path)
 
-    else:
+    elif len(path) > 2 and path[2] == "bends":
 
-        print(f"No track-processing support for {model}")
+        return process_bend(path)
+
+    elif len(path) > 3 and path[3] == "str_bez":
+
+        routes = process_m_turnout(path)
+        if routes:
+            return routes
+
+    elif "trackends" in path:
+
+        routes = process_track_end(path)
+        if routes:
+            return routes
+
+    elif "bumpers" in path:
+
+        # Car stops and the other bumper props are not track.
+        return []
+
+    print(f"No track-processing support for {model}")
 
     return []
 
@@ -449,8 +585,14 @@ def build_track_library(directory, extension):
 
                 track_data = process_file(model)
 
+                # Track ends are parsed for their points only. They are not
+                # pieces the pathfinder is allowed to lay.
+                if "/trackends/" in model or "/bumpers/" in model:
+                    continue
+
                 if len(track_data) == 1 or len(track_data) == 2:
                     # more than 1 is a switch, less than 1 is an invalid model
+                    # A switch keeps the whole list: one route dict per leg.
                     track_model_library[model] = track_data
 
     tools.stopwatch_click("submodule", "Track Library init complete")
@@ -464,17 +606,40 @@ def length_to_model_straight(length, direction, gradelevel):
     return track_straight_cache.get(f"{length}|{direction}", {}).get(gradelevel, "")
 
 
+def _as_routes(track_objects):
+
+    # A library entry is either one route dict, the list of route dicts a
+    # switch stores (one per leg), or a switch record that kept that list
+    # under "routes" when the geometry record was written over it.
+    if isinstance(track_objects, list):
+        return track_objects
+    routes = track_objects.get("routes")
+    if routes:
+        return routes
+    return [track_objects]
+
+
+def _piece(model):
+
+    # Pathfinding wants the single route. A list means "every leg"; the
+    # first entry is the one the pathfinder already knew how to walk.
+    data = track_model_library[model]
+    if isinstance(data, list):
+        return data[0]
+    return data
+
+
 def add_lines_from_track(pos, track_objects, heading):
 
-    for object in [track_objects]:
+    for route in _as_routes(track_objects):
 
-        EndPos = pos + tools.rot_orth(object["Move"], heading)
+        EndPos = pos + tools.rot_orth(route["Move"], heading)
 
         lines.write_bezier_points(
             pos,
             EndPos,
-            tools.rot_orth(get_heading(object["StartDirection"]), heading),
-            tools.rot_orth(get_heading(object["EndDirection"]), heading + 180),
+            tools.rot_orth(get_heading(route["StartDirection"]), heading),
+            tools.rot_orth(get_heading(route["EndDirection"]), heading + 180),
         )
 
 
@@ -558,7 +723,7 @@ def move_in_trackspace(length_forward, direction, tracks_over_right=0):
 
 def get_end_direction(model, current_direction):
 
-    track_data = track_model_library[model][0]  # shouldn't have to deal with switches?
+    track_data = _piece(model)
     start_direction = track_data["StartDirection"]
     end_direction = track_data["EndDirection"]
 
@@ -583,7 +748,7 @@ def get_new_node_from_node_and_model(
     Position, current_direction, Heading, _ = Node  # I don't even use it here what
     # EDITORS NOTE THE 4th SLOT IS FOR MODEL REVERSING (does not effect the jump, only rotation of the model)
 
-    track_data = track_model_library[Model][0]  # shouldn't have to deal with switches
+    track_data = _piece(Model)
 
     NewDirection = get_end_direction(Model, current_direction)
 
@@ -724,7 +889,7 @@ def _travel_stagger(direction_in, direction_out):
 
 def _place_reversed_piece(model, prev_node, new_node, yaw, track_mode):
 
-    track_data = track_model_library[model][0]  # should not have to deal with switches
+    track_data = _piece(model)
     per_in, per_out = _travel_stagger(
         track_data["EndDirection"], track_data["StartDirection"]
     )
@@ -817,20 +982,13 @@ def write_track_from_trackhammer_steps(steps):
             far_direction = new_node[1]
             base_of_far_side = new_node[0]
 
-        TrackEndDirection = track_model_library[model][0][
-            "EndDirection"
-        ]  # should not have to deal with switches
+        piece = _piece(model)
+        TrackEndDirection = piece["EndDirection"]
 
         # Whichever authored direction we leave through, if it is an 8 the
         # stored heading already includes that ±90. The prop is drawn in the
         # frame before the turn. Undo it, then add 180 when the prop is reversed.
-        outgoing = (
-            track_model_library[model][0][
-                "StartDirection"
-            ]  # should not have to deal with switches
-            if IsReversed
-            else TrackEndDirection
-        )
+        outgoing = piece["StartDirection"] if IsReversed else TrackEndDirection
         if outgoing == "8rt":
             ModelHeading = new_node[2] + 90
         elif outgoing == "8lt":
@@ -841,16 +999,14 @@ def write_track_from_trackhammer_steps(steps):
         Heading = int(ModelHeading) + RotFix
 
         forward_per_track, rear_per_track = get_offset_forward_for_parallel_on_right(
-            track_model_library[model][0]["StartDirection"], TrackEndDirection
-        )  # should not have to deal with switches
+            piece["StartDirection"], TrackEndDirection
+        )
         # The table is stored low-angle to high-angle. A piece authored the
         # other way (and not model-reversed) has to put that stagger on the
         # opposite end, or it will not meet the segment on either side.
-        if not IsReversed and int(
-            track_model_library[model][0]["StartDirection"][
-                0
-            ]  # should not have to deal with switches
-        ) > int(TrackEndDirection[0]):
+        if not IsReversed and int(piece["StartDirection"][0]) > int(
+            TrackEndDirection[0]
+        ):
             forward_per_track, rear_per_track = (
                 -rear_per_track,
                 -forward_per_track,
@@ -892,7 +1048,6 @@ def write_track_from_trackhammer_steps(steps):
         farthest_rear_back = min(
             tracks[0] * rear_per_track, tracks[-1] * rear_per_track
         )
-        piece = track_model_library[model]  # should not have to deal with switches
 
         for track in tracks:
 
@@ -946,8 +1101,22 @@ def valid_next_tracks(Direction, params={}):
 
     for Track in list(track_model_library.items()):
 
-        if Track[1]["StartDirection"] != Direction or (
-            Direction[:1] == "4" and Track[1]["StartDirection"][:1] == "4"
+        data = Track[1]
+        # Switches are stored as both legs. The pathfinder lays one piece
+        # at a time and must not treat either leg as a straight it can place.
+        if isinstance(data, list):
+            if len(data) != 1:
+                continue
+            data = data[0]
+        if data.get("kind") == "switch":
+            continue
+        if "/bends/" in Track[0] or "/trackends/" in Track[0]:
+            continue
+        if "GradeLevel" not in data or "Radius" not in data:
+            continue
+
+        if data["StartDirection"] != Direction or (
+            Direction[:1] == "4" and data["StartDirection"][:1] == "4"
         ):
             Reversed = -1
         else:
@@ -958,33 +1127,33 @@ def valid_next_tracks(Direction, params={}):
         # real floor and still treats a missing limit (False) as unset.
         if (
             MinimumGradeLevel is not False
-            and (Track[1]["GradeLevel"] * Reversed) < MinimumGradeLevel
+            and (data["GradeLevel"] * Reversed) < MinimumGradeLevel
         ):
             continue
         if (
             MaximumGradeLevel is not False
-            and (Track[1]["GradeLevel"] * Reversed) > MaximumGradeLevel
+            and (data["GradeLevel"] * Reversed) > MaximumGradeLevel
         ):
             continue
 
-        if Track[1]["Radius"] not in AllowedRadii:
+        if data["Radius"] not in AllowedRadii:
             continue
 
         if (
-            Track[1]["StartDirection"] != Direction
-            and Track[1]["EndDirection"] != Direction
+            data["StartDirection"] != Direction
+            and data["EndDirection"] != Direction
             and not (
                 (Direction[:1] == "4")
                 and (
-                    Track[1]["StartDirection"][:1] == "4"
-                    or Track[1]["EndDirection"][:1] == "4"
+                    data["StartDirection"][:1] == "4"
+                    or data["EndDirection"][:1] == "4"
                 )
             )
         ):
 
             continue
 
-        to_add = [Track, Track[1]["Length"]]
+        to_add = [Track, data["Length"]]
 
         tools.heuristic_inserter(Output, to_add)
 
@@ -996,9 +1165,7 @@ def valid_next_tracks(Direction, params={}):
 
 def get_length(model):
 
-    return track_model_library[model][0][
-        "Length"
-    ]  # should not have to deal with switches?
+    return _piece(model)["Length"]
 
 
 def decompose_length_to_straights(target):
