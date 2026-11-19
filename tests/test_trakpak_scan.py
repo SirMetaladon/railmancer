@@ -21,6 +21,7 @@ from tools.scan_trakpak3 import (
 STRAIGHT = "models/trakpak3_rsg/straights/s0384_0fw_0pg_+0384x00000x0000.mdl"
 CURVE = "models/trakpak3_rsg/arcs/r6144/a0fw_8lt_left_311pg_+6144x-6144x+300up.mdl"
 BEND = "models/trakpak3_rsg/bends/b0fw_left_minr2048_0pg_+1536x-0192x0000.mdl"
+DIAMOND = "models/trakpak3_rsg/diamonds/d0fw_1lt.mdl"
 ONE_RT = "models/trakpak3_rsg/straights/s1024_1rt_303pg_+1024x+0256x+032up.mdl"
 
 
@@ -56,8 +57,8 @@ class TrakpakScanTests(unittest.TestCase):
 
     def test_unknown_family_is_reported(self):
 
-        self.assertTrue(is_rsg_track_model(BEND))
-        routes, reason = parse_model(BEND)
+        self.assertTrue(is_rsg_track_model(DIAMOND))
+        routes, reason = parse_model(DIAMOND)
         self.assertIsNone(routes)
         self.assertIn("No track-processing support", reason)
         self.assertFalse(is_rsg_track_model("models/trakpak3_rsg_bridge/arcs/r2048/x.mdl"))

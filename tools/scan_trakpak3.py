@@ -47,6 +47,7 @@ TRACK_FOLDERS = ("arcs", "straights", "banked", "bends", "diamonds")
 SWITCH_FOLDERS = (
     "turnouts",
     "sidings",
+    "str_bez",
     "xovers",
     "wyes",
     "slips",
