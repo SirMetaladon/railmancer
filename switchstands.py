@@ -32,17 +32,10 @@ def main():
     # Import line objects from a VMF, as well as the track entities themselves.
     parser.import_track(vmf_input_path)
 
-    # Generate a mapping for finding the closest point relative to an existing point.
-    lines.encode_lines()  # required for exclusion to work
+    # Track samples only. Ground hints are staged by the import and are not inserted here.
+    lines.encode_lines()
 
-    # Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are. Also contains a map for "what block is next to this one"
-    sectors.build_fit()
-    sectors.link()
-
-    # Takes points and puts them in buckets for sector processing.
-    sectors.assign_points_to_sectors()
-
-    # Scan all entities for switch stands, determine which side of them is less blocked, place accordingly
+    # Which side of each stand is farther from the rails. Track points only, no sector map.
     sectors.collapse_quantum_switchstands()
 
     # Compile brush, entity, and brushentity data into a VMF text file and save.

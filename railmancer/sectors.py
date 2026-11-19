@@ -1,6 +1,6 @@
 import math, random
 from railmancer import tools, cfg, lines, vmfpy, terrain
-from scipy.spatial import KDTree
+from scipy.spatial import KDTree, cKDTree
 import numpy as np
 
 # Handles the creation and management of Sector objects, how they connect to each other, things related to stitching them together, and anything that takes sector objects instead of just raw grids.
@@ -716,12 +716,41 @@ def distance_to_line(pos, sector_data=None):
     return Shortest, Pos
 
 
+def _nearest_track_distance():
+
+    # One 3D tree of the track samples as they stand right now. Ground hints
+    # are still staged at this point in the build, so they are not in the tree.
+    # Stacked track stays out of each other's way because the distance is 3D.
+    # encode_lines uses a single far point when the map has no track. That is
+    # not a rail; both sides tie and the second option wins, same as before.
+
+    points = []
+    for point in lines.get_all_track_points():
+        points.append((float(point[0]), float(point[1]), float(point[2])))
+
+    if not points or points == [(100000.0, 100000.0, 100000.0)]:
+
+        def tied(_pos):
+            return 0.0
+
+        return tied
+
+    tree = cKDTree(points)
+
+    def distance(pos):
+        found, _idx = tree.query((float(pos[0]), float(pos[1]), float(pos[2])))
+        return float(found)
+
+    return distance
+
+
 def collapse_quantum_switchstands():
 
     # Roughly: takes the encoded 2-option switch stand entities and overwrites itself with whichever one is farthest from the rails.
     # Good way of finding unobstructed stand locations.
 
     Entities = vmfpy.get_entities()
+    distance_to_track = _nearest_track_distance()
 
     for ID in range(len(Entities)):
 
@@ -737,8 +766,8 @@ def collapse_quantum_switchstands():
 
         if Collapse:
 
-            FirstDistance, _ = distance_to_line(Ent[0][1])
-            SecondDistance, _ = distance_to_line(Ent[0][2])
+            FirstDistance = distance_to_track(Ent[0][1])
+            SecondDistance = distance_to_track(Ent[0][2])
 
             if FirstDistance > SecondDistance:
                 Entities[ID] = Ent[1]

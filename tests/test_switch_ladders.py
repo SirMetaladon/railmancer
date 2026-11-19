@@ -83,6 +83,11 @@ def _open_ends(origin, direction, heading, before, after, total):
     return allowed
 
 
+def _track_props(placed):
+    # Stand and gravel are two-option lists until collapse. Joint checks are track props.
+    return [prop for prop in placed if isinstance(prop, dict)]
+
+
 def _on_grid(props):
     problems = []
     for prop in props:
@@ -105,13 +110,14 @@ def _transition_case(before, after, direction, heading):
     placed = []
     vmfpy.add_entity = placed.append
     place_transition(origin, direction, heading, before, after)
+    props = _track_props(placed)
     allowed = _open_ends(origin, direction, heading, before, after, total)
-    failures = [f"{name}: {problem}" for problem in _on_grid(placed)]
+    failures = [f"{name}: {problem}" for problem in _on_grid(props)]
     failures.extend(
         f"{name}: {problem}"
-        for problem in audit_props(placed, track.track_model_library, allowed)
+        for problem in audit_props(props, track.track_model_library, allowed)
     )
-    switches = [prop for prop in placed if prop.get("classname") == "tp3_switch"]
+    switches = [prop for prop in props if prop.get("classname") == "tp3_switch"]
     if not switches:
         failures.append(f"{name}: no switch was placed")
     for prop in switches:
@@ -197,11 +203,12 @@ def _writer_hook():
     placed = []
     vmfpy.add_entity = placed.append
     track.write_track_from_trackhammer_steps(steps)
+    props = _track_props(placed)
     allowed = _open_ends(origin, direction, heading, before, after, fill + zone)
-    failures = [f"writer hook: {problem}" for problem in _on_grid(placed)]
+    failures = [f"writer hook: {problem}" for problem in _on_grid(props)]
     failures.extend(
         f"writer hook: {problem}"
-        for problem in audit_props(placed, track.track_model_library, allowed)
+        for problem in audit_props(props, track.track_model_library, allowed)
     )
     return failures
 

@@ -13,7 +13,9 @@ Extended models, where both legs are the same length, are ignored.
 import json
 import os
 
-from railmancer import track, vmfpy
+import numpy as np
+
+from railmancer import tools, track, vmfpy
 
 _CATALOG = None
 _PARSED = None
@@ -534,7 +536,72 @@ def _place_layout(origin, direction, heading, layouts, total, incoming, outgoing
             )
 
 
+def add_switch_stand(position, yaw, start_direction, lever_id):
+
+    # Two-option stand and gravel. Collapse keeps the side farther from the rails.
+    # Same offsets the importer has always used, including siding and hammer switches.
+
+    StandAngle = yaw + track.direction_to_angle(start_direction)
+
+    StandPos1 = np.add(
+        position,
+        tools.rot3(np.array([-110, -100, -17.5]), StandAngle),
+    )
+
+    StandPos2 = np.add(position, tools.rot3(np.array([-110, 100, -17.5]), StandAngle))
+
+    GravelPos1 = np.add(position, tools.rot3(np.array([-110, 0, 0]), StandAngle))
+    GravelPos2 = np.add(position, tools.rot3(np.array([-110, 0, 0]), StandAngle))
+    # models/trakpak3_us/switchstands/bethlehem_51a_right.mdl
+    # models/trakpak3_us/switchstands/racor_112e_right.mdl
+    # models/trakpak3_common/ballast/ballast_pile_switch.mdl
+
+    vmfpy.add_entity(
+        [
+            ["collapse", StandPos1, StandPos2],
+            {
+                "pos": StandPos1,
+                "mdl": "models/trakpak3_us/switchstands/bethlehem_51a_right.mdl",
+                "ang": (0, StandAngle, 0),
+                "lever": lever_id,
+                "classname": "tp3_switch_lever_anim",
+                "visgroup": "23",
+            },
+            {
+                "pos": StandPos2,
+                "mdl": "models/trakpak3_us/switchstands/bethlehem_51a_right.mdl",
+                "ang": (0, 180 + StandAngle, 0),
+                "lever": lever_id,
+                "classname": "tp3_switch_lever_anim",
+                "visgroup": "23",
+            },
+        ]
+    )
+
+    vmfpy.add_entity(
+        [
+            ["collapse", StandPos1, StandPos2],
+            {
+                "pos": GravelPos1,
+                "mdl": "models/trakpak3_common/ballast/ballast_pile_switch.mdl",
+                "ang": (0, 180 + StandAngle, 0),
+                "classname": "prop_static",
+                "visgroup": "23",
+            },
+            {
+                "pos": GravelPos2,
+                "mdl": "models/trakpak3_common/ballast/ballast_pile_switch.mdl",
+                "ang": (0, StandAngle, 0),
+                "classname": "prop_static",
+                "visgroup": "23",
+            },
+        ]
+    )
+
+
 def _mark_switches(origin, direction, heading, layout, reverse, total, mark, occupied):
+
+    from railmancer import parser
 
     for switch in layout["switches"]:
         hand = _opposite(switch["side"]) if reverse else switch["side"]
@@ -544,6 +611,7 @@ def _mark_switches(origin, direction, heading, layout, reverse, total, mark, occ
         div_s = _travel(switch["div_s"], total, reverse)
         yaw = heading + 180 if reverse else heading
         position = _station(origin, direction, heading, origin_s, switch["track"])
+        lever_id = parser.get_lever()
         vmfpy.add_entity(
             {
                 "classname": "tp3_switch",
@@ -552,6 +620,7 @@ def _mark_switches(origin, direction, heading, layout, reverse, total, mark, occ
                 "mdl": spec["mn"],
                 "model_div": spec["dv"],
                 "visgroup": "23",
+                "lever": lever_id,
             }
         )
         # Both legs. The record's "routes" list is what a parsed switch of
@@ -559,6 +628,7 @@ def _mark_switches(origin, direction, heading, layout, reverse, total, mark, occ
         track.add_lines_from_track(
             position, track.track_model_library[spec["mn"]], yaw
         )
+        add_switch_stand(position, yaw, spec["StartDirection"], lever_id)
         mark(switch["track"], origin_s)
         mark(switch["track"], main_s)
         mark(switch["div_track"], div_s)
