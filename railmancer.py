@@ -163,7 +163,7 @@ def main():
     # profile.end()
 
     # For each sector, apply the scattering algorithm that places trees, rocks, bushes, etc.
-    # compile.scatter_placables()
+    compile.scatter_placables()
 
     """points = lines.get_all_track_points()
     for entry in points:
