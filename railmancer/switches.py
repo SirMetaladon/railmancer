@@ -565,7 +565,7 @@ def add_switch_stand(position, yaw, start_direction, lever_id):
                 "ang": (0, StandAngle, 0),
                 "lever": lever_id,
                 "classname": "tp3_switch_lever_anim",
-                "visgroup": "23",
+                "visgroup": vmfpy.VISGROUP_SWITCH_STANDS,
             },
             {
                 "pos": StandPos2,
@@ -573,7 +573,7 @@ def add_switch_stand(position, yaw, start_direction, lever_id):
                 "ang": (0, 180 + StandAngle, 0),
                 "lever": lever_id,
                 "classname": "tp3_switch_lever_anim",
-                "visgroup": "23",
+                "visgroup": vmfpy.VISGROUP_SWITCH_STANDS,
             },
         ]
     )
@@ -586,14 +586,14 @@ def add_switch_stand(position, yaw, start_direction, lever_id):
                 "mdl": "models/trakpak3_common/ballast/ballast_pile_switch.mdl",
                 "ang": (0, 180 + StandAngle, 0),
                 "classname": "prop_static",
-                "visgroup": "23",
+                "visgroup": vmfpy.VISGROUP_SWITCH_STANDS,
             },
             {
                 "pos": GravelPos2,
                 "mdl": "models/trakpak3_common/ballast/ballast_pile_switch.mdl",
                 "ang": (0, StandAngle, 0),
                 "classname": "prop_static",
-                "visgroup": "23",
+                "visgroup": vmfpy.VISGROUP_SWITCH_STANDS,
             },
         ]
     )

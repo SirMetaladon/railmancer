@@ -58,7 +58,11 @@ def reprocess_raw_data(raw_ents):
             "visgroup": "25",
         }
 
-        Data = track.process_file(Entity["mdl"])
+        # import_track already parsed the path. Calling process_file again
+        # would write the straight cache a second time for the same model.
+        Data = raw_ent.get("data")
+        if Data is None:
+            Data = track.process_file(Entity["mdl"])
 
         if Data:
 
@@ -147,12 +151,82 @@ def fill_convex_polygon_3d(vertices, spacing):
     return filled_points
 
 
+_TRACK_FIELD = re.compile(
+    r'"model"\s*"([^"]+)"|'
+    r'"origin"\s*"([^"]+)"|'
+    r'"angles"\s*"([^"]+)"|'
+    r'"skin"\s*"([^"]+)"|'
+    r'"classname"\s*"([^"]+)"|'
+    r'"lever"\s*"([^"]+)"'
+)
+
+
+def _fields_in_block(block_text):
+
+    matches = _TRACK_FIELD.findall(block_text)
+
+    def first(index):
+        return next((row[index] for row in matches if row[index]), None)
+
+    return {
+        "model": first(0),
+        "origin": first(1),
+        "angles": first(2),
+        "skin": first(3),
+        "classname": first(4),
+        "lever": first(5),
+    }
+
+
+def track_entities_to_rebuild(text):
+
+    """Trakpak entities this import will replace with rebuilt copies.
+
+    The block parser supplies the entity, because a regex stops at the
+    first closing brace and cannot name the span to delete later. The
+    decision is the old one: a model path containing trakpak3_rsg, plus
+    origin and angles, and process_file actually returns routes. A model
+    it refuses (bumpers, unknown families) stays in the file.
+    """
+
+    blocks = vmfparse.parse_blocks(text)
+    found = []
+    for block in blocks:
+        if block.name != "entity" or block.close_brace < 0:
+            continue
+        block_text = text[block.start : block.close_brace + 1]
+        fields = _fields_in_block(block_text)
+        model = fields["model"]
+        if not (
+            model
+            and fields["origin"]
+            and fields["angles"]
+            and "trakpak3_rsg" in model
+        ):
+            continue
+        data = track.process_file(model)
+        if not data:
+            continue
+        start = vmfparse.line_start(text, block.start)
+        fields["data"] = data
+        fields["span"] = (start, block.close_brace + 1)
+        fields["raw"] = block_text
+        found.append(fields)
+    return found
+
+
 def import_track(path):
 
     if path == "":
+        # No input file: the next write is a fresh VMF, same as before.
+        vmfpy.clear_base_map()
         return [], []
 
-    sections = vmfparse.split_vmf(path)
+    # newline="" keeps the input's own line endings for the passthrough.
+    with open(path, "r", encoding="utf-8", newline="") as file:
+        content = file.read()
+
+    sections = vmfparse.split_vmf_text(content)
 
     imported_brushes = sections.Brushes
 
@@ -205,42 +279,10 @@ def import_track(path):
 
             lines.stage_points(verts2 + verts3)
 
-    with open(path, "r") as file:
-        content = file.read()
-
-    entity_pattern = re.compile(r"entity\s*{(.*?)}", re.DOTALL)
-    subdata_pattern = re.compile(
-        r'"model"\s*"([^"]+)"|'
-        r'"origin"\s*"([^"]+)"|'
-        r'"angles"\s*"([^"]+)"|'
-        r'"skin"\s*"([^"]+)"|'
-        r'"classname"\s*"([^"]+)"|'
-        r'"lever"\s*"([^"]+)"'
-    )
-
-    raw_ents = []
-    for match in entity_pattern.finditer(content):
-        entity_block = match.group(0)
-        model_origin_matches = subdata_pattern.findall(entity_block)
-        model = next((m for m, _, _, _, _, _ in model_origin_matches if m), None)
-        origin = next((o for _, o, _, _, _, _ in model_origin_matches if o), None)
-        angles = next((a for _, _, a, _, _, _ in model_origin_matches if a), None)
-        skin = next((s for _, _, _, s, _, _ in model_origin_matches if s), None)
-        classname = next((c for _, _, _, _, c, _ in model_origin_matches if c), None)
-        lever = next((l for _, _, _, _, _, l in model_origin_matches if l), None)
-
-        if model and origin and angles and "trakpak3_rsg" in model:
-            raw_ents.append(
-                {
-                    "model": model,
-                    "origin": origin,
-                    "angles": angles,
-                    "skin": skin,
-                    "classname": classname,
-                    "lever": lever,
-                    "raw": entity_block,
-                }
-            )
+    raw_ents = track_entities_to_rebuild(content)
+    # The writer keeps this text and cuts these spans so the rebuilt
+    # props are not added on top of the originals.
+    vmfpy.set_base_map(content, [ent["span"] for ent in raw_ents])
 
     print(f"Imported {path}, {len(raw_ents)} entities.")
     tools.stopwatch_click("submodule", "Import complete")
