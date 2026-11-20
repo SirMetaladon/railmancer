@@ -1,11 +1,15 @@
 """Consolidate adjacent TrakPak3 straight props into longer stock pieces.
 
-Pipeline hook (before the final VMF write):
+Pipeline hook (after track import and trackhammer, before ``lines.encode_lines``):
 
     from railmancer import consolidate_straights
-    consolidate_straights.consolidate_inplace(smooth_grade=False)
+    consolidate_straights.consolidate_inplace(smooth_grade=True)
 
-External VMF copy:
+``consolidate_inplace`` rewrites ``vmfpy`` straights and rebuilds
+``lines.Beziers`` from those props. Switch stands, heightmaps, and sector
+assignment sample the rebuilt curves, so they follow the regraded rail.
+
+External VMF copy (props only; there is no in-process line list):
 
     python3 tools/consolidate_vmf_straights.py input.vmf
     python3 tools/consolidate_vmf_straights.py input.vmf --smooth-grade -o out.vmf
@@ -15,8 +19,10 @@ Rules:
 - Without ``smooth_grade``, flat (``0pg``) runs and each graded token run merge
   separately. Adjacent different grades are not mixed.
 - With ``smooth_grade``, collinear straights of the same direction are
-  recomposed so total length and total rise match, using any grade versions
-  available for that direction (including flat fillers).
+  recomposed so total length and total rise match. Graded pieces all share
+  the net rise's sign. Cost, in order: total absolute rise, peak grade
+  percent, flat length, piece count. A candidate that is steeper or has more
+  cumulative rise than the original run is discarded.
 - Chain endpoints keep the same world positions (verified with joincheck).
 """
 
@@ -30,9 +36,11 @@ import sys
 import types
 from dataclasses import dataclass
 
+import numpy as np
+
 sys.modules.setdefault("turtle", types.ModuleType("turtle"))
 
-from railmancer import joincheck, tools, track, vmfpy
+from railmancer import joincheck, lines, tools, track, vmfpy
 from railmancer.joincheck import _prop_from_entity_block
 from railmancer.straight_catalog import (
     StraightCatalog,
@@ -236,15 +244,22 @@ def _trace_path(start, neighbors):
 
 
 def _path_geometry(path: list[int], refs: list[_StraightRef]):
-    """Ordered endpoints along a merge path and total rise/length."""
+    """Ordered endpoints along a merge path and total rise/length.
+
+    ``abs_rise`` is the sum of each step's |dz| (cumulative grade).
+    ``flat_length`` is the nominal length of steps that do not change height.
+    """
 
     if len(path) == 1:
         ref = refs[path[0]]
+        directed = _directed_rise(ref, ref.end_a, ref.end_b)
         return {
             "start": ref.end_a,
             "end": ref.end_b,
             "length": ref.length,
-            "rise": _directed_rise(ref, ref.end_a, ref.end_b),
+            "rise": directed,
+            "abs_rise": abs(directed),
+            "flat_length": ref.length if directed == 0 else 0,
         }
 
     a = refs[path[0]]
@@ -260,12 +275,18 @@ def _path_geometry(path: list[int], refs: list[_StraightRef]):
     start = a.end_b if shared == a.end_a else a.end_a
     ordered = [start]
     rise = 0
+    abs_rise = 0
+    flat_length = 0
     length = 0
     current_key = start
     for ref_i in path:
         ref = refs[ref_i]
         other = _other_end(ref, current_key)
-        rise += _directed_rise(ref, current_key, other)
+        directed = _directed_rise(ref, current_key, other)
+        rise += directed
+        abs_rise += abs(directed)
+        if directed == 0:
+            flat_length += ref.length
         length += ref.length
         ordered.append(other)
         current_key = other
@@ -275,6 +296,8 @@ def _path_geometry(path: list[int], refs: list[_StraightRef]):
         "end": ordered[-1],
         "length": length,
         "rise": rise,
+        "abs_rise": abs_rise,
+        "flat_length": flat_length,
     }
 
 
@@ -339,48 +362,128 @@ def _pack_exact(
     return pieces
 
 
+def _grade_percent(piece_or_token_grade: float) -> int:
+    """Grade percent in hundredths, so 1.56% sorts as 156."""
+
+    return int(round(abs(float(piece_or_token_grade)) * 100))
+
+
+def _original_cost(path, refs, geom, catalog: StraightCatalog):
+    """Lex cost of the pieces already in the run.
+
+    ``(sum |rise|, peak grade hundredths, -flat length, piece count)``.
+    """
+
+    peak = 0
+    for ref_i in path:
+        ref = refs[ref_i]
+        info = catalog.grade_info.get(ref.direction, {}).get(ref.grade_token)
+        if info is not None:
+            peak = max(peak, _grade_percent(info.real_grade))
+    return (
+        int(geom["abs_rise"]),
+        peak,
+        -int(geom["flat_length"]),
+        len(path),
+    )
+
+
+def _packed_cost(packed: list[tuple[StraightPiece, int]]):
+    """Same lex tuple as ``_original_cost``, measured on a candidate packing."""
+
+    peak = 0
+    flat = 0
+    sum_abs = 0
+    for piece, signed in packed:
+        sum_abs += abs(int(signed))
+        peak = max(peak, _grade_percent(piece.real_grade))
+        if signed == 0:
+            flat += piece.length
+    return (sum_abs, peak, -flat, len(packed))
+
+
 def _pack_smooth(
     length: int, rise: int, direction: str, catalog: StraightCatalog
 ) -> list[tuple[StraightPiece, int]] | None:
-    """Fewest pieces with exact length and signed rise."""
+    """Exact length and net rise, with grade bled out instead of cancelled.
+
+    Endpoints fix the net rise, so every feasible packing has the same signed
+    sum. The old search minimized piece count and allowed each graded model
+    both uphill and downhill, with room to overshoot the net rise and climb
+    back. That hits the net with fewer props by mixing signs or by parking
+    the whole rise on a short steep piece, and the sum of |rise| grows.
+
+    This search never offers the opposite sign, and a partial rise may not
+    pass the target. Every feasible packing therefore has sum |rise| equal
+    to |net rise|, which is the least cumulative grade the endpoints allow.
+    Among those, the kept path is the lexicographic minimum of:
+
+    1. peak grade percent (gentlest token that can still make the rise),
+    2. flat length, negated so longer level track wins (grade that is not
+       needed for the rise stays on ``0pg`` pieces),
+    3. piece count.
+
+    State is ``(length covered, rise so far)``. The cost of reaching a state
+    dominates any extension of a worse path to that same state: peak only
+    stays or increases, and flat length and piece count add the same amount
+    for a given next piece.
+    """
 
     if length < 0:
         return None
     if length == 0:
         return [] if rise == 0 else None
 
+    sign = 0 if rise == 0 else (1 if rise > 0 else -1)
+    target_abs = abs(rise)
     options: list[tuple[StraightPiece, int]] = []
     for piece in catalog.by_direction.get(direction, ()):
         if piece.rise == 0:
             options.append((piece, 0))
-        else:
-            options.append((piece, piece.rise))
-            options.append((piece, -piece.rise))
+        elif sign != 0:
+            options.append((piece, sign * piece.rise))
 
+    # Same length and same signed rise: the gentler token is always better.
     uniq = {}
     for piece, signed in options:
-        uniq.setdefault((piece.length, signed), (piece, signed))
+        key = (piece.length, signed)
+        prev = uniq.get(key)
+        if prev is None or abs(piece.real_grade) < abs(prev[0].real_grade):
+            uniq[key] = (piece, signed)
     options = list(uniq.values())
-    options.sort(key=lambda item: (-item[0].length, -abs(item[1])))
+    options.sort(
+        key=lambda item: (-item[0].length, abs(item[0].real_grade), abs(item[1]))
+    )
 
-    max_abs = max(abs(rise), length // 32 + 4)
-    dp = {0: {0: (0, None)}}
+    # cost is (peak hundredths, -flat length, piece count). sum |rise| is
+    # abs(rise so far) at every state, so it does not break ties inside one state.
+    dp = {0: {0: ((0, 0, 0), None)}}
     for covered in range(0, length + 1):
-        if covered not in dp:
+        bucket = dp.get(covered)
+        if not bucket:
             continue
-        for cur_rise, (count, _prev) in list(dp[covered].items()):
+        for cur_rise, (cost, _prev) in list(bucket.items()):
+            peak, neg_flat, count = cost
             for piece, signed in options:
                 nxt_len = covered + piece.length
                 if nxt_len > length:
                     continue
                 nxt_rise = cur_rise + signed
-                if abs(nxt_rise) > max_abs and abs(rise) <= max_abs:
+                if abs(nxt_rise) > target_abs:
                     continue
-                bucket = dp.setdefault(nxt_len, {})
-                prev_best = bucket.get(nxt_rise)
-                candidate = (count + 1, (covered, cur_rise, piece, signed))
-                if prev_best is None or candidate[0] < prev_best[0]:
-                    bucket[nxt_rise] = candidate
+                if nxt_rise != 0 and sign != 0 and (nxt_rise > 0) != (sign > 0):
+                    continue
+                piece_peak = _grade_percent(piece.real_grade)
+                new_peak = peak if piece_peak <= peak else piece_peak
+                added_flat = piece.length if signed == 0 else 0
+                new_cost = (new_peak, neg_flat - added_flat, count + 1)
+                nxt_bucket = dp.setdefault(nxt_len, {})
+                prev_best = nxt_bucket.get(nxt_rise)
+                if prev_best is None or new_cost < prev_best[0]:
+                    nxt_bucket[nxt_rise] = (
+                        new_cost,
+                        (covered, cur_rise, piece, signed),
+                    )
 
     if length not in dp or rise not in dp[length]:
         return None
@@ -389,7 +492,7 @@ def _pack_smooth(
     cursor_len = length
     cursor_rise = rise
     while cursor_len != 0 or cursor_rise != 0:
-        _count, prev = dp[cursor_len][cursor_rise]
+        _cost, prev = dp[cursor_len][cursor_rise]
         if prev is None:
             break
         prev_len, prev_rise, piece, signed = prev
@@ -399,6 +502,8 @@ def _pack_smooth(
     if sum(p.length for p, _ in out) != length:
         return None
     if sum(z for _, z in out) != rise:
+        return None
+    if any(signed > 0 for _, signed in out) and any(signed < 0 for _, signed in out):
         return None
     return out
 
@@ -561,7 +666,20 @@ def consolidate_props(
         packed = _pack_for_run(
             geom, direction, grade_token, smooth_grade, catalog
         )
-        if packed is None or len(packed) >= len(path):
+        if packed is None:
+            continue
+        if smooth_grade:
+            new_cost = _packed_cost(packed)
+            old_cost = _original_cost(path, refs, geom, catalog)
+            # (1) and (2) are a hard ceiling: more cumulative rise, or a
+            # steeper peak than the run already had, keeps the original
+            # pieces. Equal on those two still replaces when the later keys
+            # improve (more level length, then fewer pieces).
+            if new_cost[0] > old_cost[0] or new_cost[1] > old_cost[1]:
+                continue
+            if new_cost >= old_cost:
+                continue
+        elif len(packed) >= len(path):
             continue
         try:
             base_yaw = _choose_base_yaw(geom, refs, path)
@@ -607,8 +725,52 @@ def consolidate(
     return others + consolidated
 
 
+def rebuild_track_lines(entities=None):
+    """Replace ``lines.Beziers`` with one curve per route of the current props.
+
+    Import and trackhammer append a Bezier when each piece is placed. Those
+    curves still describe the pre-merge straights after consolidation changes
+    the props. ``lines.encode_lines`` only samples ``Beziers``, and the
+    heightmap, sector assignment, and switch-stand pass all read that sample,
+    so the curves are drawn again from the props that will be written.
+
+    A straight's curve is the prop origin plus the model's move at the prop
+    yaw, which is the same walk ``add_lines_from_track`` used the first time.
+    Regraded joints therefore land on the new piece ends. Arcs, banked
+    pieces, and switches are redrawn from the same models, so their curves
+    do not move. Switch stands and other non-``trakpak3_rsg`` props are not
+    rails and are skipped.
+    """
+
+    if entities is None:
+        entities = vmfpy.get_entities()
+    lines.Beziers.clear()
+    for ent in entities:
+        if not isinstance(ent, dict):
+            continue
+        model = ent.get("mdl")
+        if not model:
+            continue
+        model = str(model).replace("\\", "/")
+        if "trakpak3_rsg" not in model.lower():
+            continue
+        if model in track.track_model_library:
+            data = track.track_model_library[model]
+        else:
+            data = track.process_file(model)
+        if not data:
+            continue
+        ang = ent.get("ang", (0, 0, 0))
+        yaw = float(ang) if isinstance(ang, (int, float)) else float(ang[1])
+        pos = np.asarray(ent["pos"], dtype=float)
+        track.add_lines_from_track(pos, data, yaw)
+
+
 def consolidate_inplace(*, smooth_grade: bool = False) -> ConsolidateStats:
-    """Rewrite ``vmfpy.Entities`` straights in place. Call before ``write_to_vmf``."""
+    """Rewrite straights, then rebuild track lines from the resulting props.
+
+    Call after import and trackhammer, and before ``lines.encode_lines``.
+    """
 
     entities = vmfpy.get_entities()
     mdl_entities = [
@@ -619,6 +781,7 @@ def consolidate_inplace(*, smooth_grade: bool = False) -> ConsolidateStats:
     ]
     consolidated, stats = consolidate_props(mdl_entities, smooth_grade=smooth_grade)
     entities[:] = others + consolidated
+    rebuild_track_lines(entities)
     return stats
 
 
