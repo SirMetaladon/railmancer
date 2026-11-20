@@ -254,7 +254,11 @@ class TrackKindTests(unittest.TestCase):
         place_transition((0.0, 0.0, 0.0), "0fw", heading, (0, 0), (0, 1))
         lines.encode_lines()
         hammer = [_round_point(point) for point in lines.sampled_points]
-        switches = [prop for prop in placed if prop.get("classname") == "tp3_switch"]
+        switches = [
+            prop
+            for prop in placed
+            if isinstance(prop, dict) and prop.get("classname") == "tp3_switch"
+        ]
         self.assertEqual(len(switches), 1)
         prop = switches[0]
         parsed = _sample(track.process_file(prop["mdl"]), prop["pos"], prop["ang"][1])

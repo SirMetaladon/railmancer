@@ -198,10 +198,11 @@ class CascadiaSidingTests(unittest.TestCase):
             placed = []
             vmfpy.add_entity = placed.append
             place_transition(origin, direction, heading, before, after)
+            props = [prop for prop in placed if isinstance(prop, dict)]
             allowed = _open_ends(origin, direction, heading, before, after, total)
-            problems = audit_props(placed, track.track_model_library, allowed)
+            problems = audit_props(props, track.track_model_library, allowed)
             self.assertEqual(problems, [], f"{direction} {before}->{after} {problems}")
-            parsed = parse_vmf_track_props(_vmf(placed))
+            parsed = parse_vmf_track_props(_vmf(props))
             library, unknown = library_from_prop_names(parsed)
             self.assertEqual(unknown, [], direction)
             self.assertEqual(audit_props(parsed, library, allowed), [], direction)
