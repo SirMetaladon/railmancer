@@ -123,7 +123,8 @@ def main():
     lines.encode_lines()
     # these values are stored as global variables in the lines module.
 
-    # Scan all entities for switch stands, determine which side of them is less blocked, place accordingly
+    # Scan all entities for switch stands, determine which side of them is less blocked, place accordingly.
+    # Before staged ground hints are inserted: the stand pass measures track only.
     sectors.collapse_quantum_switchstands()
 
     # takes staged building foundation points and makes them ignore sector creation while still being a part of sectors

@@ -1,4 +1,4 @@
-from railmancer import track, lines, tools, vmfpy, vmfparse, cfg
+from railmancer import track, lines, tools, vmfpy, vmfparse, cfg, switches
 import numpy as np
 import re
 import itertools
@@ -37,63 +37,8 @@ def add_entity_to_new_map(Entity, Data):
 
         vmfpy.add_entity(Entity)
 
-        StandAngle = Entity["ang"][1] + track.direction_to_angle(
-            Data[0]["StartDirection"]
-        )
-
-        StandPos1 = np.add(
-            Pos,
-            tools.rot3(np.array([-110, -100, -17.5]), StandAngle),
-        )
-
-        StandPos2 = np.add(Pos, tools.rot3(np.array([-110, 100, -17.5]), StandAngle))
-
-        GravelPos1 = np.add(Pos, tools.rot3(np.array([-110, 0, 0]), StandAngle))
-        GravelPos2 = np.add(Pos, tools.rot3(np.array([-110, 0, 0]), StandAngle))
-        # models/trakpak3_us/switchstands/bethlehem_51a_right.mdl
-        # models/trakpak3_us/switchstands/racor_112e_right.mdl
-        # models/trakpak3_common/ballast/ballast_pile_switch.mdl
-
-        vmfpy.add_entity(
-            [
-                ["collapse", StandPos1, StandPos2],
-                {
-                    "pos": StandPos1,
-                    "mdl": "models/trakpak3_us/switchstands/bethlehem_51a_right.mdl",
-                    "ang": (0, StandAngle, 0),
-                    "lever": lever_id,
-                    "classname": "tp3_switch_lever_anim",
-                    "visgroup": "23",
-                },
-                {
-                    "pos": StandPos2,
-                    "mdl": "models/trakpak3_us/switchstands/bethlehem_51a_right.mdl",
-                    "ang": (0, 180 + StandAngle, 0),
-                    "lever": lever_id,
-                    "classname": "tp3_switch_lever_anim",
-                    "visgroup": "23",
-                },
-            ]
-        )
-
-        vmfpy.add_entity(
-            [
-                ["collapse", StandPos1, StandPos2],
-                {
-                    "pos": GravelPos1,
-                    "mdl": "models/trakpak3_common/ballast/ballast_pile_switch.mdl",
-                    "ang": (0, 180 + StandAngle, 0),
-                    "classname": "prop_static",
-                    "visgroup": "23",
-                },
-                {
-                    "pos": GravelPos2,
-                    "mdl": "models/trakpak3_common/ballast/ballast_pile_switch.mdl",
-                    "ang": (0, StandAngle, 0),
-                    "classname": "prop_static",
-                    "visgroup": "23",
-                },
-            ]
+        switches.add_switch_stand(
+            Pos, Entity["ang"][1], Data[0]["StartDirection"], lever_id
         )
 
 
