@@ -506,6 +506,115 @@ def get(sector_id, default=None):
     return Sectors.get(sector_id, default)
 
 
+def _diagonal_neighbor_id(sector_data, dx, dy):
+
+    # The diagonal sector is "go sideways, then forward" or the other order.
+    # A corkscrew can make those two walks disagree; either linked walk is a
+    # real sector touching this corner.
+    h_slot = 1 if dx > 0 else 3
+    v_slot = 0 if dy > 0 else 2
+
+    for first, second in ((h_slot, v_slot), (v_slot, h_slot)):
+
+        side_id = sector_data["neighbors"][first]
+        if not side_id or not isinstance(side_id, str):
+            continue
+
+        side = Sectors.get(side_id)
+        if not side:
+            continue
+
+        diag = side["neighbors"][second]
+        if diag and isinstance(diag, str) and diag in Sectors:
+            return diag
+
+    return None
+
+
+def _remember_corner(slots, sector_data, dx, dy, grid_name):
+
+    grid = sector_data["grid"].get(grid_name)
+    if not grid:
+        return
+    size = len(grid)
+    x = size - 1 if dx > 0 else 0
+    y = size - 1 if dy > 0 else 0
+    slots.append((grid, x, y))
+
+
+def _alias_slots(slots, mode):
+
+    # Point every slot at one list, after writing the merged value into it.
+    # Replacing the list (not just the value) is what makes a diagonal corner
+    # the same vertex as the three edge-neighbors. Later blurs write [0] and
+    # the alias keeps holding.
+    if len(slots) < 2:
+        return
+
+    values = [grid[x][y][0] for grid, x, y in slots]
+    if mode == "highest":
+        merged = max(values)
+    elif mode == "lowest":
+        merged = min(values)
+    else:
+        merged = sum(values) / len(values)
+
+    grid0, x0, y0 = slots[0]
+    grid0[x0][y0][0] = merged
+    canonical = grid0[x0][y0]
+    for grid, x, y in slots[1:]:
+        grid[x][y] = canonical
+
+
+def share_diagonal_corners():
+
+    # N/E/S/W edge merges already alias the corners of sectors that share an
+    # edge. The sector that only touches at the corner still has its own list,
+    # and that unmatched vertex is the exposed displacement corner. Gather
+    # every sector that meets at the point and alias them.
+
+    names = (
+        ("minmap", "highest"),
+        ("maxmap", "lowest"),
+        ("height", "highest"),
+    )
+    seen = set()
+
+    for sector_data in Sectors.values():
+
+        for dx, dy in ((1, 1), (1, -1), (-1, 1), (-1, -1)):
+
+            diag_id = _diagonal_neighbor_id(sector_data, dx, dy)
+            if not diag_id:
+                continue
+
+            pair = (sector_data["id"], diag_id)
+            if pair[0] > pair[1]:
+                pair = (pair[1], pair[0])
+            if pair in seen:
+                continue
+            seen.add(pair)
+
+            diag = Sectors[diag_id]
+
+            for grid_name, mode in names:
+
+                slots = []
+                _remember_corner(slots, sector_data, dx, dy, grid_name)
+                _remember_corner(slots, diag, -dx, -dy, grid_name)
+
+                h_slot = 1 if dx > 0 else 3
+                v_slot = 0 if dy > 0 else 2
+                side_h = sector_data["neighbors"][h_slot]
+                side_v = sector_data["neighbors"][v_slot]
+                if isinstance(side_h, str) and side_h in Sectors:
+                    _remember_corner(slots, Sectors[side_h], -dx, dy, grid_name)
+                if isinstance(side_v, str) and side_v in Sectors:
+                    _remember_corner(slots, Sectors[side_v], dx, -dy, grid_name)
+
+                _alias_slots(slots, mode)
+
+
 def merge_edges():
 
     # having agreed on link status, bind all the edges of the grids to each other
@@ -578,6 +687,8 @@ def merge_edges():
                     grid[hook[2][0]][hook[3][0]][0] = C
                     neighbor_grid[hook[0][0]][hook[1][0]] = grid[hook[2][0]][hook[3][0]]
 
+    share_diagonal_corners()
+
     tools.stopwatch_click("submodule", "Merge edges complete")
 
 
@@ -642,36 +753,100 @@ def blur_grid(grid_name, iterations, algorithm):
             overwrite_grid(grid, new_grid)
 
 
-def blur_min_max_grids(iterations):
+def _spread_envelope(grid, step, mode):
 
-    # Wrapper function for using blur_grid on the min and max grids to propagate ceilings and floors into adjacent sectors.
+    # One Jacobi pass. A high floor (mode "up") raises a neighbor to
+    # value - step * cell_distance, and never lowers anything. A low ceiling
+    # (mode "down") does the mirror. cell_distance is 1 orthogonally and
+    # sqrt(2) on the diagonal, and `step` is slope * node spacing, so both
+    # directions move at the same rise/run. Values only move one way, so the
+    # iteration cannot oscillate; it stops when a pass changes nothing.
+    size = len(grid)
+    new_grid = tools.blank_list_grid(2, size, 0)
+    changed = False
 
-    def raise_floor(base, list, adjust):
+    for x in range(size):
+        for y in range(size):
 
-        # take all entries and find the highest
-        numpy_list = np.array(list)
-        highest = max(numpy_list)
+            current = grid[x][y][0]
+            updated = current
 
-        return max(highest - adjust, base)
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    nx = x + dx
+                    ny = y + dy
+                    if nx < 0 or ny < 0 or nx >= size or ny >= size:
+                        continue
+                    dist = math.sqrt(2.0) if dx != 0 and dy != 0 else 1.0
+                    if mode == "up":
+                        candidate = grid[nx][ny][0] - step * dist
+                        if candidate > updated:
+                            updated = candidate
+                    else:
+                        candidate = grid[nx][ny][0] + step * dist
+                        if candidate < updated:
+                            updated = candidate
 
-    blur_grid("minmap", iterations, raise_floor)
+            if updated != current:
+                changed = True
+            new_grid[x][y][0] = updated
 
-    def lower_ceiling(base, list, adjust):
-
-        # take all entries and find the lowest
-        numpy_list = np.array(list)
-        highest = min(numpy_list)
-
-        return min(highest + adjust, base)
-
-    blur_grid("maxmap", iterations, lower_ceiling)
-
-    tools.stopwatch_click("submodule", "Blur min-max done")
+    return new_grid, changed
 
 
-def blur_heightmap_grid():
+def blur_min_max_grids(iterations=None):
 
-    # Wrapper function for using blur_grid on the heightmap.
+    # Spread floor and ceiling limits until the slope between neighbors has
+    # settled. `iterations` is an optional safety cap. Leaving it out runs
+    # long enough to cross the map; the old fixed 5 passes stopped early and
+    # left the rest of a tall transition as a cliff.
+    spacing = cfg.get("sector_real_size") / max(cfg.get("noise_grid_per_sector") - 1, 1)
+    step = cfg.get("noise_floor_ceiling_spillover_slope") * spacing
+
+    if iterations is None:
+        limit = int(cfg.get("noise_grid_per_sector") * max(cfg.get("sectors_per_map"), 1) * 2) + 8
+    else:
+        limit = max(int(iterations), 0)
+
+    passes = 0
+    settled = False
+
+    for _ in range(limit):
+
+        passes += 1
+        changed = False
+
+        for sector_data in Sectors.values():
+
+            for name, mode in (("minmap", "up"), ("maxmap", "down")):
+
+                grid = sector_data["grid"].get(name)
+                if not grid:
+                    continue
+
+                new_grid, did = _spread_envelope(grid, step, mode)
+                if did:
+                    changed = True
+                overwrite_grid(grid, new_grid)
+
+        if not changed:
+            settled = True
+            break
+
+    if not settled and limit:
+        print(
+            f"Floor/ceiling spread hit the {limit}-pass cap before the slope settled."
+        )
+
+    tools.stopwatch_click("submodule", f"Blur min-max done ({passes} passes)")
+
+
+def blur_heightmap_grid(announce=True):
+
+    # Wrapper function for using blur_grid on the heightmap. The average is
+    # not clamped here; heightmap.relax_heightmaps clamps after every pass.
 
     def cut_down_outliers(base, list, adjust):
 
@@ -688,7 +863,8 @@ def blur_heightmap_grid():
 
     blur_grid("height", 1, cut_down_outliers)
 
-    tools.stopwatch_click("submodule", "Smoothed heightmap")
+    if announce:
+        tools.stopwatch_click("submodule", "Smoothed heightmap")
 
 
 def distance_to_line(pos, sector_data=None):

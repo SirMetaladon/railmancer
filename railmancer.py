@@ -137,26 +137,22 @@ def main():
     # Takes points and puts them in buckets for sector processing.
     sectors.assign_points_to_sectors()
 
-    # From the height-buckets, create sectors that adhere to CFG parameters.
+    # Floor/ceiling limits on each node. Not the ramp; the ramp is cut-and-fill.
     heightmap.generate_sector_heightmaps()
 
-    # From the sector-heightmaps, go through and apply the merging process that allows sectors to communicate.
+    # Share edge vertices, including the diagonal corner, so displacements meet.
     sectors.merge_edges()
 
-    # Blur heightmaps according to Gaussian blurring mechanisms, constraining min and max grids.
-    # profile.start()
-    sectors.blur_min_max_grids(5)
-    # iteration count
-    # profile.end()
+    # Spread those limits across sector borders at noise_floor_ceiling_spillover_slope
+    # until the slope has settled, instead of stopping after a fixed 5 passes.
+    sectors.blur_min_max_grids()
 
-    # Apply the cut and fill relative to track that ensures terrain is not occluded.
+    # Slope-limited ramp off the smooth track field, then the rail carve.
     heightmap.cut_and_fill_sector_heightmaps()
 
-    # Blur the main heightmap to reduce jagged edges on mountains and near cuts/fill
-    sectors.blur_heightmap_grid()
-
-    # Apply cut-and-fill process again to prevent smoothing from occluding the rails.
-    heightmap.cut_and_fill_sector_heightmaps()
+    # Blur and re-clamp to the envelope and the carve, once per pass, so the
+    # average cannot lift ground over a rail or out through the floor/ceiling.
+    heightmap.relax_heightmaps()
 
     # profile.start()
     # Turn the raw sector and heightmap data into brushes and displacements.
