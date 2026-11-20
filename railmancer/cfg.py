@@ -128,16 +128,15 @@ def initialize(path: str):
     # this must be an even number for alignment to work
     CFG["sectors_per_map"] = int(CFG["max_mapsize"] / CFG["sector_real_size"])
 
-    # adjust can be calculated from CFG "slope of terrain away from hard edges" + the size of a gridsquare.
-    # Slope is (Sector size / number of gridsquares) * CFG Slope (the quantity up/down)
-    # terrain rabbithole
-
-    # Nuts to that, let's hardcode it again. But smarter.
-    decay_slope = 2
-    # there is a universe where we want to change this based on terrain NIGHTMARE NIGHTMARE NIGHTMARE
-    CFG["noise_grid_max_deviation_adjustment"] = CFG[
-        "noise_floor_ceiling_spillover_slope"
-    ] * (CFG["sector_real_size"] / CFG["noise_grid_per_sector"])
+    # The height grid runs from one sector edge to the opposite edge, so a
+    # sector is (n - 1) gaps wide, not n. Spillover slope is rise/run. One
+    # envelope step moves a floor or ceiling by exactly that slope between
+    # orthogonal nodes. Diagonal steps use the same rise/run (see sectors).
+    gaps = max(CFG["noise_grid_per_sector"] - 1, 1)
+    CFG["noise_grid_node_spacing"] = CFG["sector_real_size"] / gaps
+    CFG["noise_grid_max_deviation_adjustment"] = (
+        CFG["noise_floor_ceiling_spillover_slope"] * CFG["noise_grid_node_spacing"]
+    )
 
     tools.stopwatch_click("submodule", "CFG initialized")
 
