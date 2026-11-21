@@ -1,0 +1,478 @@
+// PRESERVE_MARKER synthetic Hammer++ map for the passthrough tests
+versioninfo
+{
+	"editorversion" "400"
+	"editorbuild" "4242"
+	"mapversion" "55"
+	"formatversion" "100"
+	"prefab" "0"
+}
+visgroups
+{
+	visgroup
+	{
+		"name" "Auto"
+		"visgroupid" "9"
+		"color" "128 128 128"
+	}
+	visgroup
+	{
+		"name" "legacy_22"
+		"visgroupid" "22"
+		"color" "11 22 33"
+	}
+	visgroup
+	{
+		"name" "legacy_23"
+		"visgroupid" "23"
+		"color" "1 1 1"
+	}
+	visgroup
+	{
+		"name" "legacy_24"
+		"visgroupid" "24"
+		"color" "1 1 1"
+	}
+	visgroup
+	{
+		"name" "legacy_25"
+		"visgroupid" "25"
+		"color" "1 1 1"
+	}
+	visgroup
+	{
+		"name" "legacy_26"
+		"visgroupid" "26"
+		"color" "1 1 1"
+	}
+	visgroup
+	{
+		"name" "legacy_27"
+		"visgroupid" "27"
+		"color" "1 1 1"
+	}
+	visgroup
+	{
+		"name" "legacy_28"
+		"visgroupid" "28"
+		"color" "1 1 1"
+	}
+	visgroup
+	{
+		"name" "legacy_77"
+		"visgroupid" "77"
+		"color" "1 1 1"
+	}
+	visgroup
+	{
+		"name" "light_env"
+		"visgroupid" "68"
+		"color" "255 255 0"
+	}
+	visgroup
+	{
+		"name" "groundhints"
+		"visgroupid" "187"
+		"color" "0 180 0"
+	}
+	visgroup
+	{
+		"name" "legacy_224"
+		"visgroupid" "224"
+		"color" "4 5 6"
+	}
+}
+viewsettings
+{
+	"bSnapToGrid" "1"
+	"bShowGrid" "1"
+	"bShowLogicalGrid" "0"
+	"nGridSpacing" "64"
+}
+palette_plus
+{
+	"color0" "9 8 7"
+}
+colorcorrection_plus
+{
+	"name0" "keep_cc"
+	"weight0" "1"
+}
+light_plus
+{
+	"samples_sun" "6"
+}
+postprocess_plus
+{
+	"enable" "1"
+}
+bgimages_plus
+{
+}
+world
+{
+	"id" "1"
+	"mapversion" "55"
+	"classname" "worldspawn"
+	"detailmaterial" "detail/keep_me"
+	"skyname" "sky_test_keep"
+	solid
+	{
+		"id" "100"
+		side
+		{
+			"id" "101"
+			"plane" "(0 0 0) (100 0 0) (100 100 0)"
+			"material" "GROUND_HINT_TEX"
+			vertices_plus
+			{
+				"v" "0 0 0"
+				"v" "100 0 0"
+				"v" "100 100 0"
+				"v" "0 100 0"
+			}
+		}
+		editor
+		{
+			"color" "0 180 0"
+			"visgroupshown" "1"
+			"visgroupautoshown" "1"
+			"visgroupid" "187"
+		}
+	}
+	hidden
+	{
+		solid
+		{
+			"id" "110"
+			side
+			{
+				"id" "111"
+				"plane" "(0 0 0) (1 0 0) (1 1 0)"
+				"material" "HIDDEN_SOLID"
+			}
+			editor
+			{
+				"color" "0 0 0"
+				"visgroupshown" "1"
+				"visgroupautoshown" "1"
+			}
+		}
+	}
+	solid
+	{
+		"id" "120"
+		side
+		{
+			"id" "121"
+			"plane" "(0 0 0) (1 0 0) (1 1 0)"
+			"material" "SHOWN_ZERO"
+		}
+		editor
+		{
+			"color" "0 0 0"
+			"visgroupshown" "0"
+			"visgroupautoshown" "1"
+			"visgroupid" "9"
+		}
+	}
+	solid
+	{
+		"id" "9000"
+		side
+		{
+			"id" "130"
+			"plane" "(0 0 0) (1 0 0) (1 1 0)"
+			"material" "DISP_SOLID"
+			dispinfo
+			{
+				"power" "3"
+				"elevation" "0"
+			}
+		}
+		editor
+		{
+			"color" "0 0 0"
+			"visgroupshown" "1"
+			"visgroupautoshown" "1"
+		}
+	}
+}
+entity
+{
+	"id" "200"
+	"classname" "prop_static"
+	"model" "models/props_keep.mdl"
+	"origin" "1 2 3"
+	"angles" "0 0 0"
+	editor
+	{
+		"color" "200 200 200"
+		"visgroupshown" "1"
+		"visgroupautoshown" "1"
+		"visgroupid" "9"
+		"visgroupid" "22"
+	}
+}
+entity
+{
+	"id" "201"
+	"classname" "prop_static"
+	"targetname" "keep_unshown"
+	"model" "models/props_unshown.mdl"
+	"origin" "4 5 6"
+	"angles" "0 0 0"
+	editor
+	{
+		"color" "200 200 200"
+		"visgroupshown" "0"
+		"visgroupautoshown" "1"
+	}
+}
+entity
+{
+	"id" "210"
+	"classname" "func_detail"
+	solid
+	{
+		"id" "211"
+		side
+		{
+			"id" "212"
+			"plane" "(0 0 0) (1 0 0) (1 1 0)"
+			"material" "DETAIL_BRUSH"
+		}
+		editor
+		{
+			"color" "0 180 0"
+			"visgroupshown" "1"
+			"visgroupautoshown" "1"
+		}
+	}
+	editor
+	{
+		"color" "0 180 0"
+		"visgroupshown" "1"
+		"visgroupautoshown" "1"
+	}
+}
+entity
+{
+	"id" "220"
+	"classname" "light"
+	"origin" "0 0 64"
+	"_light" "255 255 255 200"
+	editor
+	{
+		"color" "255 255 128"
+		"visgroupshown" "1"
+		"visgroupautoshown" "1"
+	}
+}
+entity
+{
+	"id" "221"
+	"classname" "light_spot"
+	"origin" "0 0 80"
+	editor
+	{
+		"color" "255 255 128"
+		"visgroupshown" "1"
+		"visgroupautoshown" "1"
+	}
+}
+entity
+{
+	"id" "230"
+	"classname" "trigger_teleport"
+	"target" "dest_keep"
+	"origin" "0 0 0"
+	editor
+	{
+		"color" "255 0 255"
+		"visgroupshown" "1"
+		"visgroupautoshown" "1"
+	}
+}
+entity
+{
+	"id" "240"
+	"classname" "info_player_start"
+	"origin" "0 0 8"
+	"angles" "0 90 0"
+}
+entity
+{
+	"id" "250"
+	"classname" "info_teleport_destination"
+	"targetname" "dest_keep"
+	"origin" "32 0 8"
+	editor
+	{
+		"color" "255 0 255"
+		"visgroupshown" "1"
+		"visgroupautoshown" "1"
+	}
+}
+entity
+{
+	"id" "260"
+	"classname" "tp3_sign_world"
+	"model" "models/trakpak3_us/signs/keep_sign.mdl"
+	"origin" "0 64 0"
+	"angles" "0 0 0"
+	editor
+	{
+		"color" "200 200 0"
+		"visgroupshown" "1"
+		"visgroupautoshown" "1"
+	}
+}
+entity
+{
+	"id" "280"
+	"classname" "light_environment"
+	"_light" "9 8 7 100"
+	"pitch" "-15"
+	"origin" "5 6 7"
+	editor
+	{
+		"color" "255 255 0"
+		"visgroupshown" "1"
+		"visgroupautoshown" "1"
+		"visgroupid" "68"
+	}
+}
+entity
+{
+	"id" "310"
+	"classname" "prop_static"
+	"model" "models/trakpak3_rsg/switches/sidings/p0fw_left_minr2048_+0768x00000_+1536x-0192_mn.mdl"
+	"origin" "64 128 192"
+	"angles" "0 0 0"
+	"skin" "0"
+	editor
+	{
+		"color" "220 30 220"
+		"visgroupshown" "1"
+		"visgroupautoshown" "1"
+	}
+}
+entity
+{
+	"id" "320"
+	"classname" "prop_static"
+	"model" "models/trakpak3_rsg/bumpers/bumper_stop.mdl"
+	"origin" "8 8 8"
+	"angles" "0 0 0"
+	"skin" "0"
+	editor
+	{
+		"color" "200 200 200"
+		"visgroupshown" "1"
+		"visgroupautoshown" "1"
+	}
+}
+entity
+{
+	"id" "321"
+	"classname" "prop_static"
+	"model" "models/trakpak3_rsg/diamonds/d0fw_1lt.mdl"
+	"origin" "9 9 9"
+	"angles" "0 0 0"
+	"skin" "0"
+	editor
+	{
+		"color" "200 200 200"
+		"visgroupshown" "1"
+		"visgroupautoshown" "1"
+	}
+}
+hidden
+{
+	entity
+	{
+		"id" "330"
+		"classname" "prop_static"
+		"targetname" "keep_hidden"
+		"model" "models/props_hidden.mdl"
+		"origin" "7 7 7"
+		"angles" "0 0 0"
+		editor
+		{
+			"color" "1 1 1"
+			"visgroupshown" "0"
+			"visgroupautoshown" "1"
+		}
+	}
+}
+hidden
+{
+	entity
+	{
+		"id" "300"
+		"classname" "prop_static"
+		"model" "models/trakpak3_rsg/straights/s0384_0fw_0pg_+0384x00000x0000.mdl"
+		"origin" "10 20 30"
+		"angles" "0 90 0"
+		"skin" "0"
+		editor
+		{
+			"color" "220 30 220"
+			"visgroupshown" "1"
+			"visgroupautoshown" "1"
+		}
+	}
+	entity
+	{
+		"id" "301"
+		"classname" "prop_static"
+		"targetname" "keep_sibling"
+		"model" "models/props_sibling.mdl"
+		"origin" "11 21 31"
+		"angles" "0 0 0"
+		editor
+		{
+			"color" "1 1 1"
+			"visgroupshown" "1"
+			"visgroupautoshown" "1"
+		}
+	}
+}
+hidden
+{
+	entity
+	{
+		"id" "302"
+		"classname" "prop_static"
+		"model" "models/trakpak3_rsg/straights/s0384_0fw_0pg_+0384x00000x0000.mdl"
+		"origin" "12 22 32"
+		"angles" "0 0 0"
+		"skin" "1"
+		editor
+		{
+			"color" "220 30 220"
+			"visgroupshown" "1"
+			"visgroupautoshown" "1"
+		}
+	}
+}
+cameras
+{
+	"activecamera" "7"
+	camera
+	{
+		"position" "[1 2 3]"
+		"look" "[4 5 6]"
+	}
+}
+cordons
+{
+	"active" "0"
+}
+cordon
+{
+	"mins" "(0 0 0)"
+	"maxs" "(64 64 64)"
+	"active" "0"
+}

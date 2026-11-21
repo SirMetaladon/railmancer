@@ -234,6 +234,17 @@ def split_vmf(filename: str | Path) -> VMFSections:
     with path.open("r", encoding="utf-8", newline="") as f:
         text = f.read()
 
+    return split_vmf_text(text)
+
+
+def split_vmf_text(text: str) -> VMFSections:
+    """
+    Split VMF text already in memory.
+
+    Same sections as split_vmf. The caller keeps the original string when
+    the output has to preserve that file instead of rebuilding it.
+    """
+
     blocks = parse_blocks(text)
 
     if not blocks:

@@ -151,7 +151,13 @@ def brush(Brush: list):
 
     VisgroupData = ""
     if len(Brush) > 9:
-        VisgroupData = f'\n                    "visgroupid" "{Brush[9]}"'
+        # Explicit id, including the pathfinding cubes on visgroup 24.
+        VisgroupData = f'\n                    "visgroupid" "{resolve_visgroup(Brush[9])}"'
+    elif Brush[6] in _TERRAIN_BRUSH_KINDS:
+        # Floors, ceilings, sky walls, displacements, visclusters.
+        VisgroupData = (
+            f'\n                    "visgroupid" "{resolve_visgroup(VISGROUP_TERRAIN)}"'
+        )
 
     return f"""
     {Class}
@@ -277,6 +283,11 @@ def brush(Brush: list):
 
 def add_light_environment():
 
+    # The input's own sun wins when it is actually in the map. A light that
+    # exists only inside hidden { } does not, so Railmancer still adds one.
+    if base_map is not None and base_map.visible_light:
+        return
+
     add_entity({"classname": "light_environment"})
 
 
@@ -298,7 +309,9 @@ def synthesize_entities(Entities):
         VisgroupData = ""
         if Ent.get("visgroup"):
 
-            VisgroupData = f'\n                    "visgroupid" "{Ent.get("visgroup")}"'
+            VisgroupData = (
+                f'\n                    "visgroupid" "{resolve_visgroup(Ent.get("visgroup"))}"'
+            )
 
         if Ent.get("classname", False) == "tp3_switch":
 
@@ -379,7 +392,7 @@ def synthesize_entities(Entities):
                 editor
                 {{
                     "color" "220 30 220"
-                    "visgroupid" "77"
+                    "visgroupid" "{resolve_visgroup(VISGROUP_LIGHT)}"
                     "visgroupshown" "1"
                     "visgroupautoshown" "1"
                     "logicalpos" "[1500 1500]"
@@ -561,6 +574,186 @@ def _static_prop(entity):
 # Group ids live up here so a cell per sector cannot collide with that counter.
 GROUP_ID_BASE = 1000000000
 
+# Fresh-file visgroup ids. A loaded input map does not use these numbers:
+# assemble_vmf allocates a new id above that file's max visgroupid for each
+# one, and resolve_visgroup() rewrites the literals below on the way out.
+# 77 is the light_environment editor id. It used to be written with no
+# visgroup block; the Light child under Railmancer is that definition.
+VISGROUP_SCATTER = "22"
+VISGROUP_NEW_TRACK = "23"
+VISGROUP_BLOCKS = "24"
+VISGROUP_OLD_TRACK = "25"
+VISGROUP_TERRAIN = "26"
+VISGROUP_SWITCH_STANDS = "27"
+VISGROUP_RAILMANCER = "28"
+VISGROUP_ORIGINAL = "29"
+VISGROUP_LIGHT = "77"
+
+# (logical id, Hammer name, parent name or None). Order is the allocation
+# order and the order they are written under the parent.
+_VISGROUP_SPECS = (
+    (VISGROUP_RAILMANCER, "Railmancer", None, "234 131 192"),
+    (VISGROUP_SCATTER, "Scatter", "Railmancer", "234 131 192"),
+    (VISGROUP_NEW_TRACK, "New Track", "Railmancer", "234 131 192"),
+    (VISGROUP_BLOCKS, "Blocks", "Railmancer", "234 131 192"),
+    (VISGROUP_TERRAIN, "Terrain", "Railmancer", "234 131 192"),
+    (VISGROUP_SWITCH_STANDS, "Switch Stands", "Railmancer", "234 131 192"),
+    (VISGROUP_OLD_TRACK, "Old Track", "Railmancer", "234 131 192"),
+    (VISGROUP_LIGHT, "Light", "Railmancer", "234 131 192"),
+    (VISGROUP_ORIGINAL, "Original", None, "90 140 200"),
+)
+
+# Sector shells and displacements. Pathfinding cubes pass visgroup 24
+# explicitly and stay in Blocks; these have no visgroup of their own.
+_TERRAIN_BRUSH_KINDS = ("wall", "floor", "ceiling", "displacement", "viscluster")
+
+# Set by parser.import_track when a VMF is loaded. None means "write a
+# fresh file", which is also what an empty import path selects.
+base_map = None
+
+
+class _BaseMap:
+    """The input VMF, the track-entity spans to drop, and allocated ids."""
+
+    def __init__(self, text, consumed_spans, max_id, max_visgroupid, visible_light, vis_ids):
+        self.text = text
+        self.consumed_spans = consumed_spans
+        self.max_id = max_id
+        self.max_visgroupid = max_visgroupid
+        self.visible_light = visible_light
+        self.vis_ids = vis_ids
+
+
+def clear_base_map():
+
+    global base_map
+    base_map = None
+
+
+def resolve_visgroup(stored):
+
+    # Railmancer code stores the fresh-file ids ("22" and so on). With no
+    # input those are the real ids. With an input they are rewritten to the
+    # ids allocated above that file, so Isaiah's own visgroup 22 is left
+    # alone and Scatter does not land on it.
+    key = str(stored)
+    if base_map is None:
+        return key
+    return base_map.vis_ids.get(key, key)
+
+
+def _max_quoted_int(text, key):
+
+    numbers = [int(value) for value in re.findall(rf'"{key}"\s+"(\d+)"', text)]
+    if not numbers:
+        return 0
+    return max(numbers)
+
+
+def _entity_hidden(blocks, index):
+
+    current = blocks[index].parent
+    while current is not None:
+        if blocks[current].name == "hidden":
+            return True
+        current = blocks[current].parent
+    return False
+
+
+def _visible_light_environment(text, blocks):
+
+    # "Hidden" here is the hidden { } wrapper. visgroupshown 0 is a
+    # different switch: the entity is still the map's sun, so Railmancer
+    # must not add a second one.
+    for index, block in enumerate(blocks):
+        if block.name != "entity" or block.close_brace < 0:
+            continue
+        body = text[block.start : block.close_brace + 1]
+        match = re.search(r'"classname"\s+"([^"]*)"', body)
+        if not match or match.group(1) != "light_environment":
+            continue
+        if _entity_hidden(blocks, index):
+            continue
+        return True
+    return False
+
+
+def set_base_map(text, consumed_spans):
+
+    """Remember the input file as the document write_to_vmf will extend.
+
+    consumed_spans are (start, end) slices of the entity blocks the parser
+    rebuilt. The splicer deletes those and, when a top-level hidden block
+    contained nothing else, deletes the wrapper with them.
+    """
+
+    global base_map
+
+    from railmancer import vmfparse
+
+    blocks = vmfparse.parse_blocks(text)
+    max_visgroupid = _max_quoted_int(text, "visgroupid")
+    vis_ids = {}
+    next_vis = max_visgroupid + 1
+    for logical, _name, _parent, _color in _VISGROUP_SPECS:
+        vis_ids[logical] = str(next_vis)
+        next_vis += 1
+
+    base_map = _BaseMap(
+        text=text,
+        consumed_spans=list(consumed_spans),
+        max_id=_max_quoted_int(text, "id"),
+        max_visgroupid=max_visgroupid,
+        visible_light=_visible_light_environment(text, blocks),
+        vis_ids=vis_ids,
+    )
+
+
+def _visgroup_block(name, vis_id, children="", indent="        ", color="234 131 192"):
+
+    return (
+        f"{indent}visgroup\n"
+        f"{indent}{{\n"
+        f'{indent}    "name" "{name}"\n'
+        f'{indent}    "visgroupid" "{vis_id}"\n'
+        f'{indent}    "color" "{color}"\n'
+        f"{children}"
+        f"{indent}}}\n"
+    )
+
+
+def _format_visgroup_tree(id_of, include_original):
+
+    # Children are nested inside Railmancer so one checkbox hides everything
+    # this run added. Original is a sibling: preserved input objects join it
+    # by an extra visgroupid line, and Railmancer's own objects do not.
+    children = ""
+    for logical, name, parent, color in _VISGROUP_SPECS:
+        if parent != "Railmancer":
+            continue
+        children += _visgroup_block(
+            name, id_of[logical], indent="            ", color=color
+        )
+    text = _visgroup_block(
+        "Railmancer",
+        id_of[VISGROUP_RAILMANCER],
+        children=children,
+        indent="        ",
+    )
+    if include_original:
+        text += _visgroup_block(
+            "Original",
+            id_of[VISGROUP_ORIGINAL],
+            indent="        ",
+            color="90 140 200",
+        )
+    return text
+
+
+def _fresh_vis_ids():
+
+    return {logical: logical for logical, _name, _parent, _color in _VISGROUP_SPECS}
+
 
 def _clamp_index(value, count):
     if value < 0:
@@ -606,10 +799,42 @@ def scatter_bucket(entity):
     return (sector_id, ix, iy, grouping)
 
 
+def _plan_new_ids():
+
+    """Pick the object-id counter and the scatter-group id floor.
+
+    Fresh files keep the old counters: objects from 1001, groups from
+    GROUP_ID_BASE. An input file starts objects just above its max "id".
+    Groups stay at GROUP_ID_BASE while that range is still above the
+    input. If the input already used an id up there, groups take the ids
+    immediately above that max and objects continue after the last group,
+    so the two counters cannot meet.
+    """
+
+    global ID
+    entities = get_entities()
+    if base_map is None:
+        group_ids = assign_scatter_groups(entities, GROUP_ID_BASE)
+        ID = 1000
+        return group_ids
+
+    if base_map.max_id + 1 >= GROUP_ID_BASE:
+        group_ids = assign_scatter_groups(entities, base_map.max_id + 1)
+        ID = base_map.max_id + len(group_ids)
+        return group_ids
+
+    group_ids = assign_scatter_groups(entities, GROUP_ID_BASE)
+    ID = base_map.max_id
+    return group_ids
+
+
 # One group per occupied (sector, cell x, cell y, grouping), including a lone prop.
-# Id is GROUP_ID_BASE plus the key's rank in sorted order, so it does not
+# Id is the group floor plus the key's rank in sorted order, so it does not
 # depend on prop order or on how many solids were written.
-def assign_scatter_groups(entities):
+def assign_scatter_groups(entities, group_base=None):
+    if group_base is None:
+        group_base = GROUP_ID_BASE
+
     buckets = {}
     for entity in entities:
         if _static_prop(entity):
@@ -621,7 +846,7 @@ def assign_scatter_groups(entities):
 
     group_ids = []
     for index, key in enumerate(sorted(buckets)):
-        group_id = str(GROUP_ID_BASE + index)
+        group_id = str(group_base + index)
         group_ids.append(group_id)
         for entity in buckets[key]:
             entity["groupid"] = group_id
@@ -646,10 +871,279 @@ def format_prop_groups(group_ids):
 
 
 # Assemble the brushes, entities, and brush-entity strings along with header information.
+def _covered(position, spans):
+
+    return any(start <= position < end for start, end in spans)
+
+
+def _block_span(text, block):
+
+    from railmancer import vmfparse
+
+    return vmfparse.line_start(text, block.start), block.close_brace + 1
+
+
+def _deletion_spans(text, blocks, consumed_spans):
+
+    """Spans to cut out of the input.
+
+    Each consumed track entity is removed. A top-level hidden block whose
+    entities are all consumed goes with them, so a rebuilt piece does not
+    leave an empty hidden wrapper behind. A hidden block that still holds
+    something else keeps the wrapper and loses only the track entity.
+    """
+
+    from railmancer import vmfparse
+
+    consumed_entities = set()
+    for index, block in enumerate(blocks):
+        if block.name != "entity" or block.close_brace < 0:
+            continue
+        start, end = _block_span(text, block)
+        if any(begin <= start and end <= stop for begin, stop in consumed_spans):
+            consumed_entities.add(index)
+
+    swallowed = set()
+    deletions = []
+    for index, block in enumerate(blocks):
+        if block.name != "hidden" or block.parent is not None or block.close_brace < 0:
+            continue
+        entities = [
+            child
+            for child, child_block in enumerate(blocks)
+            if child_block.name == "entity"
+            and vmfparse.has_ancestor(blocks, child, {index})
+        ]
+        if entities and all(child in consumed_entities for child in entities):
+            deletions.append(_block_span(text, block))
+            swallowed.update(entities)
+
+    for index in sorted(consumed_entities):
+        if index in swallowed:
+            continue
+        deletions.append(_block_span(text, blocks[index]))
+    return deletions
+
+
+def _direct_editor(blocks, parent_index):
+
+    for block in blocks:
+        if (
+            block.name == "editor"
+            and block.parent == parent_index
+            and block.close_brace >= 0
+        ):
+            return block
+    return None
+
+
+def _original_membership_inserts(text, blocks, deletions, original_id):
+
+    """One extra visgroupid line on every preserved solid and entity.
+
+    Hammer treats repeated visgroupid keys as membership in each group.
+    The line is inserted on the editor's closing line, so the rest of
+    that object stays as it was, including visgroupshown 0 and any
+    hidden { } wrapper around it. An object with no editor gets a small
+    one; otherwise it could not join Original.
+    """
+
+    from railmancer import vmfparse
+
+    inserts = []
+    needle = f'"visgroupid" "{original_id}"'
+    for index, block in enumerate(blocks):
+        if block.name not in ("solid", "entity") or block.close_brace < 0:
+            continue
+        if _covered(block.start, deletions):
+            continue
+
+        editor = _direct_editor(blocks, index)
+        if editor is not None:
+            if _covered(editor.start, deletions):
+                continue
+            body = text[editor.open_brace : editor.close_brace]
+            if needle in body:
+                continue
+            # The key goes on its own line immediately above the editor's
+            # closing brace, which stays exactly as it was.
+            line_at = vmfparse.line_start(text, editor.close_brace)
+            indent = text[line_at : editor.close_brace]
+            extra = "\t" if "\t" in indent else "    "
+            inserts.append((line_at, f'{indent}{extra}"visgroupid" "{original_id}"\n'))
+            continue
+
+        line_at = vmfparse.line_start(text, block.close_brace)
+        indent = text[line_at : block.close_brace]
+        inner = indent + ("\t" if "\t" in indent else "    ")
+        inserts.append(
+            (
+                line_at,
+                (
+                    f"{indent}editor\n"
+                    f"{indent}{{\n"
+                    f'{inner}"visgroupid" "{original_id}"\n'
+                    f'{inner}"visgroupshown" "1"\n'
+                    f'{inner}"visgroupautoshown" "1"\n'
+                    f"{indent}}}\n"
+                ),
+            )
+        )
+    return inserts
+
+
+def _visgroup_insert(text, blocks, tree):
+
+    from railmancer import vmfparse
+
+    visgroups = [
+        block
+        for block in blocks
+        if block.name == "visgroups" and block.parent is None and block.close_brace >= 0
+    ]
+    if visgroups:
+        # In front of the visgroups block's closing line, so every group
+        # that was already there is unchanged.
+        at = vmfparse.line_start(text, visgroups[0].close_brace)
+        return at, tree
+
+    worlds = [
+        block
+        for block in blocks
+        if block.name == "world" and block.parent is None and block.close_brace >= 0
+    ]
+    if not worlds:
+        raise ValueError("The input VMF has no top-level world block.")
+    at = vmfparse.line_start(text, worlds[0].start)
+    return at, "visgroups\n{\n" + tree + "}\n"
+
+
+def _line_after(text, position):
+
+    # The first character of the line after the one that holds position.
+    # Inserting on the closing line itself would land inside that block:
+    # line_start of the character after "}" is still the "}" line, because
+    # that character is the newline that ends it.
+    newline = text.find("\n", position)
+    if newline < 0:
+        return len(text)
+    return newline + 1
+
+
+def _world_and_entity_insert_points(text, blocks):
+
+    """Where new world contents and new entities are spliced.
+
+    World contents go in front of the world's closing line, which is
+    where this writer already puts solids and group blocks. Entities go
+    on the line after the last top-level entity or hidden-entity block,
+    which is in front of cameras and cordons and outside that block.
+    """
+
+    from railmancer import vmfparse
+
+    worlds = [
+        block
+        for block in blocks
+        if block.name == "world" and block.parent is None and block.close_brace >= 0
+    ]
+    if len(worlds) != 1:
+        raise ValueError(
+            f"Expected exactly one top-level world block, found {len(worlds)}."
+        )
+    world = worlds[0]
+    entries = []
+    for index, block in enumerate(blocks):
+        if block.close_brace < 0:
+            continue
+        if block.name == "entity" and block.parent is None:
+            entries.append(block)
+            continue
+        if block.name != "hidden" or block.parent is not None:
+            continue
+        contains_entity = any(
+            child.name == "entity"
+            and vmfparse.has_ancestor(blocks, child_index, {index})
+            for child_index, child in enumerate(blocks)
+        )
+        if contains_entity:
+            entries.append(block)
+
+    if entries:
+        last = max(entries, key=lambda block: block.close_brace)
+        entity_at = _line_after(text, last.close_brace)
+    else:
+        entity_at = _line_after(text, world.close_brace)
+
+    world_at = vmfparse.line_start(text, world.close_brace)
+    return world_at, entity_at
+
+
+def _apply_edits(text, deletions, insertions):
+
+    # Drop an insert that would have landed inside a block we are deleting
+    # (the editor of a consumed track entity). Then apply from the end of
+    # the string so earlier indexes stay put.
+    insertions = [
+        (pos, chunk)
+        for pos, chunk in insertions
+        if chunk and not _covered(pos, deletions)
+    ]
+    operations = [("del", start, end, "") for start, end in deletions]
+    operations.extend(("ins", pos, pos, chunk) for pos, chunk in insertions)
+    operations.sort(key=lambda item: item[1], reverse=True)
+    for kind, start, end, chunk in operations:
+        if kind == "del":
+            text = text[:start] + text[end:]
+        else:
+            text = text[:start] + chunk + text[start:]
+    return text
+
+
+def _splice_base(brush_string, group_string, entity_string):
+
+    from railmancer import vmfparse
+
+    text = base_map.text
+    blocks = vmfparse.parse_blocks(text)
+    deletions = _deletion_spans(text, blocks, base_map.consumed_spans)
+    insertions = _original_membership_inserts(
+        text, blocks, deletions, base_map.vis_ids[VISGROUP_ORIGINAL]
+    )
+    insertions.append(
+        _visgroup_insert(
+            text,
+            blocks,
+            _format_visgroup_tree(base_map.vis_ids, include_original=True),
+        )
+    )
+
+    world_at, entity_at = _world_and_entity_insert_points(text, blocks)
+    world_chunk = brush_string + group_string
+    if world_chunk and not world_chunk.endswith("\n"):
+        world_chunk += "\n"
+    if world_chunk:
+        insertions.append((world_at, world_chunk))
+
+    if entity_string and not entity_string.endswith("\n"):
+        entity_string += "\n"
+    if entity_string:
+        insertions.append((entity_at, entity_string))
+
+    return _apply_edits(text, deletions, insertions)
+
+
 def assemble_vmf():
 
-    global ID
-    ID = 1000
+    group_ids = _plan_new_ids()
+    BrushString = synthesize_brushes()
+    GroupString = format_prop_groups(group_ids)
+    EntityString = synthesize_entities(get_entities())
+    BrushEntityString = synthesize_brush_entities()
+    new_entities = EntityString + BrushEntityString
+
+    if base_map is not None:
+        return _splice_base(BrushString, GroupString, new_entities)
 
     Start = """versioninfo
     {
@@ -661,31 +1155,7 @@ def assemble_vmf():
     }
     visgroups
     {
-        visgroup
-        {
-            "name" "Scatter"
-            "visgroupid" "22"
-            "color" "234 131 192"
-        }
-        visgroup
-        {
-            "name" "New Track"
-            "visgroupid" "23"
-            "color" "234 131 192"
-        }
-        visgroup
-        {
-            "name" "Blocks"
-            "visgroupid" "24"
-            "color" "234 131 192"
-        }
-        visgroup
-        {
-            "name" "Old Track"
-            "visgroupid" "25"
-            "color" "234 131 192"
-        }
-    }
+__VISGROUPS__    }
     viewsettings
     {
         "bSnapToGrid" "1"
@@ -784,21 +1254,12 @@ def assemble_vmf():
         "active" "0"
     }"""
 
-    BrushString = synthesize_brushes()
-    group_ids = assign_scatter_groups(get_entities())
-    GroupString = format_prop_groups(group_ids)
-    EntityString = synthesize_entities(get_entities())
-    BrushEntityString = synthesize_brush_entities()
-
-    return (
-        Start
-        + BrushString
-        + GroupString
-        + "}"
-        + EntityString
-        + BrushEntityString
-        + End
+    Start = Start.replace(
+        "__VISGROUPS__",
+        _format_visgroup_tree(_fresh_vis_ids(), include_original=False),
     )
+
+    return Start + BrushString + GroupString + "}" + new_entities + End
 
 
 # Save the assembled VMF. Group blocks sit inside world, after the solids.
