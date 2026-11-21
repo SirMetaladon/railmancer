@@ -175,14 +175,14 @@ def convert_nodes_to_bezier(
     d0 = dir1 / np.linalg.norm(dir1)
     d3 = -dir2 / np.linalg.norm(dir2)
 
-    # Check if the direction vectors are collinear
-    cross_directions = np.cross(d0, d3)
+    # z-component of the cross product. np.cross no longer accepts 2-vectors.
+    cross_directions = d0[0] * d3[1] - d0[1] * d3[0]
     is_collinear_directions = np.isclose(cross_directions, 0)
 
     # Check if the points are aligned along the direction vector
     p3_p0 = p3 - p0
     p3_p0_dir = p3_p0 / np.linalg.norm(p3_p0)  # Unit vector in the direction of P3 - P0
-    cross_points = np.cross(d0, p3_p0_dir)
+    cross_points = d0[0] * p3_p0_dir[1] - d0[1] * p3_p0_dir[0]
     is_aligned_points = np.isclose(cross_points, 0)
 
     if is_collinear_directions and is_aligned_points:

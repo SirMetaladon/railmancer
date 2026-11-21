@@ -1,0 +1,5 @@
+numpy
+scipy
+# noisefield samples Perlin via pnoise3. The noise package builds a C
+# extension and needs Python headers; there is no binary wheel for it.
+noise

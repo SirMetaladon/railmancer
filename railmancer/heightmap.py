@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import random, itertools, math, time
 from railmancer import lines, sectors, tools, terrain, cfg, noisefield
 
@@ -90,6 +89,8 @@ def field_interpolator(sector_object, field, noise_x, noise_y):
 
 def display_perlin_layers(layers, cmap="viridis"):
     """Display multiple layers of Perlin noise."""
+    import matplotlib.pyplot as plt
+
     num_layers = len(layers)
     fig, axs = plt.subplots(1, num_layers, figsize=(15, 5))
     for i, layer in enumerate(layers):
@@ -221,8 +222,16 @@ def _track_samples(sector_data, x, y, radius, scan_cap):
     # Samples inside a radius, nearest first. A fixed k of 6-8 only reaches
     # a couple of hundred units along the near rail, so the other rail pops
     # into the set already closer than the near one and the blended z jumps.
-    # The radius is chosen by the caller from the nearest hit. scipy's ball
-    # query is the whole neighborhood; the cap is only a safety stop.
+    # The radius is chosen by the caller from the nearest hit. The cap is
+    # only a safety stop.
+    #
+    # A capped scan asks the tree for those k nearest inside the radius,
+    # instead of pulling the whole ball into Python to measure and sort.
+    # scipy's distance_upper_bound is exclusive, and the ball kept a sample
+    # sitting exactly on the radius, so the bound is the next float above
+    # it. Slots past the last in-range neighbor come back infinite, with
+    # index len(points). Nothing inside the radius still falls back to the
+    # single nearest sample. scan_cap <= 0 means no cap: that is the ball.
     tree = sector_data.get("kdtree")
     points = sector_data.get("points")
     if points is None:
@@ -235,6 +244,42 @@ def _track_samples(sector_data, x, y, radius, scan_cap):
         dist = math.hypot(float(point[0]) - x, float(point[1]) - y)
         return [(dist, float(point[0]), float(point[1]), float(point[2]))]
 
+    cap = int(scan_cap)
+    if cap <= 0:
+        return _track_samples_ball(tree, points, x, y, radius)
+
+    # More neighbors than the tree holds would only pad the tail with
+    # infinite distances. Asking for that many also allocates the tail.
+    k = cap if cap < len(points) else len(points)
+    bound = math.nextafter(float(radius), math.inf)
+    dists, idxs = tree.query((x, y), k=k, distance_upper_bound=bound)
+
+    samples = []
+    n_points = len(points)
+    for dist, idx in zip(np.atleast_1d(dists), np.atleast_1d(idxs)):
+        dist = float(dist)
+        idx = int(idx)
+        # Missing neighbors: infinite distance, idx == len(points).
+        if not math.isfinite(dist) or idx < 0 or idx >= n_points:
+            continue
+        point = points[idx]
+        samples.append((dist, float(point[0]), float(point[1]), float(point[2])))
+    if samples:
+        return samples
+
+    dist, idx = tree.query((x, y))
+    idx = int(idx)
+    dist = float(dist)
+    if idx < 0 or idx >= n_points or not math.isfinite(dist):
+        return []
+    point = points[idx]
+    return [(dist, float(point[0]), float(point[1]), float(point[2]))]
+
+
+def _track_samples_ball(tree, points, x, y, radius):
+
+    # Uncapped neighborhood. The ball, Python distances, nearest first.
+    # An empty ball falls back to the single nearest sample, even outside.
     idxs = tree.query_ball_point((x, y), radius)
     if not idxs:
         dist, idx = tree.query((x, y))
@@ -244,9 +289,10 @@ def _track_samples(sector_data, x, y, radius, scan_cap):
         dists = None
 
     samples = []
+    n_points = len(points)
     for n, idx in enumerate(idxs):
         idx = int(idx)
-        if idx < 0 or idx >= len(points):
+        if idx < 0 or idx >= n_points:
             continue
         point = points[idx]
         px, py, pz = float(point[0]), float(point[1]), float(point[2])
@@ -259,9 +305,6 @@ def _track_samples(sector_data, x, y, radius, scan_cap):
         samples.append((dist, px, py, pz))
 
     samples.sort(key=lambda sample: sample[0])
-    cap = int(scan_cap)
-    if cap > 0 and len(samples) > cap:
-        samples = samples[:cap]
     return samples
 
 
@@ -461,16 +504,13 @@ def carve_deviation(distance, terrain_block, slope_cap):
     return raw_hit + slope_cap * (run - run_hit)
 
 
-def carve_to_tracks(height, tracks, terrain_block):
+def _carve_bounds(tracks, terrain_block):
 
-    # Every distinct nearby rail contributes a window around its own bed.
-    # The ground has to sit in ALL of those windows. The upper edge is what
-    # stops a second, lower rail from being buried. If the windows do not
-    # overlap (two rails at very different heights in the same cut), the
-    # upper edge wins: leave the higher rail in the air rather than fill
-    # over the lower one.
+    # Highest floor and lowest ceiling of the per-rail windows. Same fold
+    # as the carve: when the windows miss each other, lower is pulled up
+    # to upper and the upper edge wins.
     if not tracks:
-        return height
+        return None
 
     slope_cap = _slope_cap(terrain_block)
     offset = terrain_block["height_track_to_terrain"]
@@ -487,7 +527,53 @@ def carve_to_tracks(height, tracks, terrain_block):
 
     if lower > upper:
         lower = upper
+    return lower, upper
+
+
+def carve_to_tracks(height, tracks, terrain_block):
+
+    # Every distinct nearby rail contributes a window around its own bed.
+    # The ground has to sit in ALL of those windows. The upper edge is what
+    # stops a second, lower rail from being buried. If the windows do not
+    # overlap (two rails at very different heights in the same cut), the
+    # upper edge wins: leave the higher rail in the air rather than fill
+    # over the lower one.
+    bounds = _carve_bounds(tracks, terrain_block)
+    if bounds is None:
+        return height
+    lower, upper = bounds
     return min(max(height, lower), upper)
+
+
+def _clamp_window(lo, hi, tracks, terrain_block):
+
+    # clamp(lo, hi) -> carve -> clamp(lo, hi), as one closed window.
+    #
+    # tools.clamped sorts its limits, and _node_limits already returns
+    # lo <= hi, so the envelope is [lo, hi]. Carve is itself a clamp, to
+    # [lower, upper]. min and max return one of their inputs, so folding
+    # the three clamps together is exact:
+    #
+    #   wlo = max(lo, lower)
+    #   whi = min(hi, upper)
+    #
+    # when the two intervals meet. When the carve misses the envelope the
+    # intersection is empty and the last clamp pins every height to the
+    # near side: lo if the carve sits below, hi if it sits above. No rails
+    # means the carve is the identity and the window is the envelope.
+    if lo > hi:
+        lo, hi = hi, lo
+    bounds = _carve_bounds(tracks, terrain_block)
+    if bounds is None:
+        return lo, hi
+    lower, upper = bounds
+    wlo = max(lo, lower)
+    whi = min(hi, upper)
+    if wlo > whi:
+        if upper < lo:
+            return lo, lo
+        return hi, hi
+    return wlo, whi
 
 
 def _node_limits(sector_data, noise_x, noise_y, terrain_block):
@@ -579,7 +665,61 @@ def height_at_node(sector_data, noise_x, noise_y, terrain_block):
 
     height = tools.clamped(bed + rise, lo, hi)
     height = carve_to_tracks(height, info["tracks"], terrain_block)
-    return tools.clamped(height, lo, hi)
+    height = tools.clamped(height, lo, hi)
+    # Same lo/hi and the same rails the three lines above just used.
+    _store_clamp_window(
+        sector_data, noise_x, noise_y, lo, hi, info["tracks"], terrain_block
+    )
+    return height
+
+
+def _store_clamp_window(sector_data, noise_x, noise_y, lo, hi, tracks, terrain_block):
+
+    # One window per node, owned by this sector. minmap, maxmap, and height
+    # share edge vertices across sectors; these grids do not. A corner that
+    # two sectors both own is still clamped by each of them, with that
+    # sector's rails and that sector's floor and ceiling.
+    grid = sector_data["grid"]
+    span = len(grid["height"])
+    lo_grid = grid.get("clamp_lo")
+    hi_grid = grid.get("clamp_hi")
+    if (
+        lo_grid is None
+        or hi_grid is None
+        or len(lo_grid) != span
+        or len(hi_grid) != span
+    ):
+        lo_grid = tools.blank_list_grid(2, span, None)
+        hi_grid = tools.blank_list_grid(2, span, None)
+        grid["clamp_lo"] = lo_grid
+        grid["clamp_hi"] = hi_grid
+
+    wlo, whi = _clamp_window(lo, hi, tracks, terrain_block)
+    lo_grid[noise_x][noise_y][0] = wlo
+    hi_grid[noise_x][noise_y][0] = whi
+
+
+def _stored_clamp_window(sector_data, noise_x, noise_y):
+
+    grid = sector_data.get("grid")
+    if not grid:
+        return None
+    lo_grid = grid.get("clamp_lo")
+    hi_grid = grid.get("clamp_hi")
+    if not lo_grid or not hi_grid:
+        return None
+    if (
+        noise_x < 0
+        or noise_y < 0
+        or noise_x >= len(lo_grid)
+        or noise_y >= len(lo_grid)
+    ):
+        return None
+    lo = lo_grid[noise_x][noise_y][0]
+    hi = hi_grid[noise_x][noise_y][0]
+    if lo is None or hi is None:
+        return None
+    return lo, hi
 
 
 def clamp_existing_height(sector_data, noise_x, noise_y, terrain_block, height):
@@ -588,6 +728,15 @@ def clamp_existing_height(sector_data, noise_x, noise_y, terrain_block, height):
     # back into the floor/ceiling envelope and into every nearby rail's carve.
     # Doing this every pass is what makes the neighbors slope into the cut
     # instead of the average lifting the ground back over the rails.
+    #
+    # Rails and the envelope do not move during relax, so the contours pass
+    # stores the window and this is a min/max. A node with no stored window
+    # (a clamp before contours) recomputes the old sequence.
+    window = _stored_clamp_window(sector_data, noise_x, noise_y)
+    if window is not None:
+        wlo, whi = window
+        return min(max(height, wlo), whi)
+
     real_x, real_y = convert_noise_to_real_pos(noise_x, noise_y, sector_data)
     info = track_field(sector_data, real_x, real_y, terrain_block)
     lo, hi = _node_limits(sector_data, noise_x, noise_y, terrain_block)
@@ -598,6 +747,8 @@ def clamp_existing_height(sector_data, noise_x, noise_y, terrain_block, height):
 
 def cut_and_fill_sector_heightmaps():
 
+    # The ramp and the carve. Each node keeps the clamp window just applied,
+    # so the relax passes do not rebuild the track field to put it back.
     terrain_block = terrain.get()
 
     for sector_data in sectors.get_all().values():
@@ -639,7 +790,8 @@ def relax_heightmaps():
 
     # Blur, then re-clamp, and repeat. The clamp writes back into the shared
     # edge cells, so the next blur sees the cut and the floor/ceiling and
-    # pulls the neighbors toward them.
+    # pulls the neighbors toward them. The window was stored per sector
+    # during contours; rails and the envelope do not move here.
     terrain_block = terrain.get()
     passes = max(int(terrain_block.get("height_blur_passes", 3)), 0)
 
