@@ -158,7 +158,9 @@ class HeightBlockTests(unittest.TestCase):
         self.assertGreater(len(vmfpy.Brushes), 0)
         for brush in vmfpy.Brushes:
             self.assertEqual(brush[6], "dev/dev_measurewall01d")
-            self.assertEqual(brush[4], 250.0)
+            # Up mode fills from the map floor up through the stored rail
+            # plus one block layer: z0 is fixed, z1 is stored + BlockVertical.
+            self.assertEqual(brush[4], -16320)
             self.assertEqual(brush[5], 350.0)
             self.assertEqual(brush[1] - brush[0], 1000)
 
@@ -167,21 +169,31 @@ class HeightBlockTests(unittest.TestCase):
         trackhammer.clear_occupied()
         trackhammer.blocks_new([[0, 0, 250]])
         trackhammer.display_blocks_in_vmf()
+        # Down mode hangs from the stored rail minus one block layer and
+        # fills up to the map ceiling.
         self.assertEqual(vmfpy.Brushes[0][4], 150.0)
-        self.assertEqual(vmfpy.Brushes[0][5], 250.0)
+        self.assertEqual(vmfpy.Brushes[0][5], 16320)
 
-    def test_layers_mode_still_reserves_block_ids(self):
+    def test_layers_setting_still_uses_height_mode(self):
 
+        # height_mode_enabled() is fixed on. trackhammer_block_mode is not
+        # read, so asking for layers still reserves height records.
         cfg.CFG["trackhammer_block_mode"] = "layers"
+        self.assertTrue(trackhammer.height_mode_enabled())
         added = trackhammer.blocks_new([[0, 0, 0]])
         self.assertTrue(added)
-        self.assertTrue(all(isinstance(block_id, str) for block_id in added))
-        self.assertTrue(trackhammer.Blocks)
-        self.assertEqual(trackhammer.HeightTable, {})
-        self.assertTrue(trackhammer.are_points_blocked([[0, 0, 0]]))
+        for record in added:
+            self.assertEqual(len(record), 3)
+            self.assertIsNone(record[2])
+        self.assertTrue(trackhammer.HeightTable)
+        self.assertEqual(len(trackhammer.HeightTable), len(added))
+        self.assertEqual(trackhammer.Blocks, {})
         trackhammer.display_blocks_in_vmf()
-        self.assertEqual(len(vmfpy.Brushes), len(added))
-        self.assertEqual(vmfpy.Brushes[0][6], "dev/dev_measurewall01d")
+        self.assertEqual(len(vmfpy.Brushes), len(trackhammer.HeightTable))
+        self.assertGreater(len(vmfpy.Brushes), 0)
+        for brush in vmfpy.Brushes:
+            self.assertEqual(brush[6], "dev/dev_measurewall01d")
+            self.assertEqual(brush[4], -16320)
 
     def _step(self, length, points):
 

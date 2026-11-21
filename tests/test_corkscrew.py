@@ -42,7 +42,7 @@ class CorkscrewTests(unittest.TestCase):
         cfg.initialize(os.path.join(ROOT, "railmancer", "config.json"))
         if cfg.get("sector_corkscrew_track_clearance") != 250:
             raise AssertionError("sector_corkscrew_track_clearance default")
-        if cfg.get("sector_corkscrew_prefer_height") != 0:
+        if cfg.get("sector_corkscrew_prefer_height") != 1:
             raise AssertionError("sector_corkscrew_prefer_height default")
 
     def tearDown(self):
