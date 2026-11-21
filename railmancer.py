@@ -119,6 +119,11 @@ def main():
     # 4th number is minimum grade level, in this case 0 is level
     # 5th number is maximum grade level, in this case 2.5%
 
+    # Merge collinear straights before anything samples the rail. Smooth grade
+    # rewrites rises; consolidate_inplace rebuilds lines.Beziers from the props
+    # so switch stands, heightmaps, and sectors see the regraded profile.
+    consolidate_straights.consolidate_inplace(smooth_grade=True)
+
     # Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
     lines.encode_lines()
     # these values are stored as global variables in the lines module.
@@ -170,11 +175,6 @@ def main():
     tools.stopwatch_click("submodule", "Frogging the Track, done")"""
 
     vmfpy.add_light_environment()
-
-    # Merge collinear fragmented straights into longer stock pieces so the
-    # final VMF carries fewer props. Pass smooth_grade=True to redistribute
-    # rise over a whole collinear run using mixed grade versions.
-    consolidate_straights.consolidate_inplace(smooth_grade=True)
 
     # Compile brush, entity, and brushentity data into a VMF text file and save.
     vmfpy.write_to_vmf(f"{"railmancer"}_{random.randint(5000,5999)}{".vmf"}")
