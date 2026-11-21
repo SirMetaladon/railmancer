@@ -306,8 +306,10 @@ def compile_sectors_to_brushes():
     sector_x16_size = int(sector_real_size / 16)
 
     subdivisions = cfg.get("sector_displacement_subdivision_rate")
+    ordered = list(sectors.get_all().values())
+    compiling = tools.progress("Compile", len(ordered))
 
-    for sector_data in sectors.get_all().values():
+    for index, sector_data in enumerate(ordered, 1):
 
         x, y, z = sector_data["x"], sector_data["y"], sector_data["floor"]
 
@@ -328,8 +330,10 @@ def compile_sectors_to_brushes():
                 vmfpy.data_to_dispinfo(raw_disp, heights, alphas)
             ]
 
-            vmfpy.add_brush(finished_displacement)
+            vmfpy.add_brush(finished_displacement, sector_data["id"])
+        compiling(index)
 
+    compiling.finish()
     tools.stopwatch_click("submodule", "Brushes and Displacements done")
 
 
@@ -345,9 +349,10 @@ def create_scenery_block(sector_data):
     real_y = block_y * sector_real_size
     real_floor = block_floor * 16
     real_ceiling = block_ceiling * 16
+    group_key = sector_data["id"]
 
-    vmfpy.floor(real_x, real_y, real_floor, sector_real_size)
-    vmfpy.ceiling(real_x, real_y, real_ceiling, sector_real_size)
+    vmfpy.floor(real_x, real_y, real_floor, sector_real_size, group_key)
+    vmfpy.ceiling(real_x, real_y, real_ceiling, sector_real_size, group_key)
     # vmfpy.viscluster(real_x, real_y, real_floor, real_ceiling, sector_real_size, 128)
 
     for dir in range(4):
@@ -366,6 +371,7 @@ def create_scenery_block(sector_data):
                 dir,
                 sector_real_size,
                 "ceiling",
+                group_key,
             )
 
         else:
@@ -375,7 +381,14 @@ def create_scenery_block(sector_data):
             if nearby_floor > real_floor:
 
                 vmfpy.wall(
-                    real_x, real_y, nearby_floor, real_floor, dir, sector_real_size
+                    real_x,
+                    real_y,
+                    nearby_floor,
+                    real_floor,
+                    dir,
+                    sector_real_size,
+                    "wall",
+                    group_key,
                 )
 
             if nearby_ceiling < real_ceiling:
@@ -388,4 +401,5 @@ def create_scenery_block(sector_data):
                     dir,
                     sector_real_size,
                     "ceiling",
+                    group_key,
                 )

@@ -60,6 +60,9 @@ class CorkscrewTests(unittest.TestCase):
         cfg.CFG["sector_minimum_height"] = 16
         cfg.CFG["sector_corkscrew_track_clearance"] = LIMIT
         cfg.CFG["sector_corkscrew_prefer_height"] = prefer_height
+        # The fixture's floor step is 3200, past the shipped cliff of 1000.
+        # This test is about which corkscrew link breaks, so the cliff stays open.
+        cfg.CFG["sector_connection_maximum_cliff"] = 100000
 
         # D (north) only overlaps the low sector. B (east) only overlaps the
         # high one. C spans both, so the walk north-east-south-west changes floor.
@@ -193,6 +196,66 @@ class CorkscrewTests(unittest.TestCase):
         self.assertNotIn("Broke corkscrew", text)
         self.assertNotIn("CORKSCREW", text)
         self.assertEqual(reads, 0)
+
+
+class SectorLinkTests(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+
+        cfg.initialize(os.path.join(ROOT, "railmancer", "config.json"))
+
+    def setUp(self):
+
+        sectors.Sectors.clear()
+        sectors.sector_lookup_grid.clear()
+        cfg.CFG["sector_real_size"] = SIZE
+        cfg.CFG["sector_minimum_height"] = 16
+        cfg.CFG["sector_connection_maximum_cliff"] = 1000
+
+    def tearDown(self):
+
+        sectors.Sectors.clear()
+        sectors.sector_lookup_grid.clear()
+
+    def test_floor_cliff_cuts_the_link_and_a_ceiling_gap_does_not(self):
+
+        # 0..4000 next to 3000..6000 still overlaps, but the floors are
+        # 2992 apart, past the 1000 cliff. A short ceiling on the same floor
+        # stays linked.
+        sectors.new_sector(0, 0, 0, 4000)
+        sectors.new_sector(1, 0, 3000, 6000)
+        self.assertFalse(
+            sectors.sectors_are_connected(
+                sectors.Sectors["0x0x0"], sectors.Sectors["1x0x187"]
+            )
+        )
+        self.assertIs(
+            sectors.get_sector_relative_to_this_sector(sectors.Sectors["0x0x0"], [1, 0]),
+            False,
+        )
+
+        sectors.new_sector(0, 1, 0, 2000)
+        sectors.new_sector(1, 1, 0, 8000)
+        low = sectors.Sectors["0x1x0"]
+        high = sectors.Sectors["1x1x0"]
+        self.assertTrue(sectors.sectors_are_connected(low, high))
+        self.assertEqual(
+            sectors.get_sector_relative_to_this_sector(low, [1, 0]), high["id"]
+        )
+
+    def test_neighbor_is_the_sector_with_the_largest_overlap(self):
+
+        # The short sector is created first. The old walk returned it. The
+        # tall overlap is the one that should own the wall.
+        cfg.CFG["sector_connection_maximum_cliff"] = 5000
+        sectors.new_sector(0, 0, 0, 8000)
+        sectors.new_sector(1, 0, 0, 3200)
+        sectors.new_sector(1, 0, 1600, 8000)
+        chosen = sectors.get_sector_relative_to_this_sector(
+            sectors.Sectors["0x0x0"], [1, 0]
+        )
+        self.assertEqual(chosen, "1x0x100")
 
 
 if __name__ == "__main__":

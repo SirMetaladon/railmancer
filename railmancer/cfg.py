@@ -34,6 +34,8 @@ def initialize(path: str):
         ["sector_minimum_track_depth", 128, 0, CFG["max_mapsize"]],
         ["sector_corkscrew_track_clearance", 250, 0, CFG["max_mapsize"]],
         ["sector_corkscrew_prefer_height", 0, 0, 1],
+        # Real-unit floor gap past which two sectors do not share a wall.
+        ["sector_connection_maximum_cliff", 1000, 0, CFG["max_mapsize"]],
         ["noise_floor_ceiling_spillover_slope", 2, 0, 100],
         [
             "trackhammer_minimum_allowed_distance_from_edge_of_map",

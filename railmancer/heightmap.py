@@ -750,8 +750,10 @@ def cut_and_fill_sector_heightmaps():
     # The ramp and the carve. Each node keeps the clamp window just applied,
     # so the relax passes do not rebuild the track field to put it back.
     terrain_block = terrain.get()
+    ordered = list(sectors.get_all().values())
+    contours = tools.progress("Contours", len(ordered))
 
-    for sector_data in sectors.get_all().values():
+    for index, sector_data in enumerate(ordered, 1):
 
         height = sector_data["grid"]["height"]
         span = range(len(height))
@@ -761,11 +763,13 @@ def cut_and_fill_sector_heightmaps():
                 height[noise_x][noise_y][0] = height_at_node(
                     sector_data, noise_x, noise_y, terrain_block
                 )
+        contours(index)
 
+    contours.finish()
     tools.stopwatch_click("submodule", "Contours Pass completed")
 
 
-def clamp_heightmaps(terrain_block=None):
+def clamp_heightmaps(terrain_block=None, on_sector=None):
 
     if terrain_block is None:
         terrain_block = terrain.get()
@@ -784,6 +788,8 @@ def clamp_heightmaps(terrain_block=None):
                     terrain_block,
                     height[noise_x][noise_y][0],
                 )
+        if on_sector is not None:
+            on_sector()
 
 
 def relax_heightmaps():
@@ -794,12 +800,21 @@ def relax_heightmaps():
     # during contours; rails and the envelope do not move here.
     terrain_block = terrain.get()
     passes = max(int(terrain_block.get("height_blur_passes", 3)), 0)
+    total = (passes + 1) * len(sectors.get_all())
+    relaxing = tools.progress("Relax", total)
+    done = 0
+
+    def _counted():
+        nonlocal done
+        done += 1
+        relaxing(done)
 
     for _ in range(passes):
         sectors.blur_heightmap_grid(announce=False)
-        clamp_heightmaps(terrain_block)
+        clamp_heightmaps(terrain_block, _counted)
 
-    clamp_heightmaps(terrain_block)
+    clamp_heightmaps(terrain_block, _counted)
+    relaxing.finish()
     tools.stopwatch_click("submodule", "Heightmap relaxed")
 
 
