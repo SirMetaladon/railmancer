@@ -363,6 +363,47 @@ def compile_displacement(raw_displacement, sector_data):
     return heights, alphas
 
 
+def displacement_subdivisions(sector_real_size=None, target=None):
+    """How many displacement brushes fit along one side of a sector.
+
+    The count is max(1, round(sector_real_size / displacement_target_size)).
+    Each brush is still a power-3 displacement (9x9 verts), set in
+    vmfpy.data_to_dispinfo. This only chooses how many of those brushes
+    tile the sector.
+
+    Edges are (k / count) * sector_real_size. sector_real_size is already
+    a multiple of 16, so the edges stay on that grid exactly when count
+    divides sector_real_size / 16. When the rounded count does not, the
+    nearest divisor of that cell count is used, preferring the piece size
+    closer to the target.
+    """
+
+    if sector_real_size is None:
+        sector_real_size = cfg.get("sector_real_size")
+    if target is None:
+        target = cfg.get("displacement_target_size")
+
+    sector_real_size = int(sector_real_size)
+    cells = max(sector_real_size // 16, 1)
+    target = max(float(target), 16.0)
+    ideal = max(1, int(round(float(sector_real_size) / target)))
+    ideal = min(ideal, cells)
+    if cells % ideal == 0:
+        return ideal
+
+    best = 1
+    best_key = None
+    for count in range(1, cells + 1):
+        if cells % count:
+            continue
+        piece = float(sector_real_size) / count
+        key = (abs(piece - target), abs(count - ideal), count)
+        if best_key is None or key < best_key:
+            best_key = key
+            best = count
+    return best
+
+
 def sector_coords_to_subdivided_displacements(
     block_x: int, block_y: int, block_z: int, subdivision, texture
 ):
@@ -391,7 +432,7 @@ def compile_sectors_to_brushes():
     sector_real_size = cfg.get("sector_real_size")
     sector_x16_size = int(sector_real_size / 16)
 
-    subdivisions = cfg.get("sector_displacement_subdivision_rate")
+    subdivisions = displacement_subdivisions()
     ordered = list(sectors.get_all().values())
     compiling = tools.progress("Compile", len(ordered))
 

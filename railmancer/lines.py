@@ -1,5 +1,4 @@
-import turtle, math, numpy as np
-from scipy.optimize import minimize
+import numpy as np
 from railmancer import tools, cfg
 
 # Handles extraction of line and point data from given lists of track-objects. Handles everything related to said lists of points.
@@ -26,137 +25,6 @@ def bezier_3d(t, Bez) -> tuple[float, float, float]:
 
     return x, y, Bez[0][2] + (Bez[3][2] - Bez[0][2]) * t
 
-
-def bezier_2d(t, Bez) -> tuple[float, float]:
-
-    x, y, z = bezier_3d(t, Bez)
-    return x, y
-
-
-def get_perpendicular_vec2d(v):
-    """Returns a perpendicular vector to the given vector."""
-    return (-v[1], v[0])
-
-
-def vector_length(v):
-    """Returns the length of the vector."""
-    return math.sqrt(v[0] ** 2 + v[1] ** 2)
-
-
-def normalize_vec2d(v):
-    """Normalizes the given vector to a unit vector."""
-    length = vector_length(v)
-    if length == 0:
-        return (0, 0)
-    return (v[0] / length, v[1] / length)
-
-
-def reverse(v):
-
-    Out = []
-    for entry in v:
-        Out += [-entry]
-    return Out
-
-
-def max_manhattan(v1, v2):
-
-    return max(abs(v1[0] - v2[0]), abs(v1[1] - v2[1]))
-
-
-def canvas(Point):
-    return (
-        (Point[0] + canvas_offset[0]) * canvas_scale,
-        (Point[1] + canvas_offset[1]) * canvas_scale,
-    )
-
-
-def draw_perpendicular_line(point1, point2, distance=50):
-
-    x1, y1 = point1[0], point1[1]
-    x2, y2 = point2[0], point2[1]
-
-    # Compute the vector from point1 to point2
-    dx, dy = x2 - x1, y2 - y1
-
-    # Normalize the vector
-    length = math.sqrt(dx**2 + dy**2)
-    if length != 0:
-
-        dx /= length
-        dy /= length
-
-        # Find the perpendicular vector
-        perp_dx = -dy
-        perp_dy = dx
-
-        # Compute the two equidistant perpendicular points
-        pointA = (x1 + perp_dx * distance, y1 + perp_dy * distance)
-        pointB = (x1 - perp_dx * distance, y1 - perp_dy * distance)
-
-        # Draw the perpendicular line
-        turtle.penup()
-        turtle.goto(canvas(pointA))
-        turtle.pendown()
-        turtle.goto(canvas(pointB))
-
-
-def mark(point, length=8):
-    """Draws a green cross at the specified point."""
-
-    Points = tools.quadnudge(point, length / canvas_scale)
-
-    # Draw the perpendicular line
-    turtle.penup()
-    turtle.color("green")
-    turtle.goto(canvas(Points[0]))
-    turtle.pendown()
-    turtle.goto(canvas(Points[1]))
-    turtle.penup()
-    turtle.goto(canvas(Points[2]))
-    turtle.pendown()
-    turtle.goto(canvas(Points[3]))
-    turtle.penup()
-    turtle.color("white")
-
-
-def draw_bezier_curve(Bez: list):
-
-    mark(Bez[1])
-    mark(Bez[2])
-    draw_perpendicular_line(Bez[3], Bez[2])
-
-    turtle.penup()
-    turtle.goto(canvas(Bez[0]))
-    turtle.pendown()
-
-    # Approximate with a polyline
-    steps = 20
-    for i in range(steps + 1):
-        t = i / steps
-        # Cubic Bezier formula
-
-        x, y, _ = bezier_3d(t, Bez)
-
-        turtle.goto(canvas((x, y)))
-        # THING TO DO: MAKE THIS CHANGE COLOR WITH Z-VALUE
-
-
-def draw_line(p1, p2):
-    """Draws a straight line between two points using Turtle graphics."""
-    turtle.penup()
-    turtle.goto(canvas(p1))
-    turtle.pendown()
-    turtle.goto(canvas(p2))
-
-
-def bezier_curve(t, P0, P1, P2, P3):
-    return (
-        (1 - t) ** 3 * P0
-        + 3 * (1 - t) ** 2 * t * P1
-        + 3 * (1 - t) * t**2 * P2
-        + t**3 * P3
-    )
 
 
 def convert_nodes_to_bezier(
@@ -230,30 +98,6 @@ def write_bezier_points(start_position, end_position, start_direction, end_direc
         start_position, end_position, start_direction, end_direction
     )
 
-
-def display_path(BezList: list, Extents):
-
-    global canvas_scale, canvas_offset
-
-    screen = turtle.Screen()
-    screen.colormode(255)
-    screen.bgcolor("black")
-    screen.setup(1300, 1000)
-
-    # convert extents into these values
-    canvas_scale = 0.11  # 0.22 = 1 block is on screen
-    canvas_offset = (-2040, -2048)
-
-    turtle.speed(0)
-    turtle.penup()
-    # turtle.tracer(0, 0) #this controls the width of the line
-    turtle.pencolor("white")
-    turtle.hideturtle()
-
-    draw_perpendicular_line(BezList[0][0], BezList[0][1])
-
-    for Plot in BezList:
-        draw_bezier_curve(Plot)
 
 
 def convert_bezier_to_points(Segment, line_maximum_poll_point_distance):

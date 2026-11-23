@@ -13,6 +13,7 @@ from railmancer import (
     trackhammer,
     cfg,
     consolidate_straights,
+    settings,
 )
 
 # This is where it all comes together. Each step of the process accomplishes a major part of the overall product. Mostly for clarity of flow.
@@ -20,10 +21,10 @@ from railmancer import (
 
 def main():
 
-    # Some input information. One contains the directory for building the Track Library, the other is the VMF for the importer.
-    trackpack_directory = "C:/Program Files (x86)/Steam/steamapps/common/GarrysMod/garrysmod/addons/trakpak/models/trakpak3_rsg"
-    # vmf_input_path = "vmf inputs/squamish test.vmf"
-    vmf_input_path = "vmf inputs/vancouver_only.vmf"
+    # Track library and the input VMF. settings.local.json or the
+    # RAILMANCER_* variables override these; otherwise Isaiah's paths.
+    trackpack_directory = settings.get("track_library")
+    vmf_input_path = settings.get("vmf_input")
 
     # Starts a few stopwatches for showing time progression.
     tools.stopwatch_click("total", "Start!")

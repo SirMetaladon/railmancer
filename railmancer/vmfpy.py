@@ -1,6 +1,6 @@
 import bisect
 import os, re, math
-from railmancer import tools, vmfpy
+from railmancer import tools, vmfpy, settings
 
 # Interface between VMFs as a file type and the system of blocks, entities, etc. Intended to be generic.
 
@@ -1360,7 +1360,7 @@ def write_to_vmf(filename):
     with tools.stage("Assembling the VMF"):
         content = assemble_vmf()
 
-    directory = "C:/Users/Metaladon/Desktop/Model Data/VMFS/railmancer"
+    directory = settings.get("vmf_output_dir")
     full_file_path = os.path.join(directory, filename)
 
     with tools.stage("Writing the file"):

@@ -907,3 +907,20 @@ class ClampCacheTests(unittest.TestCase):
         for x in range(SPAN):
             for y in range(SPAN):
                 self.assertEqual(old[x][y], new[x][y])
+
+    def test_interpolator_clamp_follows_a_non_25_grid(self):
+
+        # The old clamp stopped at 23, which is only correct for a 25-wide
+        # grid. On a 40-wide grid the last cell pair is 38 and 39. A unit
+        # ramp would hide the wrong index, so only those two columns are set.
+        span = 40
+        cfg.CFG["noise_grid_per_sector"] = span
+        grid = [[[0.0] for _y in range(span)] for x in range(span)]
+        for y in range(span):
+            grid[span - 2][y][0] = 10.0
+            grid[span - 1][y][0] = 20.0
+        sector = {"grid": {"height": grid}}
+        value = heightmap.field_interpolator(
+            sector, "height", (span - 2) + 0.25, 0.0
+        )
+        self.assertAlmostEqual(value, 12.5)

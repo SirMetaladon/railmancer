@@ -13,7 +13,6 @@ class HeightBlockTests(unittest.TestCase):
 
     def setUp(self):
 
-        cfg.CFG["trackhammer_block_mode"] = "height"
         cfg.CFG["trackhammer_height_direction"] = "up"
         cfg.CFG["trackhammer_height_clearance"] = 50
         trackhammer.BlockHorizontal = 1000
@@ -24,7 +23,6 @@ class HeightBlockTests(unittest.TestCase):
 
     def tearDown(self):
 
-        cfg.CFG["trackhammer_block_mode"] = "layers"
         cfg.CFG["trackhammer_height_direction"] = "up"
 
     def test_horizontal_cells_match_get_block_ids(self):
@@ -40,7 +38,6 @@ class HeightBlockTests(unittest.TestCase):
 
         records = trackhammer.blocks_new([[0, 0, 40], [0, 0, 90]])
         self.assertEqual(trackhammer.HeightTable[(0, 0)], 90.0)
-        self.assertEqual(trackhammer.Blocks, {})
         cells = [(record[0], record[1]) for record in records]
         self.assertEqual(len(cells), len(set(cells)))
         self.assertTrue(all(record[2] is None for record in records))
@@ -174,26 +171,27 @@ class HeightBlockTests(unittest.TestCase):
         self.assertEqual(vmfpy.Brushes[0][4], 150.0)
         self.assertEqual(vmfpy.Brushes[0][5], 16320)
 
-    def test_layers_setting_still_uses_height_mode(self):
+    def test_start_clears_one_block_ahead_along_the_heading(self):
 
-        # height_mode_enabled() is fixed on. trackhammer_block_mode is not
-        # read, so asking for layers still reserves height records.
-        cfg.CFG["trackhammer_block_mode"] = "layers"
-        self.assertTrue(trackhammer.height_mode_enabled())
-        added = trackhammer.blocks_new([[0, 0, 0]])
-        self.assertTrue(added)
-        for record in added:
-            self.assertEqual(len(record), 3)
-            self.assertIsNone(record[2])
+        # Vancouver start in railmancer.py: 0fw at heading -90 moves +Y.
+        # The old constant (7568, 4552, -14040) is that start plus 1000
+        # in Y. One BlockHorizontal of 1000 lands on it. The shipped
+        # block size is 2500, so the same start clears (7568, 6052, -14040).
+        node = [(7568, 3552, -14040), "0fw", -90, False]
+        trackhammer.BlockHorizontal = 1000
+        self.assertEqual(
+            trackhammer.point_one_block_ahead(node),
+            (7568.0, 4552.0, -14040),
+        )
+        trackhammer.BlockHorizontal = 2500
+        ahead = trackhammer.point_one_block_ahead(node)
+        self.assertEqual(ahead, (7568.0, 6052.0, -14040))
+
+        trackhammer.blocks_new([node[0], ahead])
         self.assertTrue(trackhammer.HeightTable)
-        self.assertEqual(len(trackhammer.HeightTable), len(added))
-        self.assertEqual(trackhammer.Blocks, {})
-        trackhammer.display_blocks_in_vmf()
-        self.assertEqual(len(vmfpy.Brushes), len(trackhammer.HeightTable))
-        self.assertGreater(len(vmfpy.Brushes), 0)
-        for brush in vmfpy.Brushes:
-            self.assertEqual(brush[6], "dev/dev_measurewall01d")
-            self.assertEqual(brush[4], -16320)
+        trackhammer.clear_start_footprint(node[0])
+        trackhammer.clear_start_footprint(ahead)
+        self.assertEqual(trackhammer.HeightTable, {})
 
     def _step(self, length, points):
 

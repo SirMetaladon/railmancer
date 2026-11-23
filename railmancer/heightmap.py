@@ -51,8 +51,19 @@ def field_interpolator(sector_object, field, noise_x, noise_y):
     if sector_object is None:
         return False
 
-    LeftXCoord = min(math.floor(noise_x), 23)
-    BottomYCoord = min(math.floor(noise_y), 23)
+    # Last cell that still has a +1 neighbor. The grid is built
+    # noise_grid_per_sector cells on a side, indexed from 0, so that
+    # cell is noise_grid_per_sector - 2. The real grid length caps it.
+    grid = sector_object["grid"][field]
+    span = len(grid)
+    if span < 2:
+        return False
+    last_cell = min(
+        max(int(cfg.get("noise_grid_per_sector")) - 2, 0),
+        span - 2,
+    )
+    LeftXCoord = min(math.floor(noise_x), last_cell)
+    BottomYCoord = min(math.floor(noise_y), last_cell)
 
     RightXCoord, TopYCoord = LeftXCoord + 1, BottomYCoord + 1
 

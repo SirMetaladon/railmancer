@@ -48,11 +48,6 @@ def get_block_ids(point):
     return [f"{x},{y},{z}" for x in xs for y in ys for z in zs]
 
 
-def height_mode_enabled():
-
-    return True  # str(TEST.get("trackhammer_block_mode")) == "height"
-
-
 def height_going_down():
 
     return str(TEST.get("trackhammer_height_direction")) == "down"
@@ -162,33 +157,17 @@ def points_violate_height(list_of_points):
 
 def clear_start_footprint(point):
 
-    # Same job as the old get_block_ids wipe: the start of a new main
-    # should not be blocked by whatever was already reserved there.
-    if height_mode_enabled():
-        for cell in horizontal_cells(point):
-            HeightTable.pop(cell, None)
-        return
-
-    blocks_remove(get_block_ids(point))
+    # The start of a new main should not be blocked by whatever was
+    # already reserved on its horizontal cells.
+    for cell in horizontal_cells(point):
+        HeightTable.pop(cell, None)
 
 
-# From a list of points, find all blocks that are NOT already spoken for and reserve them, returning a list of valid newly reserved blocks.
+# From a list of points, reserve the height cells that are not already
+# spoken for and return the records a rollback can restore.
 def blocks_new(list_of_points):
 
-    if height_mode_enabled():
-        return blocks_new_height(list_of_points)
-
-    new_blocks = []
-
-    for point in list_of_points:
-        block_ids = get_block_ids(point)
-
-        for block in block_ids:
-            if block not in Blocks:
-                new_blocks += [block]
-                Blocks[block] = True
-
-    return new_blocks
+    return blocks_new_height(list_of_points)
 
 
 # Patch function that takes all the imported points and prefills the Blocking system with them, ensuring future Trackhammers do not intersect with existing track.
@@ -202,30 +181,13 @@ def exclude_existing():
 # For this specific point, does the 2x2 of closest blocks contain any reserved blocks? If so, this space is not legal.
 def are_points_blocked(list_of_points):
 
-    if height_mode_enabled():
-        return points_violate_height(list_of_points)
-
-    for point in list_of_points:
-        block_ids = get_block_ids(point)
-        for block in block_ids:
-            if block in Blocks:
-                return True
-
-    return False
+    return points_violate_height(list_of_points)
 
 
-# For a list of string block ID's, remove them from the currently reserved list of blocks
+# Undo one blocks_new. The records are height-table entries, not block ids.
 def blocks_remove(list_of_block_ids):
 
-    global Blocks
-
-    if height_mode_enabled():
-        blocks_restore_height(list_of_block_ids)
-        return
-
-    for entry in list_of_block_ids:
-        if entry in Blocks:
-            Blocks.pop(entry)
+    blocks_restore_height(list_of_block_ids)
 
 
 def _unit_xy(x, y):
@@ -242,6 +204,18 @@ def _node_forward(node):
     local = track.move_in_trackspace(1024.0, node[1])
     world = tools.rot_orth((float(local[0]), float(local[1]), 0.0), node[2])
     return _unit_xy(float(world[0]), float(world[1]))
+
+
+def point_one_block_ahead(start_node):
+
+    # One BlockHorizontal step along the start node's heading.
+    fx, fy = _node_forward(start_node)
+    x, y, z = start_node[0]
+    return (
+        float(x) + fx * BlockHorizontal,
+        float(y) + fy * BlockHorizontal,
+        z,
+    )
 
 
 def _chord_fractions(start, end):
@@ -489,49 +463,14 @@ def set_border_override(predicate):
 
 def clear_occupied():
 
-    global Blocks, HeightTable
+    global HeightTable
 
-    Blocks = {}
     HeightTable = {}
 
 
 def display_blocks_in_vmf():
 
-    if height_mode_enabled():
-        _display_height_markers()
-        return
-
-    # Converts a block to coordinates to create brushes with
-    def block_id_to_coords(block_id):
-
-        coords = block_id.split(",")
-        x = int(coords[0])
-        y = int(coords[1])
-        z = int(coords[2])
-
-        return x * BlockHorizontal, y * BlockHorizontal, z * BlockVertical
-
-    # For debugging purposes - creates brushes that demonstrate where the block boundaries are
-    for block in Blocks:
-
-        x, y, z = block_id_to_coords(block)
-
-        vmfpy.add_brush(
-            [
-                x,
-                x + BlockHorizontal,
-                y,
-                y + BlockHorizontal,
-                z,
-                z + BlockVertical,
-                "dev/dev_measurewall01d",
-                0,
-                0,
-                "24",
-            ]
-        )
-
-    print(f"Added {len(Blocks)} pathfinding blocks.")
+    _display_height_markers()
 
 
 def _display_height_markers():
@@ -636,8 +575,6 @@ def initialize():
     BlockVertical = TEST.get("sector_minimum_height") * 1.05
     Block_Standoff_Distance = TEST.get("trackhammer_block_standoff_distance")
 
-    global Blocks
-    Blocks = {}
     clear_occupied()
     set_border_override(None)
 
@@ -681,7 +618,7 @@ def generation_process(
                 f"{len(steps)} current steps, "
                 f"{round(tools.miles(new_length), 3)} miles, "
                 f"{len(current_step['candidate_tracks'])} current candidates, "
-                f"{len(Blocks)} blocks."
+                f"{len(HeightTable)} blocks."
             )
         debug_overall_count += 1
 
@@ -1059,10 +996,10 @@ def create_rail_path(start_node, cumulative_track_profile):
 
     tools.stopwatch_click("trackhammer")
 
-    # Hollows out a little area near the start of the trackhammer, to prevent old rails from blocking the start of the mains
+    # Clear the start cell and the cell one block ahead, so rails already
+    # sitting on the first step do not block the main.
     clear_start_footprint(start_node[0])
-    # hardcoded fix
-    clear_start_footprint((7568, 4552, -14040))
+    clear_start_footprint(point_one_block_ahead(start_node))
 
     # system for testing multiple variations of rollbacks and candidates, currently semi-disabled
     rollbacks = [5000]
