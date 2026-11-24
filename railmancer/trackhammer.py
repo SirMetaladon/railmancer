@@ -318,7 +318,9 @@ def _piece_samples(current_node, next_node):
         theta, radius = frame[0], frame[1]
         sagitta = radius * (1.0 - math.cos(abs(theta) / 2.0))
         # No chord sample near the middle: one bulge point is the whole nudge.
-        if sagitta > 16.0 and not any(abs(fraction - 0.5) <= 0.2 for fraction in fractions):
+        if sagitta > 16.0 and not any(
+            abs(fraction - 0.5) <= 0.2 for fraction in fractions
+        ):
             fractions.append(0.5)
     samples = [(current_node[0], forward_s)]
     if frame is None:
@@ -630,6 +632,7 @@ def generation_process(
         existing_length=0,
         points=[],
         step_model="",
+        is_first=False,
     ):
 
         return [
@@ -637,7 +640,9 @@ def generation_process(
                 "node": start_node,
                 "length": existing_length,
                 "candidate_tracks": generate_selection_of_possible_tracks(
-                    start_node, candidates_to_generate, current_run
+                    start_node,
+                    99999 if is_first else candidates_to_generate,
+                    current_run,
                 ),
                 "points": points,
                 "blocks_added": [],
@@ -728,7 +733,8 @@ def generation_process(
         if run_id <= 0:
             return float(cumulative_track_profile[0][1])
         return float(
-            cumulative_track_profile[run_id][1] - cumulative_track_profile[run_id - 1][1]
+            cumulative_track_profile[run_id][1]
+            - cumulative_track_profile[run_id - 1][1]
         )
 
     def _tolerance():
@@ -935,7 +941,7 @@ def generation_process(
         return _try_unfitted(current_step, steps, mode)
 
     # START OF PROCESS
-    steps = new_step(start_node, 0, cumulative_track_profile[0])
+    steps = new_step(start_node, 0, cumulative_track_profile[0], 0, [], "", True)
 
     while (
         len(steps) > 0
@@ -1002,8 +1008,8 @@ def create_rail_path(start_node, cumulative_track_profile):
     clear_start_footprint(point_one_block_ahead(start_node))
 
     # system for testing multiple variations of rollbacks and candidates, currently semi-disabled
-    rollbacks = [5000]
-    candidates = [20]
+    rollbacks = [6000]
+    candidates = [8]
     random.shuffle(rollbacks)
     random.shuffle(candidates)
 

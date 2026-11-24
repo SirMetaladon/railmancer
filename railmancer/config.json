@@ -9,7 +9,7 @@
   "sector_minimum_track_depth": 300,
   "sector_corkscrew_track_clearance": 250,
   "sector_corkscrew_prefer_height": 1,
-  "sector_connection_maximum_cliff": 1000,
+  "sector_connection_maximum_cliff": 2000,
   "sector_minimum_track_to_edge_distance": 700,
   "noise_floor_ceiling_spillover_slope": 2,
   "trackhammer_minimum_allowed_distance_from_edge_of_map": 1000,
