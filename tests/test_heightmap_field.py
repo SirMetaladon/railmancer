@@ -6,6 +6,7 @@ main flow makes are run, and the grid is checked directly.
 
 import math
 import os
+import random
 import sys
 import types
 import unittest
@@ -16,7 +17,7 @@ if ROOT not in sys.path:
 
 sys.modules.setdefault("turtle", types.ModuleType("turtle"))
 
-from railmancer import cfg, heightmap, noisefield, sectors, terrain
+from railmancer import cfg, heightmap, noisefield, sectors, terrain, tools
 
 SIZE = 2400
 SPAN = 13  # 12 gaps, so nodes sit on a 200-unit lattice
@@ -28,6 +29,9 @@ class HeightFieldTests(unittest.TestCase):
     def setUpClass(cls):
 
         cfg.initialize(os.path.join(ROOT, "railmancer", "config.json"))
+        # display_perlin_layers is the only matplotlib caller, and it
+        # imports pyplot itself. Importing the module must not pull it in.
+        assert "matplotlib.pyplot" not in sys.modules
 
     def setUp(self):
 
@@ -501,3 +505,422 @@ class HeightFieldTests(unittest.TestCase):
             alpha = heightmap.query_alpha((x, 1200.0, 0.0), self.terrain, sector)
             self.assertGreaterEqual(alpha, 0.0)
             self.assertLessEqual(alpha, 255.0)
+
+
+def _legacy_track_samples(sector_data, x, y, radius, scan_cap):
+
+    # The ball query this change replaced. Kept here so the new k-nearest
+    # walk can be compared against it. scan_cap <= 0 still takes this path
+    # in the module; the copy is what the capped path is measured against.
+    tree = sector_data.get("kdtree")
+    points = sector_data.get("points")
+    if points is None:
+        points = sector_data.get("kdtree_data")
+    if tree is None or points is None or len(points) == 0:
+        return []
+
+    if len(points) == 1:
+        point = points[0]
+        dist = math.hypot(float(point[0]) - x, float(point[1]) - y)
+        return [(dist, float(point[0]), float(point[1]), float(point[2]))]
+
+    idxs = tree.query_ball_point((x, y), radius)
+    if not idxs:
+        dist, idx = tree.query((x, y))
+        idxs = [int(idx)]
+        dists = [float(dist)]
+    else:
+        dists = None
+
+    samples = []
+    for n, idx in enumerate(idxs):
+        idx = int(idx)
+        if idx < 0 or idx >= len(points):
+            continue
+        point = points[idx]
+        px, py, pz = float(point[0]), float(point[1]), float(point[2])
+        if dists is None:
+            dist = math.hypot(px - x, py - y)
+        else:
+            dist = dists[n]
+        if not math.isfinite(dist):
+            continue
+        samples.append((dist, px, py, pz))
+
+    samples.sort(key=lambda sample: sample[0])
+    cap = int(scan_cap)
+    if cap > 0 and len(samples) > cap:
+        samples = samples[:cap]
+    return samples
+
+
+def _old_clamp(sector, noise_x, noise_y, terrain_block, height):
+
+    real_x, real_y = heightmap.convert_noise_to_real_pos(noise_x, noise_y, sector)
+    info = heightmap.track_field(sector, real_x, real_y, terrain_block)
+    lo, hi = heightmap._node_limits(sector, noise_x, noise_y, terrain_block)
+    height = tools.clamped(height, lo, hi)
+    height = heightmap.carve_to_tracks(height, info["tracks"], terrain_block)
+    return tools.clamped(height, lo, hi)
+
+
+def _composed_clamp(height, lo, hi, tracks, terrain_block):
+
+    height = tools.clamped(height, lo, hi)
+    height = heightmap.carve_to_tracks(height, tracks, terrain_block)
+    return tools.clamped(height, lo, hi)
+
+
+class ClampCacheTests(unittest.TestCase):
+
+    # Same sector fixture as HeightFieldTests, without inheriting its tests.
+    setUpClass = HeightFieldTests.__dict__["setUpClass"]
+    setUp = HeightFieldTests.setUp
+    tearDown = HeightFieldTests.tearDown
+    _plant = HeightFieldTests._plant
+    _line = HeightFieldTests._line
+    _finish = HeightFieldTests._finish
+
+
+    def test_clamp_window_equals_the_three_step_clamp(self):
+
+        # The cached window is min/max only. It has to reproduce
+        # clamp(lo, hi) -> carve -> clamp(lo, hi) for every height, including
+        # heights the blur can invent outside the envelope, and including
+        # the crossed-rail case where the carve folds onto its upper edge.
+        layouts = [
+            [],
+            [(0.0, 0.0, 0.0, 100.0)],
+            [
+                (0.0, 0.0, 0.0, 100.0),
+                (40.0, 40.0, 0.0, 120.0),
+                (180.0, 180.0, 0.0, 400.0),
+            ],
+            [(0.0, 0.0, 0.0, 0.0), (0.0, 0.0, 0.0, 800.0)],
+            [(12.0, 0.0, 0.0, 200.0), (12.0, 0.0, 0.0, 900.0)],
+            [(5000.0, 0.0, 0.0, 200.0)],
+        ]
+        boxes = [(0.0, 8000.0), (100.0, 100.0), (500.0, 600.0), (-50.0, 50.0), (200.0, -10.0)]
+        probes = [-1e9, -1000.0, -35.0, 0.0, 1.0, 50.0, 165.0, 400.0, 1000.0, 8000.0, 1e9]
+
+        for tracks in layouts:
+            for lo, hi in boxes:
+                wlo, whi = heightmap._clamp_window(lo, hi, tracks, self.terrain)
+                self.assertLessEqual(wlo, whi)
+                for height in probes:
+                    old = _composed_clamp(height, lo, hi, tracks, self.terrain)
+                    new = min(max(height, wlo), whi)
+                    self.assertEqual(new, old)
+
+        rng = random.Random(0)
+        for _ in range(200):
+            lo = rng.uniform(-500.0, 2500.0)
+            hi = rng.uniform(-500.0, 8000.0)
+            tracks = []
+            for _track in range(rng.randint(0, 5)):
+                tracks.append(
+                    (
+                        rng.uniform(0.0, 3000.0),
+                        rng.uniform(-100.0, 100.0),
+                        rng.uniform(-100.0, 100.0),
+                        rng.uniform(-200.0, 3000.0),
+                    )
+                )
+            wlo, whi = heightmap._clamp_window(lo, hi, tracks, self.terrain)
+            self.assertLessEqual(wlo, whi)
+            for _probe in range(12):
+                height = rng.uniform(-5000.0, 12000.0)
+                old = _composed_clamp(height, lo, hi, tracks, self.terrain)
+                self.assertEqual(min(max(height, wlo), whi), old)
+
+    def _heights(self):
+
+        return (-1e6, -500.0, 0.0, 80.0, 165.0, 400.0, 2000.0, 9000.0, 1e6)
+
+    def _assert_sector_cache(self, sector):
+
+        self.assertIn("clamp_lo", sector["grid"])
+        self.assertIn("clamp_hi", sector["grid"])
+        span = len(sector["grid"]["height"])
+        for noise_x in range(span):
+            for noise_y in range(span):
+                lo, hi = heightmap._node_limits(sector, noise_x, noise_y, self.terrain)
+                real_x, real_y = heightmap.convert_noise_to_real_pos(
+                    noise_x, noise_y, sector
+                )
+                info = heightmap.track_field(sector, real_x, real_y, self.terrain)
+                expect = heightmap._clamp_window(lo, hi, info["tracks"], self.terrain)
+                stored = (
+                    sector["grid"]["clamp_lo"][noise_x][noise_y][0],
+                    sector["grid"]["clamp_hi"][noise_x][noise_y][0],
+                )
+                self.assertEqual(stored, expect)
+                self.assertIsNot(
+                    sector["grid"]["clamp_lo"][noise_x][noise_y],
+                    sector["grid"]["height"][noise_x][noise_y],
+                )
+                for height in self._heights():
+                    got = heightmap.clamp_existing_height(
+                        sector, noise_x, noise_y, self.terrain, height
+                    )
+                    old = _old_clamp(sector, noise_x, noise_y, self.terrain, height)
+                    self.assertEqual(got, old)
+                    self.assertEqual(got, min(max(height, stored[0]), stored[1]))
+
+    def test_cached_windows_match_on_parallel_stacked_and_dense_rails(self):
+
+        parallel = self._line(200.0, 100.0, -400.0, SIZE + 400.0)
+        parallel += self._line(900.0, 700.0, -400.0, SIZE + 400.0)
+        wide = self._plant(0, 0, 0, 8000, parallel)
+
+        stacked = []
+        for i in range(-20, 81):
+            y = i * 30.0
+            stacked.append((400.0, y, 150.0))
+            stacked.append((400.0, y, 900.0))
+        pile = self._plant(1, 0, 0, 6000, stacked)
+
+        # A yard dense enough that a node a sector away still has far more
+        # than 96 samples inside the search radius.
+        dense = [(i * 8.0, (i % 5) * 6.0, 200.0 + (i % 4) * 30.0) for i in range(400)]
+        yard = self._plant(0, 1, 0, 5000, dense)
+
+        self._finish(relax=False)
+        for sector in (wide, pile, yard):
+            self._assert_sector_cache(sector)
+
+        # A cleared cell, and a sector with the grids removed, both fall
+        # back to the recompute. The other nodes keep their windows.
+        yard["grid"]["clamp_lo"][0][0][0] = None
+        self.assertEqual(
+            heightmap.clamp_existing_height(yard, 0, 0, self.terrain, 1234.0),
+            _old_clamp(yard, 0, 0, self.terrain, 1234.0),
+        )
+        self.assertEqual(
+            heightmap.clamp_existing_height(yard, 1, 1, self.terrain, 1234.0),
+            min(
+                max(1234.0, yard["grid"]["clamp_lo"][1][1][0]),
+                yard["grid"]["clamp_hi"][1][1][0],
+            ),
+        )
+        del wide["grid"]["clamp_lo"]
+        del wide["grid"]["clamp_hi"]
+        self.assertEqual(
+            heightmap.clamp_existing_height(wide, 3, 4, self.terrain, -200.0),
+            _old_clamp(wide, 3, 4, self.terrain, -200.0),
+        )
+
+    def _snap_heights(self):
+
+        snap = []
+        for sector in sectors.get_all().values():
+            grid = sector["grid"]["height"]
+            span = len(grid)
+            snap.append(
+                [[grid[x][y][0] for y in range(span)] for x in range(span)]
+            )
+        return snap
+
+    def _restore_heights(self, snap):
+
+        for sector, rows in zip(sectors.get_all().values(), snap):
+            grid = sector["grid"]["height"]
+            span = len(grid)
+            for x in range(span):
+                for y in range(span):
+                    grid[x][y][0] = rows[x][y]
+
+    def test_shared_edge_keeps_each_sectors_window_through_relax(self):
+
+        low = self._plant(0, 0, 0, 4000, self._line(200.0, 80.0, -400.0, SIZE + 400.0))
+        high = self._plant(
+            1, 0, 2000, 8000, self._line(SIZE + 300.0, 1400.0, -400.0, SIZE * 2)
+        )
+        low["neighbors"] = [False, high["id"], False, False]
+        high["neighbors"] = [False, False, False, low["id"]]
+        self._finish(relax=False)
+
+        last = SPAN - 1
+        mid = SPAN // 2
+        self.assertIs(low["grid"]["height"][last][mid], high["grid"]["height"][0][mid])
+        self.assertIsNot(
+            low["grid"]["clamp_lo"][last][mid], high["grid"]["clamp_lo"][0][mid]
+        )
+        self.assertIsNot(
+            low["grid"]["clamp_hi"][last][mid], high["grid"]["clamp_hi"][0][mid]
+        )
+        # Different floor and different rails, so the windows are not copies.
+        self.assertNotEqual(
+            (
+                low["grid"]["clamp_lo"][last][mid][0],
+                low["grid"]["clamp_hi"][last][mid][0],
+            ),
+            (
+                high["grid"]["clamp_lo"][0][mid][0],
+                high["grid"]["clamp_hi"][0][mid][0],
+            ),
+        )
+
+        before = self._snap_heights()
+        heightmap.relax_heightmaps()
+        cached = self._snap_heights()
+
+        self._restore_heights(before)
+        original = heightmap.clamp_existing_height
+
+        def recompute(sector_data, noise_x, noise_y, terrain_block, height):
+            return _old_clamp(sector_data, noise_x, noise_y, terrain_block, height)
+
+        heightmap.clamp_existing_height = recompute
+        try:
+            heightmap.relax_heightmaps()
+            recomputed = self._snap_heights()
+        finally:
+            heightmap.clamp_existing_height = original
+
+        self.assertEqual(cached, recomputed)
+
+    def _assert_same_samples(self, old, new):
+
+        # Same points, and distances within a ulp of the old hypot. An exact
+        # tie at the cap may swap which of the tied points fills the last
+        # slot; nothing farther out, and nothing strictly closer, may move.
+        self.assertEqual(len(old), len(new))
+        old_pts = {(sample[1], sample[2], sample[3]): sample[0] for sample in old}
+        new_pts = {(sample[1], sample[2], sample[3]): sample[0] for sample in new}
+        if set(old_pts) == set(new_pts):
+            for key, dist in new_pts.items():
+                self.assertAlmostEqual(dist, old_pts[key], delta=1e-6)
+            return
+        cutoff = max(max(old_pts.values()), max(new_pts.values()))
+        for key in set(old_pts) ^ set(new_pts):
+            dist = old_pts[key] if key in old_pts else new_pts[key]
+            self.assertAlmostEqual(dist, cutoff, delta=1e-9)
+
+    def test_track_samples_match_the_capped_ball(self):
+
+        rails = []
+        for i in range(-30, 90):
+            y = i * 25.0
+            rails.append((0.0, y, 50.0))
+            rails.append((480.0, y + 3.0, 600.0))
+        sector = self._plant(0, 0, 0, 4000, rails)
+        for query in ((40.0, 100.0), (240.0, 800.0), (2000.0, -500.0)):
+            nearest, _idx = sector["kdtree"].query(query)
+            radius = max(float(nearest) * 4.0, float(nearest) + 240.0, 240.0)
+            old = _legacy_track_samples(sector, query[0], query[1], radius, 96)
+            new = heightmap._track_samples(sector, query[0], query[1], radius, 96)
+            self._assert_same_samples(old, new)
+
+        # Stacked rails: each xy is two samples with one distance. The cap
+        # lands between pairs, so the set is the same; only pair order can move.
+        stacked = []
+        for i in range(-40, 41):
+            y = i * 15.0
+            stacked.append((0.0, y, 0.0))
+            stacked.append((0.0, y, 500.0))
+        pile = self._plant(1, 0, 0, 4000, stacked)
+        old = _legacy_track_samples(pile, 60.0, 7.0, 500.0, 96)
+        new = heightmap._track_samples(pile, 60.0, 7.0, 500.0, 96)
+        self.assertGreater(len(pile["kdtree"].query_ball_point((60.0, 7.0), 500.0)), 96)
+        self.assertEqual(len(old), 96)
+        self._assert_same_samples(old, new)
+
+        # Far from a dense yard: the ball holds well over 96 points, and the
+        # 96 nearest are a unique set (no shared distance at the cutoff).
+        dense = [(i * 5.0, (i % 7) * 1.5, 100.0 + i) for i in range(-250, 251)]
+        yard = self._plant(0, 1, 0, 4000, dense)
+        query = (0.0, 1500.0)
+        radius = 8000.0
+        ball = yard["kdtree"].query_ball_point(query, radius)
+        self.assertGreater(len(ball), 96)
+        old = _legacy_track_samples(yard, query[0], query[1], radius, 96)
+        new = heightmap._track_samples(yard, query[0], query[1], radius, 96)
+        self.assertEqual(len(new), 96)
+        self._assert_same_samples(old, new)
+        self.assertNotAlmostEqual(old[95][0], old[94][0], delta=1e-9)
+
+        # A sample exactly on the radius stays in. The next one does not.
+        edge = self._plant(
+            2,
+            0,
+            0,
+            4000,
+            [(0.0, 0.0, 5.0), (100.0, 0.0, 15.0), (300.0, 0.0, 25.0)],
+        )
+        old = _legacy_track_samples(edge, 0.0, 0.0, 100.0, 96)
+        new = heightmap._track_samples(edge, 0.0, 0.0, 100.0, 96)
+        self.assertEqual(sorted((sample[1], sample[2]) for sample in old), [(0.0, 0.0), (100.0, 0.0)])
+        self._assert_same_samples(old, new)
+
+        # Nothing in range: the single nearest, even though it is outside.
+        old = _legacy_track_samples(edge, 50.0, 50.0, 1.0, 96)
+        new = heightmap._track_samples(edge, 50.0, 50.0, 1.0, 96)
+        self.assertEqual(len(new), 1)
+        self.assertGreater(new[0][0], 1.0)
+        self._assert_same_samples(old, new)
+
+        lone = self._plant(2, 1, 0, 4000, [(12.0, -4.0, 9.0)])
+        self.assertEqual(
+            heightmap._track_samples(lone, 0.0, 0.0, 0.0, 96),
+            _legacy_track_samples(lone, 0.0, 0.0, 0.0, 96),
+        )
+        self.assertEqual(
+            heightmap._track_samples(lone, 0.0, 0.0, 0.0, 0),
+            _legacy_track_samples(lone, 0.0, 0.0, 0.0, 0),
+        )
+        empty = self._plant(3, 0, 0, 4000, [])
+        self.assertEqual(heightmap._track_samples(empty, 0.0, 0.0, 100.0, 96), [])
+
+        # No cap returns the whole ball, distances included, in ball order.
+        old = _legacy_track_samples(yard, 10.0, 20.0, 400.0, 0)
+        new = heightmap._track_samples(yard, 10.0, 20.0, 400.0, 0)
+        self.assertGreater(len(new), 96)
+        self.assertEqual(old, new)
+        self.assertEqual(
+            heightmap._track_samples(yard, 10.0, 20.0, 400.0, -3),
+            _legacy_track_samples(yard, 10.0, 20.0, 400.0, -3),
+        )
+
+    def test_height_grid_matches_the_ball_sampler(self):
+
+        points = self._line(0.0, 200.0, -400.0, SIZE + 400.0)
+        points += self._line(700.0, 1100.0, -400.0, SIZE + 400.0)
+
+        def run(sampler):
+            sectors.Sectors.clear()
+            sectors.sector_lookup_grid.clear()
+            sector = self._plant(0, 0, 0, 8000, points)
+            original = heightmap._track_samples
+            heightmap._track_samples = sampler
+            try:
+                self._finish(relax=True)
+                grid = sector["grid"]["height"]
+                return [
+                    [grid[x][y][0] for y in range(SPAN)] for x in range(SPAN)
+                ]
+            finally:
+                heightmap._track_samples = original
+
+        old = run(_legacy_track_samples)
+        new = run(heightmap._track_samples)
+        for x in range(SPAN):
+            for y in range(SPAN):
+                self.assertEqual(old[x][y], new[x][y])
+
+    def test_interpolator_clamp_follows_a_non_25_grid(self):
+
+        # The old clamp stopped at 23, which is only correct for a 25-wide
+        # grid. On a 40-wide grid the last cell pair is 38 and 39. A unit
+        # ramp would hide the wrong index, so only those two columns are set.
+        span = 40
+        cfg.CFG["noise_grid_per_sector"] = span
+        grid = [[[0.0] for _y in range(span)] for x in range(span)]
+        for y in range(span):
+            grid[span - 2][y][0] = 10.0
+            grid[span - 1][y][0] = 20.0
+        sector = {"grid": {"height": grid}}
+        value = heightmap.field_interpolator(
+            sector, "height", (span - 2) + 0.25, 0.0
+        )
+        self.assertAlmostEqual(value, 12.5)

@@ -27,13 +27,15 @@ def initialize(path: str):
         ["prop_group_subdivisions", 4, 1, 64],
         ["noise_grid_per_sector", 25, 1, 1000],
         ["line_maximum_poll_point_distance", 25, 1, 1000],
-        ["sector_displacement_subdivision_rate", 3, 1, 50],
+        ["displacement_target_size", 1088, 16, 65536],
         ["sector_snap_grid", 16, 1, 128],
         ["sector_minimum_height", 1824, 0, CFG["max_mapsize"]],
         ["sector_maximum_height", 4000, 0, CFG["max_mapsize"]],
         ["sector_minimum_track_depth", 128, 0, CFG["max_mapsize"]],
         ["sector_corkscrew_track_clearance", 250, 0, CFG["max_mapsize"]],
         ["sector_corkscrew_prefer_height", 0, 0, 1],
+        # Real-unit floor gap past which two sectors do not share a wall.
+        ["sector_connection_maximum_cliff", 1000, 0, CFG["max_mapsize"]],
         ["noise_floor_ceiling_spillover_slope", 2, 0, 100],
         [
             "trackhammer_minimum_allowed_distance_from_edge_of_map",
@@ -75,16 +77,8 @@ def initialize(path: str):
             "wall can be missed, and a corkscrew link may be cut under it."
         )
 
-    # "layers" is the 3-D on/off block grid. "height" stores one absolute
-    # rail height per horizontal cell. Anything else falls back to layers
-    # so a typo cannot silently change a map.
-    block_mode = str(CFG.get("trackhammer_block_mode", "layers")).strip().lower()
-    CFG["trackhammer_block_mode"] = (
-        block_mode if block_mode in ("layers", "height") else "height"
-    )
-
-    # Height mode only. "down" keeps the lowest rail in the cell and requires
-    # the next track to pass at least trackhammer_height_clearance underneath it.
+    # "down" keeps the lowest rail in the cell and requires the next track
+    # to pass at least trackhammer_height_clearance underneath it.
     height_direction = (
         str(CFG.get("trackhammer_height_direction", "up")).strip().lower()
     )

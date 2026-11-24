@@ -27,7 +27,7 @@ sample_spec / sample_named return the raw fbm value, roughly -1 to 1.
 
 import math
 
-from noise import pnoise3
+from railmancer.perlin import pnoise3
 
 from railmancer import cfg
 

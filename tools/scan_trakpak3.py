@@ -6,10 +6,8 @@ This script collects those names and runs each one through
 railmancer.track.process_file, which is the parser the game library uses.
 
 It does not download model bytes. A refresh asks GitHub for the file tree
-(names only). A local copy, including the Steam folder Railmancer already
-points at, can be scanned instead:
-
-    C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg
+(names only). A local copy can be scanned with --local. The folders the
+scripts themselves use are in railmancer/settings.example.json.
 
 From the repo root:
 

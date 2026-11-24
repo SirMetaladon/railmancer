@@ -2,7 +2,7 @@
   "line_maximum_poll_point_distance": 80, 
   "sector_real_size": 3264,
   "noise_grid_per_sector": 25,
-  "sector_displacement_subdivision_rate": 2,
+  "displacement_target_size": 1088,
   "sector_snap_grid": 16,
   "sector_minimum_height": 1200,
   "sector_maximum_height": 4000,
@@ -10,7 +10,6 @@
   "sector_corkscrew_track_clearance": 250,
   "sector_corkscrew_prefer_height": 1,
   "sector_connection_maximum_cliff": 1000,
-  "sector_connection_maximum_rise": 1000,
   "sector_minimum_track_to_edge_distance": 700,
   "noise_floor_ceiling_spillover_slope": 2,
   "trackhammer_minimum_allowed_distance_from_edge_of_map": 1000,
@@ -18,7 +17,6 @@
   "trackhammer_fit_run_length": 1,
   "run_length_tolerance": 1000,
   "trackhammer_block_size_horizontal": 2500,
-  "trackhammer_block_mode": "layers",
   "trackhammer_height_direction": "up",
   "trackhammer_height_clearance": 1500,
   "trackhammer_block_standoff_distance": 3500, 
@@ -142,7 +140,11 @@
         "height_terrain_minimum_to_floor": 15,
         "model_minimum_distance": 150,
         "tree_fade_distance": 128,
-        "tree_hard_distance": 128
+        "tree_hard_distance": 128,
+        "density_edge_multiplier": 6,
+        "density_edge_width": 1088,
+        "density_edge_cutoff": 102,
+        "wall_clearance": 64
       }
     },
     "dev_null": {

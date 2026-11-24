@@ -1,17 +1,22 @@
+import bisect
 import os, re, math
-from railmancer import vmfpy
+from railmancer import tools, vmfpy, settings
 
 # Interface between VMFs as a file type and the system of blocks, entities, etc. Intended to be generic.
 
 Brushes: list = []
+# Parallel to Brushes. None means the solid is not in a sector group.
+Brush_Group_Keys: list = []
+# sector id -> group id string, filled when assemble allocates ids.
+Sector_Group_IDs: dict = {}
 Brush_Entites: list = []
 Entities: list = []
 
 
 # Handler function that makes Brushes a global list.
-def add_brush(Brush):
+def add_brush(Brush, group_key=None):
 
-    global Brushes
+    global Brushes, Brush_Group_Keys
 
     Flag = 0
 
@@ -20,7 +25,11 @@ def add_brush(Brush):
             Flag = 1
 
     if Flag == 0:
+        # Tests and callers clear Brushes directly. Drop stale keys with it.
+        if not Brushes:
+            Brush_Group_Keys = []
         Brushes += [Brush]
+        Brush_Group_Keys += [group_key]
 
 
 def add_entity(Ent):
@@ -72,7 +81,7 @@ def get_ID():
 
 
 # From a list-brush object, compile all the information together to make a brush-string ready for assembly in to the final VMF.
-def brush(Brush: list):
+def brush(Brush: list, group_id=None):
 
     global ID
 
@@ -150,6 +159,9 @@ def brush(Brush: list):
     Z_End = str(Brush[5])
 
     VisgroupData = ""
+    GroupLine = ""
+    if group_id:
+        GroupLine = f'\n            "groupid" "{group_id}"'
     if len(Brush) > 9:
         # Explicit id, including the pathfinding cubes on visgroup 24.
         VisgroupData = f'\n                    "visgroupid" "{resolve_visgroup(Brush[9])}"'
@@ -274,7 +286,7 @@ def brush(Brush: list):
         }}
         editor
         {{
-            "color" "150 150 160"
+            "color" "150 150 160"{GroupLine}
             "visgroupshown" "1"
             "visgroupautoshown" "1"{VisgroupData}
         }}
@@ -441,8 +453,10 @@ def synthesize_entities(Entities):
 def synthesize_brushes():
 
     BrushString = ""
-    for Brush in Brushes:
-        BrushString += brush(Brush)
+    for index, Brush in enumerate(Brushes):
+        key = Brush_Group_Keys[index] if index < len(Brush_Group_Keys) else None
+        group_id = Sector_Group_IDs.get(key) if key is not None else None
+        BrushString += brush(Brush, group_id)
 
     print(f"Synthesized {len(Brushes)} brushes into {len(BrushString)} chars.")
 
@@ -464,7 +478,7 @@ def synthesize_brush_entities():
 
 
 # From a set of coordinates and a sector size hint, add the brushe for a floor.
-def floor(block_x: int, block_y: int, block_z: int, sector_size: int):
+def floor(block_x: int, block_y: int, block_z: int, sector_size: int, group_key=None):
     add_brush(
         [
             block_x,
@@ -474,12 +488,13 @@ def floor(block_x: int, block_y: int, block_z: int, sector_size: int):
             block_z,
             (block_z - 16),
             "floor",
-        ]
+        ],
+        group_key,
     )
 
 
 # From a set of coordinates and a sector size hint, add the brush for a ceiling.
-def ceiling(block_x: int, block_y: int, block_z: int, sector_size: int):
+def ceiling(block_x: int, block_y: int, block_z: int, sector_size: int, group_key=None):
     add_brush(
         [
             block_x,
@@ -489,7 +504,8 @@ def ceiling(block_x: int, block_y: int, block_z: int, sector_size: int):
             (block_z),
             (block_z + 16),
             "ceiling",
-        ]
+        ],
+        group_key,
     )
 
 
@@ -524,6 +540,7 @@ def wall(
     dir: int,
     sector_size: int,
     type="wall",
+    group_key=None,
 ):
 
     dir = dir % 4
@@ -558,7 +575,8 @@ def wall(
             block_z,
             height,
             type,
-        ]
+        ],
+        group_key,
     )
 
 
@@ -815,17 +833,38 @@ def _plan_new_ids():
     entities = get_entities()
     if base_map is None:
         group_ids = assign_scatter_groups(entities, GROUP_ID_BASE)
+        sector_ids = _assign_sector_group_ids(GROUP_ID_BASE, len(group_ids))
         ID = 1000
-        return group_ids
+        return group_ids, sector_ids
 
     if base_map.max_id + 1 >= GROUP_ID_BASE:
-        group_ids = assign_scatter_groups(entities, base_map.max_id + 1)
-        ID = base_map.max_id + len(group_ids)
-        return group_ids
+        group_base = base_map.max_id + 1
+        group_ids = assign_scatter_groups(entities, group_base)
+        sector_ids = _assign_sector_group_ids(group_base, len(group_ids))
+        # Objects continue after the last group, scatter and sector alike.
+        ID = base_map.max_id + len(group_ids) + len(sector_ids)
+        return group_ids, sector_ids
 
     group_ids = assign_scatter_groups(entities, GROUP_ID_BASE)
+    sector_ids = _assign_sector_group_ids(GROUP_ID_BASE, len(group_ids))
     ID = base_map.max_id
-    return group_ids
+    return group_ids, sector_ids
+
+
+def _assign_sector_group_ids(group_base, scatter_count):
+
+    # One group per sector that actually emitted a brush. Rank is sorted
+    # sector id, so the numbers do not depend on compile order. They start
+    # after the scatter groups, which keep group_base + 0 .. count-1.
+    global Sector_Group_IDs
+    keys = sorted({key for key in Brush_Group_Keys if key is not None})
+    Sector_Group_IDs = {}
+    sector_ids = []
+    for rank, key in enumerate(keys):
+        group_id = str(group_base + scatter_count + rank)
+        Sector_Group_IDs[key] = group_id
+        sector_ids.append(group_id)
+    return sector_ids
 
 
 # One group per occupied (sector, cell x, cell y, grouping), including a lone prop.
@@ -871,9 +910,49 @@ def format_prop_groups(group_ids):
 
 
 # Assemble the brushes, entities, and brush-entity strings along with header information.
+def _merge_spans(spans):
+
+    # Union of the ranges, sorted and disjoint, so a point is covered by
+    # at most one of them.
+    if not spans:
+        return ()
+    ordered = sorted(spans)
+    merged = [ordered[0]]
+    for start, end in ordered[1:]:
+        prev_start, prev_end = merged[-1]
+        if start <= prev_end:
+            if end > prev_end:
+                merged[-1] = (prev_start, end)
+        else:
+            merged.append((start, end))
+    return tuple(merged)
+
+
 def _covered(position, spans):
 
-    return any(start <= position < end for start, end in spans)
+    # `spans` is the merged form from _merge_spans.
+    if not spans:
+        return False
+    index = bisect.bisect_right(spans, (position, float("inf"))) - 1
+    if index < 0:
+        return False
+    start, end = spans[index]
+    return start <= position < end
+
+
+def _editors_by_parent(blocks):
+
+    # First editor child of each parent, which is what a linear scan found.
+    editors = {}
+    for block in blocks:
+        if (
+            block.name == "editor"
+            and block.parent is not None
+            and block.close_brace >= 0
+            and block.parent not in editors
+        ):
+            editors[block.parent] = block
+    return editors
 
 
 def _block_span(text, block):
@@ -925,18 +1004,6 @@ def _deletion_spans(text, blocks, consumed_spans):
     return deletions
 
 
-def _direct_editor(blocks, parent_index):
-
-    for block in blocks:
-        if (
-            block.name == "editor"
-            and block.parent == parent_index
-            and block.close_brace >= 0
-        ):
-            return block
-    return None
-
-
 def _original_membership_inserts(text, blocks, deletions, original_id):
 
     """One extra visgroupid line on every preserved solid and entity.
@@ -952,15 +1019,17 @@ def _original_membership_inserts(text, blocks, deletions, original_id):
 
     inserts = []
     needle = f'"visgroupid" "{original_id}"'
+    editors = _editors_by_parent(blocks)
+    covered = _merge_spans(deletions)
     for index, block in enumerate(blocks):
         if block.name not in ("solid", "entity") or block.close_brace < 0:
             continue
-        if _covered(block.start, deletions):
+        if _covered(block.start, covered):
             continue
 
-        editor = _direct_editor(blocks, index)
+        editor = editors.get(index)
         if editor is not None:
-            if _covered(editor.start, deletions):
+            if _covered(editor.start, covered):
                 continue
             body = text[editor.open_brace : editor.close_brace]
             if needle in body:
@@ -1082,22 +1151,35 @@ def _world_and_entity_insert_points(text, blocks):
 def _apply_edits(text, deletions, insertions):
 
     # Drop an insert that would have landed inside a block we are deleting
-    # (the editor of a consumed track entity). Then apply from the end of
-    # the string so earlier indexes stay put.
+    # (the editor of a consumed track entity). Edits are applied from the
+    # end, so an earlier index still refers to the original string. The
+    # pieces are collected and joined once instead of copying the whole
+    # text for every edit. Equal positions keep the old order: deletions
+    # were listed first, and the stable reverse sort leaves them ahead of
+    # an insert at the same index, which means the insert is applied second
+    # and therefore ends up in front of whatever the deletion left.
+    covered = _merge_spans(deletions)
     insertions = [
         (pos, chunk)
         for pos, chunk in insertions
-        if chunk and not _covered(pos, deletions)
+        if chunk and not _covered(pos, covered)
     ]
     operations = [("del", start, end, "") for start, end in deletions]
     operations.extend(("ins", pos, pos, chunk) for pos, chunk in insertions)
     operations.sort(key=lambda item: item[1], reverse=True)
+
+    pieces = []
+    cursor = len(text)
     for kind, start, end, chunk in operations:
-        if kind == "del":
-            text = text[:start] + text[end:]
-        else:
-            text = text[:start] + chunk + text[start:]
-    return text
+        if end < cursor:
+            pieces.append(text[end:cursor])
+        if kind == "ins":
+            pieces.append(chunk)
+        cursor = start
+    if cursor:
+        pieces.append(text[:cursor])
+    pieces.reverse()
+    return "".join(pieces)
 
 
 def _splice_base(brush_string, group_string, entity_string):
@@ -1135,15 +1217,25 @@ def _splice_base(brush_string, group_string, entity_string):
 
 def assemble_vmf():
 
-    group_ids = _plan_new_ids()
-    BrushString = synthesize_brushes()
-    GroupString = format_prop_groups(group_ids)
-    EntityString = synthesize_entities(get_entities())
-    BrushEntityString = synthesize_brush_entities()
-    new_entities = EntityString + BrushEntityString
+    with tools.stage("Allocating ids"):
+        group_ids, sector_ids = _plan_new_ids()
+    with tools.stage("Formatting"):
+        BrushString = synthesize_brushes()
+        GroupString = format_prop_groups(group_ids + sector_ids)
+        EntityString = synthesize_entities(get_entities())
+        BrushEntityString = synthesize_brush_entities()
+        new_entities = EntityString + BrushEntityString
+
+        if base_map is None:
+            fresh = _fresh_vmf(BrushString, GroupString, new_entities)
 
     if base_map is not None:
-        return _splice_base(BrushString, GroupString, new_entities)
+        with tools.stage("Splicing"):
+            return _splice_base(BrushString, GroupString, new_entities)
+    return fresh
+
+
+def _fresh_vmf(BrushString, GroupString, new_entities):
 
     Start = """versioninfo
     {
@@ -1265,19 +1357,21 @@ __VISGROUPS__    }
 # Save the assembled VMF. Group blocks sit inside world, after the solids.
 def write_to_vmf(filename):
 
-    content = assemble_vmf()
+    with tools.stage("Assembling the VMF"):
+        content = assemble_vmf()
 
-    directory = "C:/Users/Metaladon/Desktop/Model Data/VMFS/railmancer"
+    directory = settings.get("vmf_output_dir")
     full_file_path = os.path.join(directory, filename)
 
-    try:
-        os.makedirs(directory, exist_ok=True)
+    with tools.stage("Writing the file"):
+        try:
+            os.makedirs(directory, exist_ok=True)
 
-        with open(full_file_path, "w", encoding="utf-8") as file:
-            file.write(content)
-        print(f"File saved successfully: {full_file_path}")
-    except Exception as e:
-        print(f"An error occurred: {e}")
+            with open(full_file_path, "w", encoding="utf-8") as file:
+                file.write(content)
+            print(f"File saved successfully: {full_file_path}")
+        except Exception as e:
+            print(f"An error occurred: {e}")
 
 
 # Convert a "raw" displacement + alpha and heights (presampled) into a properly compiled grid of data ready to be inserted into a displacement-brush string

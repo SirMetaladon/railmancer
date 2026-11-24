@@ -14,10 +14,10 @@ python tools/scan_trakpak3.py --refresh
 
 ## Scan a local copy
 
-The same folder `railmancer.py` already uses works. Point `--local` at a checkout, an addon, or the Steam `trakpak3_rsg` directory:
+Point `--local` at a checkout, an addon, or a Steam `trakpak3_rsg` directory. The folders the scripts use are `track_library` and `switchstands_track_library` in `railmancer/settings.example.json`.
 
 ```
-python tools/scan_trakpak3.py --local "C:/Program Files (x86)/Steam/steamapps/common/Source SDK Base 2013 Singleplayer/ep2/custom/trakpak/models/trakpak3_rsg"
+python tools/scan_trakpak3.py --local PATH
 ```
 
 If that directory is inside a git checkout, the manifest records `HEAD`.

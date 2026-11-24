@@ -13,6 +13,7 @@ from railmancer import (
     trackhammer,
     cfg,
     consolidate_straights,
+    settings,
 )
 
 # This is where it all comes together. Each step of the process accomplishes a major part of the overall product. Mostly for clarity of flow.
@@ -20,27 +21,31 @@ from railmancer import (
 
 def main():
 
-    # Some input information. One contains the directory for building the Track Library, the other is the VMF for the importer.
-    trackpack_directory = "C:/Program Files (x86)/Steam/steamapps/common/GarrysMod/garrysmod/addons/trakpak/models/trakpak3_rsg"
-    # vmf_input_path = "vmf inputs/squamish test.vmf"
-    vmf_input_path = "vmf inputs/vancouver_only.vmf"
+    # Track library and the input VMF. settings.local.json or the
+    # RAILMANCER_* variables override these; otherwise Isaiah's paths.
+    trackpack_directory = settings.get("track_library")
+    vmf_input_path = settings.get("vmf_input")
 
     # Starts a few stopwatches for showing time progression.
     tools.stopwatch_click("total", "Start!")
     tools.stopwatch_click("submodule", "Start!")
 
     # Initializes CFG parameters for use elsewhere
-    cfg.initialize("railmancer/config.json")
+    with tools.stage("Reading config"):
+        cfg.initialize("railmancer/config.json")
 
     # Assembles a "library" of track pieces from a directory.
-    track.build_track_library(trackpack_directory, ".mdl")
+    with tools.stage("Building the track library"):
+        track.build_track_library(trackpack_directory, ".mdl")
 
     # Import line objects from a VMF, as well as the track entities themselves.
-    parser.import_track(vmf_input_path)
+    with tools.stage("Importing the VMF"):
+        parser.import_track(vmf_input_path)
 
     # Starting from a node, procedurally move forward and place track, finding a path that fits the parameters.
-    trackhammer.initialize()
-    trackhammer.exclude_existing()
+    with tools.stage("Preparing trackhammer"):
+        trackhammer.initialize()
+        trackhammer.exclude_existing()
 
     Vancouver_Start = [(7568, 3552, -14040), "0fw", -90, False]
     # Each run is (tracks left, tracks right), miles, parameters.
@@ -48,46 +53,47 @@ def main():
     # and both sides get switches. "stub" ends or starts that side with no
     # switch. A dict sets the sides separately, for example
     # {"left": "stub", "right": "switch"}.
-    trackhammer.generate_mainline(
-        Vancouver_Start,
-        [
+    with tools.stage("Generating the mainline"):
+        trackhammer.generate_mainline(
+            Vancouver_Start,
             [
-                (0, 0),
-                2,
-                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+                [
+                    (0, 0),
+                    2,
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+                ],
+                [
+                    (0, 1),
+                    0.4,
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+                ],
+                [
+                    (0, 2),
+                    0.07,
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+                ],
+                [
+                    (0, 0),
+                    0.75,
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+                ],
+                [
+                    (0, 1),
+                    0.6,
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+                ],
+                [
+                    (0, 2),
+                    0.07,
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+                ],
+                [
+                    (0, 0),
+                    2,
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+                ],
             ],
-            [
-                (0, 1),
-                0.4,
-                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
-            ],
-            [
-                (0, 2),
-                0.07,
-                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
-            ],
-            [
-                (0, 0),
-                0.75,
-                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
-            ],
-            [
-                (0, 1),
-                0.6,
-                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
-            ],
-            [
-                (0, 2),
-                0.07,
-                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
-            ],
-            [
-                (0, 0),
-                2,
-                {"min_radius": 2, "min_grade": 1, "max_grade": 2},
-            ],
-        ],
-    )
+        )
 
     """[(0, 0), 0.3, {"min_radius": 5, "min_grade": 0, "max_grade": 0}],  # run 4
     [(1, 0), 1, {"min_radius": 3, "min_grade": 2, "max_grade": 2}],  # run 2
@@ -122,50 +128,64 @@ def main():
     # Merge collinear straights before anything samples the rail. Smooth grade
     # rewrites rises; consolidate_inplace rebuilds lines.Beziers from the props
     # so switch stands, heightmaps, and sectors see the regraded profile.
-    consolidate_straights.consolidate_inplace(smooth_grade=True)
+    with tools.stage("Consolidating straights"):
+        consolidate_straights.consolidate_inplace(smooth_grade=True)
 
     # Generate KDTree for distance to this line; speeds up later processes compared to doing it manually
-    lines.encode_lines()
+    with tools.stage("Encoding lines"):
+        lines.encode_lines()
     # these values are stored as global variables in the lines module.
 
     # Scan all entities for switch stands, determine which side of them is less blocked, place accordingly.
     # Before staged ground hints are inserted: the stand pass measures track only.
-    sectors.collapse_quantum_switchstands()
+    with tools.stage("Placing switch stands"):
+        sectors.collapse_quantum_switchstands()
 
     # takes staged building foundation points and makes them ignore sector creation while still being a part of sectors
-    lines.insert_staged_points()
+    with tools.stage("Inserting staged points"):
+        lines.insert_staged_points()
 
     # Build a sector-map from the blocklist. Dict instead of a list; tells you where the walls are. Also contains a map for "what block is next to this one"
-    sectors.build_fit()
-    sectors.link()
+    with tools.stage("Fitting sectors"):
+        sectors.build_fit()
+    with tools.stage("Linking sectors"):
+        sectors.link()
 
     # Takes points and puts them in buckets for sector processing.
-    sectors.assign_points_to_sectors()
+    with tools.stage("Assigning points to sectors"):
+        sectors.assign_points_to_sectors()
 
     # Floor/ceiling limits on each node. Not the ramp; the ramp is cut-and-fill.
-    heightmap.generate_sector_heightmaps()
+    with tools.stage("Generating heightmaps"):
+        heightmap.generate_sector_heightmaps()
 
     # Share edge vertices, including the diagonal corner, so displacements meet.
-    sectors.merge_edges()
+    with tools.stage("Merging edges"):
+        sectors.merge_edges()
 
     # Spread those limits across sector borders at noise_floor_ceiling_spillover_slope
     # until the slope has settled, instead of stopping after a fixed 5 passes.
-    sectors.blur_min_max_grids()
+    with tools.stage("Spreading floor and ceiling"):
+        sectors.blur_min_max_grids()
 
     # Slope-limited ramp off the smooth track field, then the rail carve.
-    heightmap.cut_and_fill_sector_heightmaps()
+    with tools.stage("Contours"):
+        heightmap.cut_and_fill_sector_heightmaps()
 
     # Blur and re-clamp to the envelope and the carve, once per pass, so the
     # average cannot lift ground over a rail or out through the floor/ceiling.
-    heightmap.relax_heightmaps()
+    with tools.stage("Relaxing the heightmap"):
+        heightmap.relax_heightmaps()
 
     # profile.start()
     # Turn the raw sector and heightmap data into brushes and displacements.
-    compile.compile_sectors_to_brushes()
+    with tools.stage("Compiling sectors"):
+        compile.compile_sectors_to_brushes()
     # profile.end()
 
     # For each sector, apply the scattering algorithm that places trees, rocks, bushes, etc.
-    compile.scatter_placables()
+    with tools.stage("Scattering props"):
+        compile.scatter_placables()
 
     """points = lines.get_all_track_points()
     for entry in points:
@@ -174,10 +194,12 @@ def main():
     # Places Frogs at all track-points around the map, for debugging purposes.
     tools.stopwatch_click("submodule", "Frogging the Track, done")"""
 
-    vmfpy.add_light_environment()
+    with tools.stage("Adding the light"):
+        vmfpy.add_light_environment()
 
     # Compile brush, entity, and brushentity data into a VMF text file and save.
-    vmfpy.write_to_vmf(f"{"railmancer"}_{random.randint(5000,5999)}{".vmf"}")
+    with tools.stage("Writing the VMF"):
+        vmfpy.write_to_vmf(f"{"railmancer"}_{random.randint(5000,5999)}{".vmf"}")
 
     tools.stopwatch_click("total", "Railmancer Finished")
 

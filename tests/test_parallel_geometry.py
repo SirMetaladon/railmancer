@@ -26,7 +26,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-# lines.py imports turtle, which imports tkinter. Geometry tests never draw.
+# Left over from when lines.py imported turtle. Harmless if turtle is absent.
 sys.modules.setdefault("turtle", types.ModuleType("turtle"))
 
 from railmancer import lines, track, tools, vmfpy

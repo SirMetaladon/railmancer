@@ -182,6 +182,14 @@ class CascadiaSidingTests(unittest.TestCase):
         register_switch_library()
         lines.write_bezier_points = lambda *_args, **_kwargs: None
         origin = (0.0, 0.0, 0.0)
+        add_entity = vmfpy.add_entity
+        try:
+            self._ladder_cases(origin)
+        finally:
+            vmfpy.add_entity = add_entity
+
+    def _ladder_cases(self, origin):
+
         for direction, before, after in (
             ("4lt", (0, 0), (1, 0)),
             ("4lt", (0, 0), (0, 1)),

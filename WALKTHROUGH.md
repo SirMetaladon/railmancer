@@ -102,7 +102,7 @@ Limits: if the filename does not match what `process_file` or the siding parser 
 
 ### Tests
 
-There is no pytest file and no extra suite. These three scripts are the suite. They stub `turtle` themselves, because `lines.py` imports it and this environment has no Tk.
+The suite is `python3 -W error::DeprecationWarning -m unittest discover -s tests`. The three scripts below are the parallel-track checks. `lines.py` no longer imports `turtle`; a few tests still stub it, which does nothing.
 
 ```bash
 python3 tests/test_parallel_geometry.py
@@ -192,7 +192,7 @@ Each run can say how it joins the previous one. The key sits in the run's parame
 
 `"stub"` on a side means those tracks just end or begin. Their endpoints stay unpaired, which the checker already allows at a run end. A per-track list would punch a hole in the ladder, because each switch's diverging end is the next switch's point, so the control is per side.
 
-As a run gets close to its length, pieces that would leave no room for the upcoming zone are skipped, and the gap in front of the zone is filled with a grid-snapped straight that does not round past the target. `trackhammer_fit_run_length` in `config.json` turns that off if you want the old "fill whatever is left, then add the zone" behavior. It works with height mode, because the corridor check uses the same block test as a normal piece.
+As a run gets close to its length, pieces that would leave no room for the upcoming zone are skipped, and the gap in front of the zone is filled with a grid-snapped straight that does not round past the target. `trackhammer_fit_run_length` in `config.json` turns that off if you want the old "fill whatever is left, then add the zone" behavior. The corridor check uses the same height reservation as a normal piece. Trackhammer only has that height table now; the old on/off block grid is gone.
 
 `4lt` and `4rt` sidings do not land on a parallel track. The condensed `4lt` diverging point is 32 units off `move_in_trackspace`. There is no `4rt` siding and no `8lt` / `8rt` siding. A run boundary in those directions does not get a ladder; the pathfinder prints the error and tries another piece. After an 8 piece the node direction is already `0fw`, so the boundary after a corner is a normal `0fw` ladder. A boundary while the train is still on `4lt` or `4rt` is unsolved.
 
@@ -208,12 +208,8 @@ That run is 84 transitions (the count changes in the owner's list, both hands, o
 python3 railmancer.py
 ```
 
-That is the normal entry point. On this machine it stops at import:
+That is the normal entry point. Terrain noise is `railmancer/perlin.py`. Paths come from `railmancer/settings.local.json` when that file exists, otherwise the defaults in `railmancer/settings.py` (the same paths as `settings.example.json`): the track library, the input VMF, and the output folder. `RAILMANCER_TRACK_LIBRARY`, `RAILMANCER_VMF_INPUT`, and `RAILMANCER_VMF_OUTPUT_DIR` override both. `switchstands.py` uses `switchstands_track_library` and `switchstands_vmf_input`, with `RAILMANCER_SWITCHSTANDS_TRACK_LIBRARY` and `RAILMANCER_SWITCHSTANDS_VMF_INPUT`.
 
-```text
-ModuleNotFoundError: No module named 'noise'
-```
-
-`heightmap.py` imports `pnoise3` from the `noise` package. Building that package here fails because `Python.h` is not installed. Past that, `lines.py` imports `turtle` (no Tk in this environment), the track library path in `railmancer.py` is a Windows Steam directory that is not on this machine, and `vmf inputs/vancouver_only.vmf` is not in the repo. The three scripts above are the runs that actually execute here. They do not need the mdl files, that VMF, or the noise package.
+A full run still needs the track-library folder and `vmf inputs/`, which are not in the repo. The unit tests do not. Displacement brushes stay power 3. How many tile a sector is `round(sector_real_size / displacement_target_size)` in `config.json`, moved to a divisor of the 16-unit grid when that count would leave an edge off the grid. The shipped sector, 3264 with a target of 1088, is 3 by 3.
 
 The numbers from the latest run of those scripts, and of the checker on `c_fully_fixed.vmf`, are in the pull request description.

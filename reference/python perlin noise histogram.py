@@ -1,6 +1,11 @@
+import os
+import sys
+
 import numpy as np
 import matplotlib.pyplot as plt
-from noise import pnoise2
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from railmancer.perlin import pnoise2
 
 # Configuration
 width = 5000  # X samples

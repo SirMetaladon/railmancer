@@ -13,7 +13,6 @@ class HeightBlockTests(unittest.TestCase):
 
     def setUp(self):
 
-        cfg.CFG["trackhammer_block_mode"] = "height"
         cfg.CFG["trackhammer_height_direction"] = "up"
         cfg.CFG["trackhammer_height_clearance"] = 50
         trackhammer.BlockHorizontal = 1000
@@ -24,7 +23,6 @@ class HeightBlockTests(unittest.TestCase):
 
     def tearDown(self):
 
-        cfg.CFG["trackhammer_block_mode"] = "layers"
         cfg.CFG["trackhammer_height_direction"] = "up"
 
     def test_horizontal_cells_match_get_block_ids(self):
@@ -40,7 +38,6 @@ class HeightBlockTests(unittest.TestCase):
 
         records = trackhammer.blocks_new([[0, 0, 40], [0, 0, 90]])
         self.assertEqual(trackhammer.HeightTable[(0, 0)], 90.0)
-        self.assertEqual(trackhammer.Blocks, {})
         cells = [(record[0], record[1]) for record in records]
         self.assertEqual(len(cells), len(set(cells)))
         self.assertTrue(all(record[2] is None for record in records))
@@ -158,7 +155,9 @@ class HeightBlockTests(unittest.TestCase):
         self.assertGreater(len(vmfpy.Brushes), 0)
         for brush in vmfpy.Brushes:
             self.assertEqual(brush[6], "dev/dev_measurewall01d")
-            self.assertEqual(brush[4], 250.0)
+            # Up mode fills from the map floor up through the stored rail
+            # plus one block layer: z0 is fixed, z1 is stored + BlockVertical.
+            self.assertEqual(brush[4], -16320)
             self.assertEqual(brush[5], 350.0)
             self.assertEqual(brush[1] - brush[0], 1000)
 
@@ -167,21 +166,32 @@ class HeightBlockTests(unittest.TestCase):
         trackhammer.clear_occupied()
         trackhammer.blocks_new([[0, 0, 250]])
         trackhammer.display_blocks_in_vmf()
+        # Down mode hangs from the stored rail minus one block layer and
+        # fills up to the map ceiling.
         self.assertEqual(vmfpy.Brushes[0][4], 150.0)
-        self.assertEqual(vmfpy.Brushes[0][5], 250.0)
+        self.assertEqual(vmfpy.Brushes[0][5], 16320)
 
-    def test_layers_mode_still_reserves_block_ids(self):
+    def test_start_clears_one_block_ahead_along_the_heading(self):
 
-        cfg.CFG["trackhammer_block_mode"] = "layers"
-        added = trackhammer.blocks_new([[0, 0, 0]])
-        self.assertTrue(added)
-        self.assertTrue(all(isinstance(block_id, str) for block_id in added))
-        self.assertTrue(trackhammer.Blocks)
+        # Vancouver start in railmancer.py: 0fw at heading -90 moves +Y.
+        # The old constant (7568, 4552, -14040) is that start plus 1000
+        # in Y. One BlockHorizontal of 1000 lands on it. The shipped
+        # block size is 2500, so the same start clears (7568, 6052, -14040).
+        node = [(7568, 3552, -14040), "0fw", -90, False]
+        trackhammer.BlockHorizontal = 1000
+        self.assertEqual(
+            trackhammer.point_one_block_ahead(node),
+            (7568.0, 4552.0, -14040),
+        )
+        trackhammer.BlockHorizontal = 2500
+        ahead = trackhammer.point_one_block_ahead(node)
+        self.assertEqual(ahead, (7568.0, 6052.0, -14040))
+
+        trackhammer.blocks_new([node[0], ahead])
+        self.assertTrue(trackhammer.HeightTable)
+        trackhammer.clear_start_footprint(node[0])
+        trackhammer.clear_start_footprint(ahead)
         self.assertEqual(trackhammer.HeightTable, {})
-        self.assertTrue(trackhammer.are_points_blocked([[0, 0, 0]]))
-        trackhammer.display_blocks_in_vmf()
-        self.assertEqual(len(vmfpy.Brushes), len(added))
-        self.assertEqual(vmfpy.Brushes[0][6], "dev/dev_measurewall01d")
 
     def _step(self, length, points):
 

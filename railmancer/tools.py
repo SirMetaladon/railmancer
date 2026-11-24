@@ -1,4 +1,5 @@
 import time, math
+from contextlib import contextmanager
 import numpy as np
 from typing import Dict
 
@@ -13,6 +14,56 @@ def display_time(sec):
     mins = mins % 60
 
     return "{0}:{1}:{2}".format(int(hours), int(mins), round(sec, 3))
+
+
+@contextmanager
+def stage(label):
+
+    # One line when the step starts, so a long run always shows what is
+    # happening. The duration is only worth printing once it is visible.
+    print(f"{label}...", flush=True)
+    started = time.perf_counter()
+    try:
+        yield
+    finally:
+        elapsed = time.perf_counter() - started
+        if elapsed >= 0.5:
+            print(f"...done in {elapsed:.2f} s", flush=True)
+        else:
+            print("...done", flush=True)
+
+
+class _Progress:
+
+    # In-place counter for a long loop. Printing every item would cost more
+    # than the work, so the line moves at most a few times a second.
+    def __init__(self, label, total):
+
+        self.label = label
+        self.total = total
+        self._stamp = 0.0
+        self._shown = False
+
+    def __call__(self, done):
+
+        if self.total <= 0:
+            return
+        now = time.perf_counter()
+        if self._shown and done < self.total and (now - self._stamp) < 0.2:
+            return
+        self._shown = True
+        self._stamp = now
+        print(f"\r{self.label} {done}/{self.total}", end="", flush=True)
+
+    def finish(self):
+
+        if self._shown:
+            print(flush=True)
+
+
+def progress(label, total):
+
+    return _Progress(label, total)
 
 
 def stopwatch_click(name: str, blurb: str = "") -> float:

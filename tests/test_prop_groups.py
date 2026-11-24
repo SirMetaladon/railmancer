@@ -63,7 +63,9 @@ class PropGroupTests(unittest.TestCase):
         vmfpy.Brush_Entites.clear()
 
     def test_one_group_per_sector_cell_and_grouping(self):
-        self.assertEqual(self._subs, 4)
+        # Config ships 2. setUp forces 4, which is what the 256-unit cells below use.
+        self.assertEqual(self._subs, 2)
+        self.assertEqual(cfg.CFG["prop_group_subdivisions"], 4)
         self.assertNotIn("prop_group_categories", cfg.CFG)
         biomes = cfg.CFG["Biomes"]
         self.assertEqual(biomes["hl2_white_forest"]["models"][TREE_A]["grouping"], "tree")

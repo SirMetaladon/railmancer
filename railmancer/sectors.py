@@ -9,16 +9,27 @@ Sectors = {}
 sector_lookup_grid = {}
 
 
-def sectors_are_connected(first_sector, second_sector):
+def _vertical_overlap(first_sector, second_sector):
 
-    # this algorithm tells a sector if it is capable of connecting to another sector. Rules can be arbitrary.
-
+    # Stored floor and ceiling are map units / 16. The overlap is in those
+    # same units; callers that compare to a config height multiply by 16.
     floor_limit = max(first_sector["floor"], second_sector["floor"])
     ceiling_limit = min(first_sector["ceiling"], second_sector["ceiling"])
+    return ceiling_limit - floor_limit
 
-    # add a check in here for "is there a sector directly above me that is connected in a roundabout way"
 
-    return ((ceiling_limit - floor_limit) * 16) >= cfg.get("sector_minimum_height")
+def sectors_are_connected(first_sector, second_sector):
+
+    # A neighbor has to share enough vertical room for a sector, and its
+    # floor cannot be a cliff away. Ceiling height does not cut the link:
+    # a low sky next to a high sky is still one piece of ground.
+    if (_vertical_overlap(first_sector, second_sector) * 16) < cfg.get(
+        "sector_minimum_height"
+    ):
+        return False
+
+    floor_gap = abs(first_sector["floor"] - second_sector["floor"]) * 16
+    return floor_gap <= cfg.get("sector_connection_maximum_cliff")
 
 
 def get_sector_relative_to_this_sector(sector_data, nudge):
@@ -32,14 +43,24 @@ def get_sector_relative_to_this_sector(sector_data, nudge):
     if sector_list is False:
         return False
 
+    # Several sectors can sit in the next column. The one that shares the
+    # most vertical room wins. An equal overlap keeps the earlier sector,
+    # which is what returning the first match used to do.
+    best_id = False
+    best_overlap = None
+
     for possible_sector_id in sector_list:
 
-        if sectors_are_connected(sector_data, Sectors[possible_sector_id]):
+        other = Sectors[possible_sector_id]
+        if not sectors_are_connected(sector_data, other):
+            continue
 
-            return possible_sector_id
+        overlap = _vertical_overlap(sector_data, other)
+        if best_overlap is None or overlap > best_overlap:
+            best_overlap = overlap
+            best_id = possible_sector_id
 
-    # if no sectors found or none were within height range
-    return False
+    return best_id
 
 
 def convert_real_to_sector_xy(position):
@@ -325,13 +346,15 @@ def sort_points_to_sector_grid_buckets(points, sectors_per_map):
 
         sector_lookup = f"{sector_x}x{sector_y}"
 
-        if sector_height_buckets.get(sector_lookup, False):
-            tools.heuristic_inserter(
-                sector_height_buckets[sector_lookup],
-                ((sector_x, sector_y), -point[2]),
-            )
-        else:
-            sector_height_buckets[sector_lookup] = [((sector_x, sector_y), -point[2])]
+        sector_height_buckets.setdefault(sector_lookup, []).append(
+            ((sector_x, sector_y), -point[2])
+        )
+
+    # One stable sort per column. heuristic_inserter walked the bucket for
+    # every point (higher -z first, ties left in arrival order). sort is
+    # stable, so equal heights stay in that same order.
+    for bucket in sector_height_buckets.values():
+        bucket.sort(key=lambda item: item[1], reverse=True)
 
     return sector_height_buckets
 
@@ -365,8 +388,10 @@ def build_fit():
         return floor, ceiling
 
     sector_height_buckets = sort_points_to_sector_grid_buckets(points, sectors_per_map)
+    fitted = list(sector_height_buckets.values())
+    fitting = tools.progress("Fitting", len(fitted))
 
-    for this_sector_heights_sorted in sector_height_buckets.values():
+    for fit_index, this_sector_heights_sorted in enumerate(fitted, 1):
 
         sector_x = this_sector_heights_sorted[0][0][0]
         sector_y = this_sector_heights_sorted[0][0][1]
@@ -414,12 +439,6 @@ def build_fit():
                     next_point_height
                 )
 
-            else:
-
-                current_ceiling_height = tools.downtomult(
-                    current_floor_height + sector_minimum_height, sector_snap_grid
-                )
-
         # when there's no points left, make a topmost sector that encapsulates the remainder
         new_sector(
             sector_x,
@@ -429,6 +448,9 @@ def build_fit():
                 current_ceiling_height + sector_maximum_height, sector_snap_grid
             ),
         )
+        fitting(fit_index)
+
+    fitting.finish()
 
     tools.stopwatch_click("submodule", "Sectors Built & Fit")
 
@@ -473,7 +495,8 @@ def assign_points_to_sectors():
         sector_point_map[sector_id].append(point)
 
     # Step 2: For each sector, gather its own and neighbor points
-    for sector_id, sector_data in Sectors.items():
+    assigning = tools.progress("Assigning points", len(Sectors))
+    for assign_index, (sector_id, sector_data) in enumerate(Sectors.items(), 1):
         all_points = list(sector_point_map.get(sector_id, []))
 
         for neighbor_id in sector_data.get("neighbors", []):
@@ -486,6 +509,9 @@ def assign_points_to_sectors():
         sector_data["points"] = lines.get_terrain_points_from_sample(all_points)
 
         build_kdtree_for_sector(sector_data)
+        assigning(assign_index)
+
+    assigning.finish()
 
 
 def find_closest_point_2d(sector, x, y):
