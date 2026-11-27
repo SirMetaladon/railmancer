@@ -90,7 +90,7 @@ class MarkerTests(unittest.TestCase):
         self.assertEqual(cfg.get("start_milepost"), 0)
         self.assertEqual(
             cfg.get("milepost_model"),
-            "models/trakpak3_us/signs/milepost.mdl",
+            "models/trakpak3_us/signage/milepost/milestone1.mdl",
         )
         self.assertEqual(markers.marker_name(0.2), "mp_0_2")
         self.assertEqual(markers.marker_name(1), "mp_1_0")
@@ -255,7 +255,7 @@ class MarkerTests(unittest.TestCase):
                     "targetname": "post_1_0",
                     "pos": (0, -100, 4),
                     "ang": (0, 0, 0),
-                    "mdl": "models/trakpak3_us/signs/milepost.mdl",
+                    "mdl": "models/trakpak3_us/signage/milepost/milestone1.mdl",
                     "visgroup": vmfpy.VISGROUP_MARKERS,
                 },
             ]
@@ -269,7 +269,7 @@ class MarkerTests(unittest.TestCase):
         self.assertIn('"targetname" "warp_yard"', text)
         self.assertIn('"targetname" "post_1_0"', text)
         self.assertIn('"visgroupid" "30"', text)
-        self.assertIn("models/trakpak3_us/signs/milepost.mdl", text)
+        self.assertIn("models/trakpak3_us/signage/milepost/milestone1.mdl", text)
 
 
 def _install(names, extra=None):

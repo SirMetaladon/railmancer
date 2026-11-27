@@ -117,11 +117,10 @@ def initialize(path: str):
     take_float("milepost_interval_miles", 1.0, 0.01, 100)
     take_float("start_milepost", 0, -1000, 10000)
 
-    # data/trakpak3_models.json is track pieces only. Nothing in it is a
-    # milepost prop, so this path is a placeholder for the real TP3 mdl.
+    # Milepost prop. The track manifest does not list it.
     model = CFG.get("milepost_model", "")
     if not isinstance(model, str) or not model.strip():
-        model = "models/trakpak3_us/signs/milepost.mdl"
+        model = "models/trakpak3_us/signage/milepost/milestone1.mdl"
     CFG["milepost_model"] = model.strip()
 
     CFG["sector_real_size"] = int(math.floor(CFG["sector_real_size"] / 16) * 16)
