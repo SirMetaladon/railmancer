@@ -55,6 +55,12 @@ def main():
     # and both sides get switches. "stub" ends or starts that side with no
     # switch. A dict sets the sides separately, for example
     # {"left": "stub", "right": "switch"}.
+    # "straight_only" (or "force_straight") keeps that run on straight pieces.
+    # "flat" is min_grade 0 and max_grade 0 for that run.
+    # Warps are not run entries. Each one is a milepost and a targetname.
+    Warps = [
+        # {"mile": 1.4, "name": "warp_squamish"},
+    ]
     with tools.stage("Generating the mainline"):
         """trackhammer.generate_mainline(
             Vancouver_Start,
@@ -226,6 +232,7 @@ def main():
                     {"min_radius": 2, "min_grade": 1, "min_grade": 2, "join": "stub"},
                 ],
             ],
+            Warps,
         )
 
         """

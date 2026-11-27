@@ -561,6 +561,7 @@ class PreserveVmfTests(unittest.TestCase):
         self.assertIn(("Blocks", vmfpy.VISGROUP_BLOCKS, "Railmancer"), records)
         self.assertIn(("Terrain", vmfpy.VISGROUP_TERRAIN, "Railmancer"), records)
         self.assertIn(("Switch Stands", vmfpy.VISGROUP_SWITCH_STANDS, "Railmancer"), records)
+        self.assertIn(("Markers", vmfpy.VISGROUP_MARKERS, "Railmancer"), records)
         self.assertIn(("Old Track", vmfpy.VISGROUP_OLD_TRACK, "Railmancer"), records)
         self.assertIn(("Light", vmfpy.VISGROUP_LIGHT, "Railmancer"), records)
         self.assertIn('"visgroupid" "77"', output)

@@ -1048,7 +1048,8 @@ def aggregate_track_profile(Runs):
 
 
 # Taking a node start and target length + parameters, generate a list of track models that coincides with grade, curvature, and block rules.
-def generate_mainline(start_node, simple_track_profile):
+# warps is a list of {"mile", "name"} and is not part of the run tuples.
+def generate_mainline(start_node, simple_track_profile, warps=None):
     # FYI: Nodes are defined as [[x, y, z], "string TP3 direction", base rotation in 90 increments, IsReversed (compile relevant only)]
 
     cumulative_track_profile = aggregate_track_profile(simple_track_profile)
@@ -1067,5 +1068,12 @@ def generate_mainline(start_node, simple_track_profile):
     display_blocks_in_vmf()
 
     track.write_track_from_trackhammer_steps(steps_found)
+
+    # Markers snap to pathfinder piece origins. Mileposts and warps stay
+    # two-option pairs until collapse_quantum_switchstands, which main
+    # already runs after the lines are encoded.
+    from railmancer import markers
+
+    markers.place(steps_found, warps)
 
     tools.stopwatch_click("submodule", "Pathfinder data written")

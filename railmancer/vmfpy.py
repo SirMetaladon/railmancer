@@ -407,6 +407,41 @@ def synthesize_entities(Entities):
                 }}
             }}"""
 
+        elif Ent.get("classname", False) == "info_null":
+
+            EntityString += f"""entity
+            {{
+                "id" "{get_ID()}"
+                "classname" "info_null"
+                "targetname" "{Ent.get("targetname", "marker")}"
+                "origin" "{Ent["pos"][0]} {Ent["pos"][1]} {Ent["pos"][2]}"
+                editor
+                {{
+                    "color" "255 180 40"
+                    "visgroupshown" "1"
+                    "visgroupautoshown" "1"{VisgroupData}
+                    "logicalpos" "[0 0]"
+                }}
+            }}"""
+
+        elif Ent.get("classname", False) == "info_teleport_destination":
+
+            EntityString += f"""entity
+            {{
+                "id" "{get_ID()}"
+                "classname" "info_teleport_destination"
+                "targetname" "{Ent.get("targetname", "warp")}"
+                "angles" "{Ent["ang"][0]} {Ent["ang"][1]} {Ent["ang"][2]}"
+                "origin" "{Ent["pos"][0]} {Ent["pos"][1]} {Ent["pos"][2]}"
+                editor
+                {{
+                    "color" "255 180 40"
+                    "visgroupshown" "1"
+                    "visgroupautoshown" "1"{VisgroupData}
+                    "logicalpos" "[0 0]"
+                }}
+            }}"""
+
         elif Ent.get("classname", False) == "light_environment":
             EntityString += f"""entity
             {{
@@ -461,11 +496,15 @@ def synthesize_entities(Entities):
             if Ent.get("groupid"):
                 GroupData = f'\n                    "groupid" "{Ent.get("groupid")}"'
 
+            TargetName = ""
+            if Ent.get("targetname"):
+                TargetName = f'\n                "targetname" "{Ent.get("targetname")}"'
+
             EntityString += f"""entity
             {{
                 "id" "{get_ID()}"
                 "classname" "prop_static"
-                "angles" "{Ent["ang"][0]} {Ent["ang"][1]} {Ent["ang"][2]}"
+                "angles" "{Ent["ang"][0]} {Ent["ang"][1]} {Ent["ang"][2]}"{TargetName}
                 "fademindist" "-1"
                 "fadescale" "1"
                 "model" "{Ent.get("mdl","models/props_2fort/frog.mdl")}"
@@ -702,6 +741,7 @@ VISGROUP_TERRAIN = "26"
 VISGROUP_SWITCH_STANDS = "27"
 VISGROUP_RAILMANCER = "28"
 VISGROUP_ORIGINAL = "29"
+VISGROUP_MARKERS = "30"
 VISGROUP_LIGHT = "77"
 # 30 is the Markers group on the open milepost branch. 31 stays clear of it.
 VISGROUP_BUILD_SHEDS = "31"
@@ -720,6 +760,9 @@ _VISGROUP_SPECS = (
     (VISGROUP_LIGHT, "Light", "Railmancer", "234 131 192"),
     (VISGROUP_ORIGINAL, "Original", None, "90 140 200"),
     (VISGROUP_BUILD_SHEDS, "Build Sheds", "Railmancer", "196 164 96"),
+    # After Original so a map with no visgroups still gives Original id 9.
+    # The writer nests this under Railmancer because of its parent, not its place in the list.
+    (VISGROUP_MARKERS, "Markers", "Railmancer", "255 180 40"),
 )
 
 # Sector shells and displacements. Pathfinding cubes pass visgroup 24
