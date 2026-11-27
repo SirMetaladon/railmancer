@@ -24,7 +24,7 @@ DEFAULTS = {
         "C:/Program Files (x86)/Steam/steamapps/common/GarrysMod/"
         "garrysmod/addons/trakpak/models/trakpak3_rsg"
     ),
-    "vmf_input": "vmf inputs/vancouver_only.vmf",
+    "vmf_input": "vmf inputs/gm_cascadia.vmf",
     "vmf_output_dir": "C:/Users/Metaladon/Desktop/Model Data/VMFS/railmancer",
     "switchstands_track_library": (
         "C:/Program Files (x86)/Steam/steamapps/common/"

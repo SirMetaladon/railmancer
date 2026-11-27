@@ -64,43 +64,7 @@ def main():
     with tools.stage("Generating the mainline"):
         """trackhammer.generate_mainline(
             Vancouver_Start,
-            [
-                [
-                    (0, 0),
-                    2,
-                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
-                ],
-                [
-                    (0, 1),
-                    0.4,
-                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
-                ],
-                [
-                    (0, 2),
-                    0.07,
-                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
-                ],
-                [
-                    (0, 0),
-                    0.75,
-                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
-                ],
-                [
-                    (0, 1),
-                    0.6,
-                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
-                ],
-                [
-                    (0, 2),
-                    0.07,
-                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
-                ],
-                [
-                    (0, 0),
-                    2,
-                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
-                ],
-            ],
+
         )"""
 
         trackhammer.generate_mainline(
@@ -164,32 +128,32 @@ def main():
                 [
                     (0, 0),
                     2.125,
-                    {"min_radius": 2, "min_grade": 1, "min_grade": 2},
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
                 ],
                 [
                     (1, 0),  # Alta Lake MOW Stub
                     0.1,
-                    {"min_radius": 2, "min_grade": 1, "min_grade": 2},
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
                 ],
                 [
                     (0, 0),
                     1,
-                    {"min_radius": 2, "min_grade": 1, "min_grade": 2, "join": "stub"},
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2, "join": "stub"},
                 ],
                 [  # Pemberton Siding
                     (0, 1),
                     0.4,
-                    {"min_radius": 2, "min_grade": 1, "min_grade": 2},
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
                 ],
                 [  # Pemberton Siding
                     (0, 3),
                     0.2,
-                    {"min_radius": 2, "min_grade": 1, "min_grade": 2},
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
                 ],
                 [
                     (0, 0),
                     0.005,
-                    {"min_radius": 2, "min_grade": 1, "min_grade": 2},
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
                 ],
                 [
                     (1, 0),  # Mt. Currie Pole Guy
@@ -199,7 +163,7 @@ def main():
                 [
                     (0, 0),
                     1,
-                    {"min_radius": 2, "min_grade": 1, "min_grade": 2, "join": "stub"},
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2, "join": "stub"},
                 ],
                 [  # Creekside
                     (0, 1),
@@ -214,7 +178,7 @@ def main():
                 [
                     (0, 0),
                     2,
-                    {"min_radius": 2, "min_grade": 1, "min_grade": 2},
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
                 ],
                 [  # D'Arcy
                     (0, 1),
@@ -229,26 +193,48 @@ def main():
                 [
                     (0, 0),
                     2,
-                    {"min_radius": 2, "min_grade": 1, "min_grade": 2, "join": "stub"},
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2, "join": "stub"},
+                ],
+                [
+                    (0, 1),  # McGillivray Siding
+                    0.1,
+                    {"min_radius": 0, "min_grade": 0, "max_grade": 0},
+                ],
+                [
+                    (0, 0),  # to Seton
+                    0.5,
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+                ],
+                [
+                    (1, 0),  # Seton Portage siding
+                    0.6,
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+                ],
+                [
+                    (0, 0),  # Seton Portage tunnel
+                    0.3,
+                    {"min_radius": 0, "min_grade": 1, "max_grade": 2},
+                ],
+                [
+                    (0, 0),  # main
+                    0.1,
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2},
+                ],
+                [
+                    (0, 1),  # BC Hydro spur
+                    0.1,
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2, "join": "stub"},
+                ],
+                [
+                    (0, 0),  # spur onward
+                    1,
+                    {"min_radius": 2, "min_grade": 1, "max_grade": 2, "join": "stub"},
                 ],
             ],
             Warps,
         )
 
         """
-
-            #D'Arcy to Seton Portage
-            2.125 mi 1 track
-
-            #McGillivray
-            0.1 mi 1 track (optional abandoned/remnant)
-
-            #Seton Portage Siding
-            0.6 mi 2 tracks
-            0.3 mi South-facing car-storage stub
-
-            #Seton Portage to Retakit
-            1.125 mi 1 track
 
             #Retakit Siding
             0.4 mi 2 tracks
