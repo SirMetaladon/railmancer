@@ -49,6 +49,10 @@ def initialize(path: str):
         ["trackhammer_fit_run_length", 1, 0, 1],
         # Plain track between ladders may finish this far short or long.
         ["run_length_tolerance", 1000, 0, CFG["max_mapsize"]],
+        # info_null markers sit this far above the track-piece origin.
+        ["marker_z_offset", 64, 0, 4096],
+        # Lateral offset for mileposts and warps, same scale as a switch stand.
+        ["side_offset", 100, 1, 4096],
     ]
 
     # Integers and floats are clamped separately so a 1.5 does not get truncated.
@@ -100,6 +104,24 @@ def initialize(path: str):
     CFG["trackhammer_height_clearance"] = int(
         min(max(clearance, 0), CFG["max_mapsize"])
     )
+
+    # Miles stay floats. The integer clamp above would turn 0.2 into 0.
+    def take_float(key, default, low, high):
+        try:
+            value = float(CFG.get(key, default))
+        except (TypeError, ValueError):
+            value = float(default)
+        CFG[key] = min(max(value, float(low)), float(high))
+
+    take_float("marker_interval_miles", 0.2, 0.01, 100)
+    take_float("milepost_interval_miles", 1.0, 0.01, 100)
+    take_float("start_milepost", 0, -1000, 10000)
+
+    # Milepost prop. The track manifest does not list it.
+    model = CFG.get("milepost_model", "")
+    if not isinstance(model, str) or not model.strip():
+        model = "models/trakpak3_us/signage/milepost/milestone1.mdl"
+    CFG["milepost_model"] = model.strip()
 
     CFG["sector_real_size"] = int(math.floor(CFG["sector_real_size"] / 16) * 16)
     for Biome in CFG["Biomes"].values():
