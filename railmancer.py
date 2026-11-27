@@ -333,7 +333,7 @@ def main():
 
     # Compile brush, entity, and brushentity data into a VMF text file and save.
     with tools.stage("Writing the VMF"):
-        vmfpy.write_to_vmf(f"{"railmancer"}_{random.randint(5000,5999)}{".vmf"}")
+        vmfpy.write_to_vmf(f"{"railmancer"}_{random.randint(500,599)}{".vmf"}")
 
     tools.stopwatch_click("total", "Railmancer Finished")
 

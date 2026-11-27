@@ -23,8 +23,7 @@ import os
 import re
 import sys
 
-from railmancer import tools
-
+import tools
 
 # trackhammer._in_window treats a run as finished once plain length is
 # within run_length_tolerance of the target. The shipped value is 1000
@@ -280,7 +279,11 @@ def _finalize_params(params, explicit):
     # flat replaces the grade band. Drop grades inherited from the header
     # so the paste does not carry a floor the run will ignore. A grade
     # written on this same line stays.
-    if params.get("flat") and "min_grade" not in explicit and "max_grade" not in explicit:
+    if (
+        params.get("flat")
+        and "min_grade" not in explicit
+        and "max_grade" not in explicit
+    ):
         params.pop("min_grade", None)
         params.pop("max_grade", None)
     for key in BOOL_PARAMS:
@@ -302,7 +305,9 @@ def _apply_setting(route, key, value, line_no):
     elif key == "siding_miles":
         route.siding_miles = _num(value, f"line {line_no}: siding_miles")
     elif key == "ladder_allowance_miles":
-        route.ladder_allowance_miles = _num(value, f"line {line_no}: ladder_allowance_miles")
+        route.ladder_allowance_miles = _num(
+            value, f"line {line_no}: ladder_allowance_miles"
+        )
     elif key == "ladder_allowance":
         route.ladder_allowance_number = _num(value, f"line {line_no}: ladder_allowance")
     elif key == "default_min_miles":
@@ -324,12 +329,16 @@ def _apply_setting(route, key, value, line_no):
         _store_param(route.default_params, route.default_explicit, key, value, line_no)
     else:
         known = ", ".join(sorted(SETTINGS))
-        raise RouteError(f"line {line_no}: unknown setting {key!r}. Settings are: {known}.")
+        raise RouteError(
+            f"line {line_no}: unknown setting {key!r}. Settings are: {known}."
+        )
 
 
 def _finish_settings(route):
     if route.target_miles is None:
-        raise RouteError("target_miles is missing. Put it at the top, for example target_miles = 6.0.")
+        raise RouteError(
+            "target_miles is missing. Put it at the top, for example target_miles = 6.0."
+        )
     if route.target_miles < 0:
         raise RouteError("target_miles cannot be negative.")
     if route.siding_miles < 0:
@@ -341,7 +350,9 @@ def _finish_settings(route):
         route.ladder_allowance_miles = 0.0
         return
     if miles is not None and allowance is not None and abs(miles - allowance) > 1e-9:
-        raise RouteError("ladder_allowance and ladder_allowance_miles are both set and they differ.")
+        raise RouteError(
+            "ladder_allowance and ladder_allowance_miles are both set and they differ."
+        )
     if miles is None and allowance is not None:
         route.ladder_allowance_miles = allowance
     route.ladders_enabled = True
@@ -420,7 +431,9 @@ def _parse_segment(body, inline, route, line_no):
             fixed = _num(value, f"line {line_no}: fixed")
         elif key == "weight":
             if weight is not None:
-                raise RouteError(f"line {line_no}: give '8 miles' or weight=, not both.")
+                raise RouteError(
+                    f"line {line_no}: give '8 miles' or weight=, not both."
+                )
             weight = _num(value, f"line {line_no}: weight")
         elif key == "min":
             seg.min_miles = _num(value, f"line {line_no}: min")
@@ -441,7 +454,9 @@ def _parse_segment(body, inline, route, line_no):
     seg.params = params
 
     if fixed is not None and weight is not None:
-        raise RouteError(f"line {line_no}: {_label(seg)} has a fixed length and a weight. Use one.")
+        raise RouteError(
+            f"line {line_no}: {_label(seg)} has a fixed length and a weight. Use one."
+        )
     if fixed is not None and fixed < 0:
         raise RouteError(f"line {line_no}: fixed length cannot be negative.")
     if weight is not None and weight <= 0:
@@ -637,7 +652,9 @@ def solve(route):
 
     for seg in flex:
         if seg.min_miles is None:
-            seg.min_bound = 0.0 if route.default_min_miles is None else route.default_min_miles
+            seg.min_bound = (
+                0.0 if route.default_min_miles is None else route.default_min_miles
+            )
         else:
             seg.min_bound = seg.min_miles
         if seg.max_miles is None:
@@ -645,7 +662,9 @@ def solve(route):
         else:
             seg.max_bound = seg.max_miles
         if seg.max_bound is not None and seg.min_bound > seg.max_bound + 1e-9:
-            raise RouteError(f"{_where(seg)} has min {seg.min_bound} above max {seg.max_bound}.")
+            raise RouteError(
+                f"{_where(seg)} has min {seg.min_bound} above max {seg.max_bound}."
+            )
 
     if flex:
         need = sum(seg.min_bound for seg in flex)
@@ -738,7 +757,9 @@ def _py_literal(value):
     if isinstance(value, float):
         return _py_num(value)
     if isinstance(value, dict):
-        parts = [f"{json.dumps(str(key))}: {_py_literal(val)}" for key, val in value.items()]
+        parts = [
+            f"{json.dumps(str(key))}: {_py_literal(val)}" for key, val in value.items()
+        ]
         return "{" + ", ".join(parts) + "}"
     raise RouteError(f"cannot write {value!r} into the mainline")
 
@@ -782,7 +803,11 @@ def _segment_name(seg):
 
 
 def render(route):
-    if route.segments and route.segments[0].miles is None and not route.segments[0].handbuilt:
+    if (
+        route.segments
+        and route.segments[0].miles is None
+        and not route.segments[0].handbuilt
+    ):
         raise RouteError("solve the route before rendering it.")
 
     lines = ["Route preview", ""]
@@ -823,7 +848,9 @@ def render(route):
             milepost = _miles_text(seg.milepost_end)
             if seg.warp:
                 params = f"{params}    warp {seg.warp} at {_miles_text(seg.milepost_start)}".strip()
-        rows.append((_segment_name(seg), tracks, seg.mode, weight, miles, milepost, params))
+        rows.append(
+            (_segment_name(seg), tracks, seg.mode, weight, miles, milepost, params)
+        )
 
     headers = ("segment", "tracks", "mode", "weight", "miles", "milepost", "params")
     widths = []
@@ -831,7 +858,9 @@ def render(route):
         widths.append(max(len(header), max(len(row[index]) for row in rows)))
 
     def format_row(row):
-        return "  ".join(row[index].ljust(widths[index]) for index in range(len(headers))).rstrip()
+        return "  ".join(
+            row[index].ljust(widths[index]) for index in range(len(headers))
+        ).rstrip()
 
     lines.append(format_row(headers))
     into = {id(item["after"]): item for item in route.transitions}
@@ -852,7 +881,9 @@ def render(route):
                 f"{_whole(route.run_window)}-unit run window. This run can collapse to zero length."
             )
 
-    weight_sum = sum(seg.weight for seg in route.segments if seg.weight and not seg.handbuilt)
+    weight_sum = sum(
+        seg.weight for seg in route.segments if seg.weight and not seg.handbuilt
+    )
     lines.append("")
     lines.append(f"fixed total     {_miles_text(route.fixed_total)}")
     lines.append(f"flex total      {_miles_text(route.flex_total)}")
@@ -868,7 +899,9 @@ def render(route):
     groups = merged_runs(route)
     emitted_count = sum(len(group) for group in groups)
     if route.merge and emitted_count != len(groups):
-        lines.append(f"merged          {emitted_count} segments into {len(groups)} runs")
+        lines.append(
+            f"merged          {emitted_count} segments into {len(groups)} runs"
+        )
     if route.warnings:
         lines.append("")
         lines.append("Warnings")
@@ -918,9 +951,7 @@ def _python_lines(route):
         lines.append("Warps = [")
         for mile, name in warps:
             lines.append(
-                "    {"
-                + f'"mile": {_py_num(mile)}, "name": {json.dumps(name)}'
-                + "},"
+                "    {" + f'"mile": {_py_num(mile)}, "name": {json.dumps(name)}' + "},"
             )
         lines.append("]")
     for comment in route.footer_comments:
@@ -941,7 +972,9 @@ def main(argv=None):
         description="Build a Trackhammer mainline from a notepad route file."
     )
     parser.add_argument("route_file")
-    parser.add_argument("--out", help="Also write the preview and the pasteable list here.")
+    parser.add_argument(
+        "--out", help="Also write the preview and the pasteable list here."
+    )
     parser.add_argument(
         "--no-merge",
         action="store_true",
