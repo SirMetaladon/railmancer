@@ -1074,11 +1074,28 @@ def write_track_from_trackhammer_steps(steps):
         prev_run = step["current_run"]
 
 
+def _straight_model(model):
+
+    # Same path test as straight_catalog.is_straight_model. Inlined so this
+    # module does not import the catalog (the catalog loads the manifest,
+    # and the manifest imports track).
+    lowered = str(model).replace("\\", "/").lower()
+    return "/straights/" in lowered and "trakpak" in lowered
+
+
 def valid_next_tracks(Direction, params={}):
 
     MinimumRadiusLevel = params.get("min_radius", 0)
-    MinimumGradeLevel = params.get("min_grade", False)
-    MaximumGradeLevel = params.get("max_grade", False)
+    # "flat" is min and max together, so a repeated min_grade key cannot
+    # leave the run with no ceiling. Explicit 0, 0 already works: the tests
+    # below are strict < and >, so grade 0 is kept and anything else drops.
+    if params.get("flat"):
+        MinimumGradeLevel = 0
+        MaximumGradeLevel = 0
+    else:
+        MinimumGradeLevel = params.get("min_grade", False)
+        MaximumGradeLevel = params.get("max_grade", False)
+    straight_only = bool(params.get("straight_only") or params.get("force_straight"))
 
     global valid_tracks_cache
 
@@ -1088,6 +1105,8 @@ def valid_next_tracks(Direction, params={}):
         + str(MinimumGradeLevel)
         + str(MaximumGradeLevel)
     )
+    if straight_only:
+        Index += "|straight"
 
     if valid_tracks_cache.get(Index, []):
 
@@ -1137,6 +1156,9 @@ def valid_next_tracks(Direction, params={}):
             continue
 
         if data["Radius"] not in AllowedRadii:
+            continue
+
+        if straight_only and not _straight_model(Track[0]):
             continue
 
         if (
