@@ -124,6 +124,14 @@ def initialize(path: str):
     CFG["milepost_model"] = model.strip()
 
     CFG["sector_real_size"] = int(math.floor(CFG["sector_real_size"] / 16) * 16)
+
+    # Build sheds. Height and the track margin stay on the 16-unit grid.
+    # The door is 112 tall on a 32-unit floor, under a 16-unit ceiling.
+    CFG["build_sheds_enabled"] = _flag(CFG.get("build_sheds_enabled", True), True)
+    CFG["build_shed_height"] = max(_grid_int(CFG, "build_shed_height", 1856), 160)
+    CFG["build_shed_track_margin"] = _grid_int(CFG, "build_shed_track_margin", 80)
+    return_target = str(CFG.get("build_shed_return_target", "spawn")).strip()
+    CFG["build_shed_return_target"] = return_target or "spawn"
     for Biome in CFG["Biomes"].values():
         Biome["terrain"]["seed"] = random.randint(0, 100)
 
@@ -157,6 +165,27 @@ def initialize(path: str):
     tools.stopwatch_click("submodule", "CFG initialized")
 
     return CFG
+
+
+def _flag(value, default):
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return default
+
+
+def _grid_int(config, key, default):
+
+    try:
+        value = int(config.get(key, default))
+    except (TypeError, ValueError):
+        value = default
+    value = int(math.floor(value / 16) * 16)
+    return int(min(max(value, 0), config["max_mapsize"]))
 
 
 def get(path):

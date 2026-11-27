@@ -20,7 +20,9 @@ def add_brush(Brush, group_key=None):
 
     Flag = 0
 
-    for x in range(0, 5):
+    # Index 5 is the second Z. The old loop stopped at 4, so a brush
+    # could hang out the bottom of the map and still be kept.
+    for x in range(0, 6):
         if abs(Brush[x]) > 16384:
             Flag = 1
 
@@ -142,6 +144,25 @@ def brush(Brush: list, group_id=None):
         Positive_Y_Texture = "TOOLS/TOOLSTRIGGER"
         Negative_Y_Texture = "TOOLS/TOOLSTRIGGER"
         Class = '''"classname" "func_viscluster"'''
+
+    elif Brush[6] == "trigger":
+        Top_Texture = "TOOLS/TOOLSTRIGGER"
+        Bottom_Texture = "TOOLS/TOOLSTRIGGER"
+        Negative_X_Texture = "TOOLS/TOOLSTRIGGER"
+        Positive_X_Texture = "TOOLS/TOOLSTRIGGER"
+        Positive_Y_Texture = "TOOLS/TOOLSTRIGGER"
+        Negative_Y_Texture = "TOOLS/TOOLSTRIGGER"
+
+    elif Brush[6] == "faces":
+        # Keys are world faces after the min/max sort above.
+        faces = Brush[7] if len(Brush) > 7 and isinstance(Brush[7], dict) else {}
+        nodraw = "TOOLS/TOOLSNODRAW"
+        Top_Texture = faces.get("top", nodraw)
+        Bottom_Texture = faces.get("bottom", nodraw)
+        Negative_X_Texture = faces.get("nx", nodraw)
+        Positive_X_Texture = faces.get("px", nodraw)
+        Positive_Y_Texture = faces.get("py", nodraw)
+        Negative_Y_Texture = faces.get("ny", nodraw)
 
     else:
         Top_Texture = str(Brush[6])
@@ -446,6 +467,24 @@ def synthesize_entities(Entities):
                 }}
             }}"""
 
+        elif Ent.get("classname", False) == "info_teleport_destination":
+
+            EntityString += f"""entity
+            {{
+                "id" "{get_ID()}"
+                "classname" "info_teleport_destination"
+                "angles" "{Ent["ang"][0]} {Ent["ang"][1]} {Ent["ang"][2]}"
+                "targetname" "{Ent.get("targetname", "")}"
+                "origin" "{Ent["pos"][0]} {Ent["pos"][1]} {Ent["pos"][2]}"
+                editor
+                {{
+                    "color" "220 30 220"
+                    "visgroupshown" "1"
+                    "visgroupautoshown" "1"{VisgroupData}
+                    "logicalpos" "[0 0]"
+                }}
+            }}"""
+
         else:  # implied if you don't recognize the class or prop_static
 
             Shadows = ""
@@ -503,11 +542,69 @@ def synthesize_brushes():
 
 
 # Runs through the global list of brush-entities and returns the completed VMF string.
+def add_faced_brush(x0, x1, y0, y1, z0, z1, faces, visgroup=None, group_key=None):
+
+    # Per-face materials. `faces` keys are top, bottom, nx, px, py, ny.
+    # Index 7 is the face dict, 8 is unused, 9 is the visgroup.
+    item = [x0, x1, y0, y1, z0, z1, "faces", faces, None]
+    if visgroup:
+        item.append(visgroup)
+    add_brush(item, group_key)
+
+
+def add_trigger_teleport(
+    x0, x1, y0, y1, z0, z1, target, visgroup=None, spawnflags="1", start_disabled="0"
+):
+
+    Brush_Entites.append(
+        {
+            "bounds": (x0, x1, y0, y1, z0, z1),
+            "classname": "trigger_teleport",
+            "target": str(target),
+            "spawnflags": str(spawnflags),
+            "StartDisabled": str(start_disabled),
+            "visgroup": visgroup,
+        }
+    )
+
+
+def _trigger_teleport_entity(item):
+
+    x0, x1, y0, y1, z0, z1 = item["bounds"]
+    solid_brush = [x0, x1, y0, y1, z0, z1, "trigger"]
+    if item.get("visgroup"):
+        solid_brush += [None, None, item["visgroup"]]
+    vis = ""
+    if item.get("visgroup"):
+        vis = (
+            f'\n        "visgroupid" "{resolve_visgroup(item["visgroup"])}"'
+        )
+    return f"""
+entity
+{{
+    "id" "{get_ID()}"
+    "classname" "trigger_teleport"
+    "spawnflags" "{item["spawnflags"]}"
+    "StartDisabled" "{item["StartDisabled"]}"
+    "target" "{item["target"]}"
+    {brush(solid_brush)}
+    editor
+    {{
+        "color" "220 30 220"
+        "visgroupshown" "1"
+        "visgroupautoshown" "1"{vis}
+    }}
+}}"""
+
+
 def synthesize_brush_entities():
 
     BrushEntityString = ""
     for Object in Brush_Entites:
-        BrushEntityString += f"""\nentity\n{{\n"id" "{get_ID()}"\n{brush(Object)}}}"""
+        if isinstance(Object, dict):
+            BrushEntityString += _trigger_teleport_entity(Object)
+        else:
+            BrushEntityString += f"""\nentity\n{{\n"id" "{get_ID()}"\n{brush(Object)}}}"""
 
     print(
         f"Synthesized {len(Brush_Entites)} brush-entities into {len(BrushEntityString)} chars."
@@ -646,6 +743,9 @@ VISGROUP_RAILMANCER = "28"
 VISGROUP_ORIGINAL = "29"
 VISGROUP_MARKERS = "30"
 VISGROUP_LIGHT = "77"
+# 30 is the Markers group on the open milepost branch. 31 stays clear of it.
+VISGROUP_BUILD_SHEDS = "31"
+BUILD_SHEDS_VISGROUP_NAME = "Build Sheds"
 
 # (logical id, Hammer name, parent name or None). Order is the allocation
 # order and the order they are written under the parent.
@@ -659,6 +759,7 @@ _VISGROUP_SPECS = (
     (VISGROUP_OLD_TRACK, "Old Track", "Railmancer", "234 131 192"),
     (VISGROUP_LIGHT, "Light", "Railmancer", "234 131 192"),
     (VISGROUP_ORIGINAL, "Original", None, "90 140 200"),
+    (VISGROUP_BUILD_SHEDS, "Build Sheds", "Railmancer", "196 164 96"),
     # After Original so a map with no visgroups still gives Original id 9.
     # The writer nests this under Railmancer because of its parent, not its place in the list.
     (VISGROUP_MARKERS, "Markers", "Railmancer", "255 180 40"),
@@ -1044,6 +1145,20 @@ def _deletion_spans(text, blocks, consumed_spans):
         if index in swallowed:
             continue
         deletions.append(_block_span(text, blocks[index]))
+
+    # World solids are not entities, so the loop above never sees them.
+    # A span that is exactly one of those solids (build-shed shells, for
+    # example) still has to come out. Solids inside an entity leave with
+    # that entity and must not be cut a second time.
+    entity_indexes = {i for i, block in enumerate(blocks) if block.name == "entity"}
+    for index, block in enumerate(blocks):
+        if block.name != "solid" or block.close_brace < 0:
+            continue
+        if vmfparse.has_ancestor(blocks, index, entity_indexes):
+            continue
+        start, end = _block_span(text, block)
+        if any(begin <= start and end <= stop for begin, stop in consumed_spans):
+            deletions.append((start, end))
     return deletions
 
 

@@ -14,6 +14,7 @@ from railmancer import (
     cfg,
     consolidate_straights,
     settings,
+    build_sheds,
 )
 
 # This is where it all comes together. Each step of the process accomplishes a major part of the overall product. Mostly for clarity of flow.
@@ -337,6 +338,12 @@ def main():
 
     # with tools.stage("Adding the light"):
     # vmfpy.add_light_environment()
+
+    # Sheds sit in columns the fitted sectors left open, including stacked
+    # ones. Their track is visgrouped so the next import does not adopt it.
+    if cfg.get("build_sheds_enabled"):
+        with tools.stage("Building sheds"):
+            build_sheds.apply()
 
     # Compile brush, entity, and brushentity data into a VMF text file and save.
     with tools.stage("Writing the VMF"):
