@@ -1,0 +1,43 @@
+# Vancouver-Squamish, MP3 to MP39.
+# A weight like "8 miles" is prototype miles, not a fixed length.
+# fixed= stays that long. A bare siding uses siding_miles.
+# straight and flat are Trackhammer run params. min= and max= clamp a weight.
+
+target_miles = 6.0
+siding_miles = 0.6
+start_milepost = 3
+default_min_miles = 0.05
+merge = true
+min_radius = 2
+min_grade = 1
+max_grade = 2
+
+# MP3 to MP8: Ambleside
+5 miles 1 track
+
+# MP8 to MP11: Horseshoe Bay
+3 miles 1 track
+
+# MP11: Horseshoe Bay bridge
+straight 1 miles 1 track min=0.2
+
+# MP12 to MP19: Brunswick
+7 miles 1 track
+
+# MP19 to MP20: Brunswick Siding
+siding warp=brunswick
+
+# MP20 to MP27: tunnel
+straight 7 miles 1 track min=0.2
+
+# MP27 to MP28: Porteau station
+flat 1 miles 1 track
+
+# MP28 to MP38: Britannia
+10 miles 1 track
+
+# MP38 to MP39: Squamish shop
+(0, 2) fixed=0.15 warp=squamish
+
+# Squamish yard, drawn by hand
+handbuilt
