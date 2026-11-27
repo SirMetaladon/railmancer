@@ -25,6 +25,7 @@ tracks the actual nesting structure.
 from __future__ import annotations
 
 import argparse
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -221,6 +222,42 @@ def has_ancestor(
             return True
 
     return False
+
+
+_VISGROUP_NAME = re.compile(r'"name"\s+"([^"]*)"')
+_VISGROUP_ID = re.compile(r'"visgroupid"\s+"(\d+)"')
+
+
+def visgroup_ids_named(text: str, name: str) -> set[str]:
+    """Ids of visgroup blocks whose own name matches `name`.
+
+    Nested groups are their own blocks, so a parent id is not returned
+    for a child. Hammer renumbers ids; the name is what stays put.
+    """
+
+    if not text or not name:
+        return set()
+    wanted = name.lower()
+    found = set()
+    for block in parse_blocks(text):
+        if block.name != "visgroup" or block.close_brace < 0:
+            continue
+        body = text[block.open_brace + 1 : block.close_brace]
+        nested = re.search(r"\bvisgroup\b", body)
+        head = body[: nested.start()] if nested else body
+        name_match = _VISGROUP_NAME.search(head)
+        id_match = _VISGROUP_ID.search(head)
+        if (
+            name_match
+            and id_match
+            and name_match.group(1).lower() == wanted
+        ):
+            found.add(id_match.group(1))
+    return found
+
+
+def block_visgroup_ids(block_text: str) -> set[str]:
+    return set(_VISGROUP_ID.findall(block_text or ""))
 
 
 def split_vmf(filename: str | Path) -> VMFSections:

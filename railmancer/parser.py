@@ -186,15 +186,22 @@ def track_entities_to_rebuild(text):
     first closing brace and cannot name the span to delete later. The
     decision is the old one: a model path containing trakpak3_rsg, plus
     origin and angles, and process_file actually returns routes. A model
-    it refuses (bumpers, unknown families) stays in the file.
+    it refuses (bumpers, unknown families) stays in the file. So does a
+    prop in the Build Sheds visgroup: it is not mainline, and it is not
+    a line, so it does not grow a sector.
     """
 
     blocks = vmfparse.parse_blocks(text)
+    # Shed track lives in the "Build Sheds" visgroup. The id is whatever
+    # Hammer or resolve_visgroup wrote, so the name is the test, not "31".
+    shed_ids = vmfparse.visgroup_ids_named(text, vmfpy.BUILD_SHEDS_VISGROUP_NAME)
     found = []
     for block in blocks:
         if block.name != "entity" or block.close_brace < 0:
             continue
         block_text = text[block.start : block.close_brace + 1]
+        if shed_ids and vmfparse.block_visgroup_ids(block_text) & shed_ids:
+            continue
         fields = _fields_in_block(block_text)
         model = fields["model"]
         if not (

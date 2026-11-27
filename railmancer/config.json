@@ -21,6 +21,10 @@
   "trackhammer_height_clearance": 1500,
   "trackhammer_block_standoff_distance": 3500, 
   "prop_group_subdivisions": 2,
+  "build_sheds_enabled": true,
+  "build_shed_height": 1856,
+  "build_shed_return_target": "spawn",
+  "build_shed_track_margin": 80,
   "Biomes": {
     "hl2_white_forest": {
       "models": {
