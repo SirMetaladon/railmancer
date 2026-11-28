@@ -405,9 +405,7 @@ def _unlinked_wall_segments(sector):
         ((x0, y0), (x0, y1)),
     )
     return [
-        (slot, sides[slot])
-        for slot in range(4)
-        if sector["neighbors"][slot] is False
+        (slot, sides[slot]) for slot in range(4) if sector["neighbors"][slot] is False
     ]
 
 
@@ -533,10 +531,7 @@ def measure_wall_clearance(curves=None, sources=None):
 
             # Nearest wall is the map edge, and the rail was laid by hand.
             # The number would only say the author went to the border.
-            if (
-                source == lines.SOURCE_HANDMADE
-                and best_kind == "map-edge"
-            ):
+            if source == lines.SOURCE_HANDMADE and best_kind == "map-edge":
                 excluded += 1
             else:
                 if best_kind is None:
@@ -651,7 +646,7 @@ def _print_clearance_omissions(stats):
     )
     print(f"  outside every sector: {len(stats['missed'])}")
     for point in stats["missed"][:WALL_WORST]:
-        print(f"    ({point[0]:.1f}, {point[1]:.1f}, {point[2]:.1f})")
+        print(f"    ({point[0]:.1f} {point[1]:.1f} {point[2]:.1f})")
     if len(stats["missed"]) > WALL_WORST:
         print(f"    ... {len(stats['missed']) - WALL_WORST} more")
 
@@ -693,10 +688,6 @@ def report_wall_clearance(curves=None):
         f"errors: {stats['corkscrew_errors']}"
     )
     _print_clearance_omissions(stats)
-    if stats["missed"]:
-        print(f"  outside every sector: {len(stats['missed'])}")
-        for point in stats["missed"][:WALL_WORST]:
-            print(f"    ({point[0]:.1f} {point[1]:.1f} {point[2]:.1f})")
     print(
         "  histogram: "
         + " | ".join(f"{label} {count}" for label, count in stats["histogram"])
