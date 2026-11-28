@@ -324,6 +324,23 @@ def add_light_environment():
     add_entity({"classname": "light_environment"})
 
 
+def _entity_visgroup_data(ent):
+
+    # Imported props carry their file's visgroup ids in "visgroups" and those
+    # numbers are written unchanged. Logical ids ("23" and the rest) are what
+    # Railmancer code stores, and resolve_visgroup remaps those above the
+    # input file. A raw list wins so an imported "23" stays 23 instead of
+    # becoming New Track.
+    raw = ent.get("visgroups")
+    if raw:
+        ids = [str(item) for item in raw]
+    elif ent.get("visgroup"):
+        ids = [resolve_visgroup(ent.get("visgroup"))]
+    else:
+        return ""
+    return "".join(f'\n                    "visgroupid" "{vis_id}"' for vis_id in ids)
+
+
 # Turns the main list of Entity-list primitives into compiled strings ready for VMF assembly.
 def synthesize_entities(Entities):
 
@@ -339,12 +356,7 @@ def synthesize_entities(Entities):
         # if Ent.get("raw_entity", False):
 
         # EntityString += re_id(Ent["raw_entity"], get_ID())
-        VisgroupData = ""
-        if Ent.get("visgroup"):
-
-            VisgroupData = (
-                f'\n                    "visgroupid" "{resolve_visgroup(Ent.get("visgroup"))}"'
-            )
+        VisgroupData = _entity_visgroup_data(Ent)
 
         if Ent.get("classname", False) == "tp3_switch":
 
@@ -814,12 +826,13 @@ def _max_quoted_int(text, key):
 
 def _entity_hidden(blocks, index):
 
-    current = blocks[index].parent
-    while current is not None:
-        if blocks[current].name == "hidden":
-            return True
-        current = blocks[current].parent
-    return False
+    # Wrapper only. Track import uses vmfparse.entity_is_hidden, which also
+    # treats visgroupshown 0 and visgroupautoshown 0 as hidden. A
+    # light_environment with those flags is still the map's sun, so this
+    # check does not use that wider policy.
+    from railmancer import vmfparse
+
+    return vmfparse.in_hidden_wrapper(blocks, index)
 
 
 def _visible_light_environment(text, blocks):

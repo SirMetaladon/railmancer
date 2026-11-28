@@ -260,6 +260,91 @@ def block_visgroup_ids(block_text: str) -> set[str]:
     return set(_VISGROUP_ID.findall(block_text or ""))
 
 
+def in_hidden_wrapper(blocks: list[Block], index: int) -> bool:
+    """True when a ``hidden { }`` block is an ancestor.
+
+    That is the quick-hide wrapper. ``visgroupshown`` and
+    ``visgroupautoshown`` are separate marks; ``entity_is_hidden`` is the
+    policy that combines all three. The sun check stays wrapper-only,
+    because a visgroup-hidden light_environment is still the map's sun.
+    """
+
+    current = blocks[index].parent
+    while current is not None:
+        if blocks[current].name == "hidden":
+            return True
+        current = blocks[current].parent
+    return False
+
+
+_KEY_VALUE = re.compile(r'"([^"]+)"\s+"([^"]*)"')
+
+
+def read_keys(block_text: str) -> dict:
+    """First quoted value of each key, plus every ``visgroupid`` in order.
+
+    First match wins, which is the rule the old track regex and
+    ``joincheck._quoted`` already used. Repeated ``visgroupid`` keys are
+    membership in each group, so those are kept as a list.
+    """
+
+    keys: dict = {}
+    visgroupids: list[str] = []
+    if block_text:
+        for match in _KEY_VALUE.finditer(block_text):
+            key, value = match.group(1), match.group(2)
+            if key == "visgroupid":
+                visgroupids.append(value)
+            if key not in keys:
+                keys[key] = value
+    keys["visgroupids"] = visgroupids
+    return keys
+
+
+def entity_is_hidden(blocks: list[Block], index: int, keys: dict | None = None) -> bool:
+    """True when Hammer is not showing this block.
+
+    Any one mark is enough: a ``hidden { }`` ancestor, ``visgroupshown``
+    ``"0"``, or ``visgroupautoshown`` ``"0"``.
+    """
+
+    if in_hidden_wrapper(blocks, index):
+        return True
+    if not keys:
+        return False
+    if keys.get("visgroupshown") == "0" or keys.get("visgroupautoshown") == "0":
+        return True
+    return False
+
+
+def hidden_entity_spans(text: str) -> list[tuple[int, int]]:
+    """``(start, close_brace)`` of entity blocks ``entity_is_hidden`` rejects.
+
+    Readers that still walk braces with their own loop test the entity
+    keyword's index against these spans. They share this predicate instead
+    of growing a second one.
+    """
+
+    if not text:
+        return []
+    blocks = parse_blocks(text)
+    spans = []
+    for index, block in enumerate(blocks):
+        if block.name != "entity" or block.close_brace < 0:
+            continue
+        keys = read_keys(text[block.start : block.close_brace + 1])
+        if entity_is_hidden(blocks, index, keys):
+            spans.append((block.start, block.close_brace))
+    return spans
+
+
+def span_is_hidden(spans: list[tuple[int, int]], position: int) -> bool:
+    for begin, end in spans:
+        if begin <= position <= end:
+            return True
+    return False
+
+
 def split_vmf(filename: str | Path) -> VMFSections:
     """
     Read a VMF file and return Start, Brushes, Entities, and End.

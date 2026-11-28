@@ -141,35 +141,31 @@ def rot3(v, angle):
 
 
 def rot_orth(v, turns):
-    """
-    BUILT BY CHATGPT 5-24-26
-    Fast orthogonal 3D Z-axis rotation.
-    Optimized for 90-degree increments only.
+    """Rotate ``v`` about Z in 90-degree steps.
 
-    Parameters
-    ----------
-    v : array-like
-        [x, y, z]
-    turns : int
-        Number of 90-degree clockwise turns.
-        Examples:
-            1  = 90°
-            2  = 180°
-            3  = 270°
-            4  = 0°
-            -1 = -90°
+    ``turns`` is a yaw in degrees, the same number Hammer stores on a prop
+    and every caller passes in. The rotation itself only has four positions.
+    A yaw within 0.001 degrees of a multiple of 90 is snapped to that
+    multiple before the step is chosen, so Hammer's ``-89.9999`` is a -90
+    degree turn and not 0. Any other angle truncates toward zero onto the
+    previous step: 45 and 89 both stay on 0, and -45 stays on 0.
 
-    Returns
-    -------
-    np.ndarray
-        Rotated vector.
+    Positive yaw rotates counterclockwise when viewed from above. 90 degrees
+    takes ``(x, y)`` to ``(-y, x)``.
     """
 
     x, y, z = v
 
-    turns /= 90
-    turns = int(turns)
-    turns %= 4
+    degrees = float(turns)
+    quotient = degrees / 90.0
+    if quotient >= 0:
+        nearest = math.floor(quotient + 0.5)
+    else:
+        nearest = math.ceil(quotient - 0.5)
+    if abs(degrees - nearest * 90.0) <= 0.001:
+        turns = int(nearest) % 4
+    else:
+        turns = int(degrees / 90.0) % 4
 
     if turns == 0:
         return np.array([x, y, z])
