@@ -15,6 +15,8 @@ import types
 import unittest
 from contextlib import redirect_stdout
 
+import numpy as np
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
@@ -244,10 +246,11 @@ class SectorLinkTests(unittest.TestCase):
             sectors.get_sector_relative_to_this_sector(low, [1, 0]), high["id"]
         )
 
-    def test_neighbor_is_the_sector_with_the_largest_overlap(self):
+    def test_neighbor_is_the_sector_with_the_closest_floor(self):
 
-        # The short sector is created first. The old walk returned it. The
-        # tall overlap is the one that should own the wall.
+        # The upper sector overlaps more (400 vs 200 in stored units). The
+        # old largest-overlap walk linked that one. The short sector shares
+        # this floor, and that is the wall.
         cfg.CFG["sector_connection_maximum_cliff"] = 5000
         sectors.new_sector(0, 0, 0, 8000)
         sectors.new_sector(1, 0, 0, 3200)
@@ -255,7 +258,223 @@ class SectorLinkTests(unittest.TestCase):
         chosen = sectors.get_sector_relative_to_this_sector(
             sectors.Sectors["0x0x0"], [1, 0]
         )
-        self.assertEqual(chosen, "1x0x100")
+        self.assertEqual(chosen, "1x0x0")
+
+    def test_equal_floor_gap_prefers_overlap_then_the_earlier_sector(self):
+
+        # Both neighbors are 1600 off this floor. The higher one overlaps
+        # more, so it wins even though the lower one was created first.
+        cfg.CFG["sector_connection_maximum_cliff"] = 5000
+        sectors.new_sector(0, 0, 1600, 8000)
+        sectors.new_sector(1, 0, 0, 4000)
+        sectors.new_sector(1, 0, 3200, 9600)
+        chosen = sectors.get_sector_relative_to_this_sector(
+            sectors.Sectors["0x0x100"], [1, 0]
+        )
+        self.assertEqual(chosen, "1x0x200")
+
+        # Same floor gap and the same overlap. The earlier sector keeps it.
+        sectors.Sectors.clear()
+        sectors.sector_lookup_grid.clear()
+        sectors.new_sector(0, 0, 1600, 6400)
+        sectors.new_sector(1, 0, 0, 4800)
+        sectors.new_sector(1, 0, 3200, 8000)
+        chosen = sectors.get_sector_relative_to_this_sector(
+            sectors.Sectors["0x0x100"], [1, 0]
+        )
+        self.assertEqual(chosen, "1x0x0")
+
+
+class TrackBoundaryTests(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+
+        cfg.initialize(os.path.join(ROOT, "railmancer", "config.json"))
+
+    def tearDown(self):
+
+        sectors.Sectors.clear()
+        sectors.sector_lookup_grid.clear()
+        lines.Beziers.clear()
+        lines.sampled_points = []
+
+    def test_no_sampled_track_crosses_an_unlinked_cardinal_boundary(self):
+
+        # Heights build_fit gives a rail at z=0 beside a rail at z=1800.
+        # The tall sector is 5200 tall (minimum height + maximum height).
+        # It overlaps the upper stack by 3408 and the lower sector, which
+        # shares its floor, by 1760. The upper floor is 1792 higher, inside
+        # the shipped cliff of 2000. Largest-overlap links the upper sector;
+        # link() then drops the lower sector's link, and this rail hits a wall.
+        saved = {
+            key: cfg.CFG[key]
+            for key in (
+                "sector_real_size",
+                "sector_minimum_height",
+                "sector_connection_maximum_cliff",
+                "line_maximum_poll_point_distance",
+            )
+        }
+        cfg.CFG["sector_real_size"] = SIZE
+        cfg.CFG["sector_minimum_height"] = 1200
+        cfg.CFG["sector_connection_maximum_cliff"] = 2000
+        cfg.CFG["line_maximum_poll_point_distance"] = 80
+        try:
+            sectors.new_sector(0, 0, -304, 4896)
+            sectors.new_sector(1, 0, -304, 1456)
+            sectors.new_sector(1, 0, 1488, 6688)
+            tall = sectors.Sectors["0x0x-19"]
+            lower = sectors.Sectors["1x0x-19"]
+            upper = sectors.Sectors["1x0x93"]
+            self.assertEqual(
+                sectors.get_sector_relative_to_this_sector(tall, [1, 0]),
+                lower["id"],
+            )
+
+            start = np.array([200.0, 512.0, 0.0])
+            end = np.array([200.0 + SIZE, 512.0, 0.0])
+            # Straight cubic, same handles convert_nodes_to_bezier would use.
+            # Appended directly: other tests replace lines.write_bezier_points
+            # and leave that replacement in place.
+            lines.Beziers.clear()
+            lines.Beziers.append(
+                (
+                    start,
+                    start * (2.0 / 3.0) + end * (1.0 / 3.0),
+                    start * (1.0 / 3.0) + end * (2.0 / 3.0),
+                    end,
+                )
+            )
+            output = io.StringIO()
+            with redirect_stdout(output):
+                lines.encode_lines()
+                sectors.link()
+
+            step = cfg.get("line_maximum_poll_point_distance")
+            saw_boundary = False
+            for bezier in lines.Beziers:
+                previous = None
+                for point in lines.convert_bezier_to_points(bezier, step):
+                    sector_id = sectors.get_sector_id_at_position(point)
+                    self.assertTrue(
+                        sector_id, f"track point {point} is outside every sector"
+                    )
+                    if previous and previous != sector_id:
+                        first = sectors.Sectors[previous]
+                        second = sectors.Sectors[sector_id]
+                        self.assertEqual(
+                            abs(first["x"] - second["x"]) + abs(first["y"] - second["y"]),
+                            1,
+                            f"track step {previous} -> {sector_id} is not cardinal",
+                        )
+                        saw_boundary = True
+                        self.assertTrue(
+                            sectors.sectors_share_a_wall(first, second),
+                            f"track crosses an unlinked boundary {previous} -> {sector_id} at {point}",
+                        )
+                    previous = sector_id
+
+            self.assertTrue(saw_boundary)
+            self.assertEqual(tall["neighbors"][1], lower["id"])
+            self.assertEqual(lower["neighbors"][3], tall["id"])
+            self.assertIs(upper["neighbors"][3], False)
+            self.assertNotIn("CORKSCREW ERROR", output.getvalue())
+        finally:
+            cfg.CFG.update(saved)
+
+
+class WallClearanceTests(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+
+        cfg.initialize(os.path.join(ROOT, "railmancer", "config.json"))
+
+    def setUp(self):
+
+        sectors.Sectors.clear()
+        sectors.sector_lookup_grid.clear()
+        self._size = cfg.CFG["sector_real_size"]
+        cfg.CFG["sector_real_size"] = SIZE
+
+    def tearDown(self):
+
+        cfg.CFG["sector_real_size"] = self._size
+        sectors.Sectors.clear()
+        sectors.sector_lookup_grid.clear()
+
+    def _open(self, x, y):
+
+        sectors.new_sector(x, y, 0, 1600)
+        sector = sectors.Sectors[f"{x}x{y}x0"]
+        sector["neighbors"] = [False, False, False, False]
+        return sector
+
+    def test_distance_uses_unlinked_sides_and_the_fixed_buckets(self):
+
+        sector = self._open(0, 0)
+        close = sectors.measure_wall_clearance([[(32.0, 512.0, 800.0)]])
+        self.assertEqual(close["count"], 1)
+        self.assertAlmostEqual(close["min"], 32.0)
+        self.assertEqual(close["under"], 1)
+        self.assertEqual(close["histogram"][0], ("0-64", 1))
+
+        # 64 is the collision line and the bucket edge. It is not a hit,
+        # and it belongs to the next bucket.
+        on_line = sectors.measure_wall_clearance([[(64.0, 512.0, 800.0)]])
+        self.assertEqual(on_line["under"], 0)
+        self.assertEqual(on_line["histogram"][1], ("64-256", 1))
+
+        # The shared side is linked, so a point 16 from it is still half a
+        # sector from the north and south walls.
+        east = self._open(1, 0)
+        sector["neighbors"][1] = east["id"]
+        east["neighbors"][3] = sector["id"]
+        beside = sectors.measure_wall_clearance([[(SIZE - 16.0, 512.0, 800.0)]])
+        self.assertAlmostEqual(beside["min"], 512.0)
+        self.assertEqual(beside["under"], 0)
+        self.assertEqual(beside["crossings"], 0)
+
+    def test_distance_caps_at_sector_size_inside_a_linked_block(self):
+
+        offsets = ((0, 1), (1, 0), (0, -1), (-1, 0))
+        for x in range(3):
+            for y in range(3):
+                self._open(x, y)
+        for x in range(3):
+            for y in range(3):
+                sector = sectors.Sectors[f"{x}x{y}x0"]
+                neighbors = []
+                for dx, dy in offsets:
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < 3 and 0 <= ny < 3:
+                        neighbors.append(f"{nx}x{ny}x0")
+                    else:
+                        neighbors.append(False)
+                sector["neighbors"] = neighbors
+
+        stats = sectors.measure_wall_clearance([[(SIZE + 512.0, SIZE + 512.0, 800.0)]])
+        # The outer walls sit 1536 away. The cap keeps the sample at one sector.
+        self.assertAlmostEqual(stats["min"], float(SIZE))
+        self.assertEqual(stats["max"], float(SIZE))
+        self.assertEqual(stats["histogram"][-1][0], "1632+")
+
+    def test_unlinked_cardinal_step_is_a_crossing_and_a_link_is_not(self):
+
+        left = self._open(0, 0)
+        right = self._open(1, 0)
+        curve = [[(512.0, 512.0, 800.0), (SIZE + 512.0, 512.0, 800.0)]]
+        open_stats = sectors.measure_wall_clearance(curve)
+        self.assertEqual(open_stats["crossings"], 1)
+        self.assertEqual(open_stats["pairs"], 1)
+        self.assertEqual(open_stats["worst"][0]["sector"], left["id"])
+
+        left["neighbors"][1] = right["id"]
+        right["neighbors"][3] = left["id"]
+        linked = sectors.measure_wall_clearance(curve)
+        self.assertEqual(linked["crossings"], 0)
+        self.assertEqual(linked["pairs"], 0)
 
 
 if __name__ == "__main__":

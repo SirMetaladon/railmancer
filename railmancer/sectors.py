@@ -8,6 +8,19 @@ import numpy as np
 Sectors = {}
 sector_lookup_grid = {}
 
+# Filled by link(). The wall-clearance report prints these beside the distances.
+corkscrew_breaks = 0
+corkscrew_errors = 0
+
+# Clearance histogram. The upper edge of each bucket belongs to the next one.
+# The last bucket is every distance at or above 1632, including the cap.
+WALL_BIN_EDGES = (0, 64, 256, 512, 700, 1024, 1632)
+WALL_COLLISION = 64
+WALL_WORST = 8
+
+# neighbor slot for a cardinal step (dx, dy): north, east, south, west.
+_CARDINAL_SLOT = {(0, 1): 0, (1, 0): 1, (0, -1): 2, (-1, 0): 3}
+
 
 def _vertical_overlap(first_sector, second_sector):
 
@@ -34,7 +47,10 @@ def sectors_are_connected(first_sector, second_sector):
 
 def get_sector_relative_to_this_sector(sector_data, nudge):
 
-    # special function that scans nearby connected and returns them (for a certain height)
+    # The next column can hold a stack. Share the wall with the sector
+    # whose floor is closest to this one. sectors_are_connected still
+    # applies, including the cliff limit. An equal floor gap keeps the
+    # larger vertical overlap, then the earlier sector in the column.
 
     sector_list = sector_lookup_grid.get(
         f"{sector_data["x"]+nudge[0]}x{sector_data["y"]+nudge[1]}", False
@@ -43,11 +59,8 @@ def get_sector_relative_to_this_sector(sector_data, nudge):
     if sector_list is False:
         return False
 
-    # Several sectors can sit in the next column. The one that shares the
-    # most vertical room wins. An equal overlap keeps the earlier sector,
-    # which is what returning the first match used to do.
     best_id = False
-    best_overlap = None
+    best_key = None
 
     for possible_sector_id in sector_list:
 
@@ -55,9 +68,14 @@ def get_sector_relative_to_this_sector(sector_data, nudge):
         if not sectors_are_connected(sector_data, other):
             continue
 
-        overlap = _vertical_overlap(sector_data, other)
-        if best_overlap is None or overlap > best_overlap:
-            best_overlap = overlap
+        # Overlap is negated so a larger overlap sorts first. A strict <
+        # leaves an equal key with the earlier sector.
+        key = (
+            abs(sector_data["floor"] - other["floor"]),
+            -_vertical_overlap(sector_data, other),
+        )
+        if best_key is None or key < best_key:
+            best_key = key
             best_id = possible_sector_id
 
     return best_id
@@ -150,6 +168,10 @@ def link():
 
     # takes all sectors, finds nearby sectors, and adds them to a list of neighbors, then checks those lists for consistiency
 
+    global corkscrew_breaks, corkscrew_errors
+    corkscrew_breaks = 0
+    corkscrew_errors = 0
+
     # initially add neighbors
     for Sector_Data in Sectors.values():
 
@@ -220,6 +242,8 @@ def break_corkscrews():
     # finishing on a different sector at the same x,y is a corkscrew.
     # a walk that comes back to the same sector is a plain square (or part
     # of a wider loop) and is left alone.
+
+    global corkscrew_breaks, corkscrew_errors
 
     buckets = None
     limit = cfg.get("sector_corkscrew_track_clearance")
@@ -299,6 +323,7 @@ def break_corkscrews():
 
             if chosen is None:
 
+                corkscrew_errors += 1
                 corner_x = max(item[0]["x"] for item in links) * size
                 corner_y = max(item[0]["y"] for item in links) * size
                 print(
@@ -314,9 +339,254 @@ def break_corkscrews():
             _, clearance, left, right, slot = chosen
             left["neighbors"][slot] = False
             right["neighbors"][(slot + 2) % 4] = False
+            corkscrew_breaks += 1
             print(
                 f"Broke corkscrew {left['id']} {slot_names[slot]} to {right['id']}, clearance {round(clearance,0)}."
             )
+
+
+def sectors_share_a_wall(first, second):
+
+    # Cardinal neighbors that each list the other in the matching slot.
+    # A one-way link was already dropped by link(), and a diagonal step
+    # is not a shared wall.
+    slot = _CARDINAL_SLOT.get((second["x"] - first["x"], second["y"] - first["y"]))
+    if slot is None:
+        return False
+    back = (slot + 2) % 4
+    return (
+        first["neighbors"][slot] == second["id"]
+        and second["neighbors"][back] == first["id"]
+    )
+
+
+def _unlinked_wall_segments(sector):
+
+    # An unlinked side is a wall. Slot order matches link(): N, E, S, W.
+    size = cfg.get("sector_real_size")
+    x0 = sector["x"] * size
+    y0 = sector["y"] * size
+    x1 = x0 + size
+    y1 = y0 + size
+    sides = (
+        ((x0, y1), (x1, y1)),
+        ((x1, y0), (x1, y1)),
+        ((x0, y0), (x1, y0)),
+        ((x0, y0), (x0, y1)),
+    )
+    return [sides[slot] for slot in range(4) if sector["neighbors"][slot] is False]
+
+
+def _point_segment_distance(px, py, start, end):
+
+    ax, ay = start
+    bx, by = end
+    dx = bx - ax
+    dy = by - ay
+    span = dx * dx + dy * dy
+    if span == 0:
+        return math.hypot(px - ax, py - ay)
+    t = ((px - ax) * dx + (py - ay) * dy) / span
+    if t < 0:
+        t = 0
+    elif t > 1:
+        t = 1
+    return math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+
+
+def track_sample_curves():
+
+    # One polyline per bezier. The joint between two pieces is not a step
+    # along the rail, so crossings are counted inside a curve only.
+    step = cfg.get("line_maximum_poll_point_distance")
+    return [
+        lines.convert_bezier_to_points(bezier, step) for bezier in lines.Beziers
+    ]
+
+
+def _wall_bin_labels():
+
+    labels = []
+    edges = WALL_BIN_EDGES
+    for index in range(len(edges) - 1):
+        labels.append(f"{edges[index]}-{edges[index + 1]}")
+    labels.append(f"{edges[-1]}+")
+    return labels
+
+
+def measure_wall_clearance(curves=None):
+
+    # 2D distance from each sampled track point to the nearest wall, capped
+    # at sector_real_size. A wall is an unlinked side of the point's own
+    # sector or of a sector linked to it. The sample is the track
+    # centerline. The rails sit about half a gauge closer to the wall than
+    # the distance recorded here.
+    # curves is a list of polylines. The default samples lines.Beziers.
+
+    if curves is None:
+        curves = track_sample_curves()
+
+    size = float(cfg.get("sector_real_size"))
+    distances = []
+    located = []
+    missed = []
+    crossings = 0
+    pairs = set()
+
+    for curve in curves:
+
+        previous_id = None
+
+        for point in curve:
+
+            sector_id = get_sector_id_at_position(point)
+            if not sector_id:
+                missed.append(point)
+                previous_id = None
+                continue
+
+            sector = Sectors[sector_id]
+            candidates = [sector]
+            for neighbor_id in sector["neighbors"]:
+                if neighbor_id:
+                    candidates.append(Sectors[neighbor_id])
+
+            best = size
+            px = point[0]
+            py = point[1]
+            for candidate in candidates:
+                for start, end in _unlinked_wall_segments(candidate):
+                    dist = _point_segment_distance(px, py, start, end)
+                    if dist < best:
+                        best = dist
+
+            distances.append(best)
+            located.append((best, sector_id, px, py, point[2]))
+
+            if previous_id and previous_id != sector_id:
+                other = Sectors.get(previous_id)
+                if other is not None and not sectors_share_a_wall(other, sector):
+                    # Only a cardinal step can be a cut wall. A stack change
+                    # or a diagonal jump is a different gap.
+                    if _CARDINAL_SLOT.get(
+                        (sector["x"] - other["x"], sector["y"] - other["y"])
+                    ) is not None:
+                        crossings += 1
+                        pairs.add(tuple(sorted((previous_id, sector_id))))
+
+            previous_id = sector_id
+
+    labels = _wall_bin_labels()
+    if distances:
+        values = np.array(distances, dtype=float)
+        histogram = np.histogram(
+            values, bins=list(WALL_BIN_EDGES) + [np.inf]
+        )[0]
+        summary = {
+            "min": float(values.min()),
+            "p1": float(np.percentile(values, 1)),
+            "p5": float(np.percentile(values, 5)),
+            "median": float(np.median(values)),
+            "mean": float(values.mean()),
+            "max": float(values.max()),
+            "under": int((values < WALL_COLLISION).sum()),
+        }
+    else:
+        histogram = [0] * len(labels)
+        summary = {
+            "min": None,
+            "p1": None,
+            "p5": None,
+            "median": None,
+            "mean": None,
+            "max": None,
+            "under": 0,
+        }
+
+    located.sort()
+    # Two curves often share an endpoint. Keep one row per place so the
+    # list is places to visit in Hammer, not repeated samples.
+    worst = []
+    seen = set()
+    for distance, sector_id, px, py, pz in located:
+        key = (sector_id, round(px), round(py), round(pz))
+        if key in seen:
+            continue
+        seen.add(key)
+        worst.append(
+            {
+                "distance": distance,
+                "sector": sector_id,
+                "x": px,
+                "y": py,
+                "z": pz,
+            }
+        )
+        if len(worst) == WALL_WORST:
+            break
+
+    return {
+        "count": len(distances),
+        "missed": missed,
+        "histogram": list(zip(labels, (int(count) for count in histogram))),
+        "worst": worst,
+        "crossings": crossings,
+        "pairs": len(pairs),
+        "crossing_pairs": sorted(pairs),
+        "corkscrew_breaks": corkscrew_breaks,
+        "corkscrew_errors": corkscrew_errors,
+        **summary,
+    }
+
+
+def report_wall_clearance(curves=None):
+
+    # Printed after sectors are linked. Same numbers as check_wall_clearance.py.
+    stats = measure_wall_clearance(curves)
+    if stats["count"] == 0:
+        print("Wall clearance: no sampled track points")
+        return stats
+
+    print(
+        "Wall clearance, track centerline "
+        "(rails sit about half a gauge closer):"
+    )
+    print(
+        f"  {stats['count']} points   "
+        f"min {stats['min']:.0f}   p1 {stats['p1']:.0f}   "
+        f"p5 {stats['p5']:.0f}   median {stats['median']:.0f}   "
+        f"mean {stats['mean']:.1f}   max {stats['max']:.0f}"
+    )
+    print(
+        f"  under {WALL_COLLISION}: {stats['under']}"
+    )
+    print(
+        f"  unlinked cardinal crossings: {stats['crossings']} "
+        f"({stats['pairs']} sector pairs)"
+    )
+    for left_id, right_id in stats["crossing_pairs"][:WALL_WORST]:
+        print(f"    {left_id}  {right_id}")
+    if stats["pairs"] > WALL_WORST:
+        print(f"    ... {stats['pairs'] - WALL_WORST} more pairs")
+    print(
+        f"  corkscrew breaks: {stats['corkscrew_breaks']}   "
+        f"errors: {stats['corkscrew_errors']}"
+    )
+    if stats["missed"]:
+        print(f"  outside every sector: {len(stats['missed'])}")
+        for point in stats["missed"][:WALL_WORST]:
+            print(f"    ({point[0]:.1f}, {point[1]:.1f}, {point[2]:.1f})")
+    print(
+        "  histogram: "
+        + " | ".join(f"{label} {count}" for label, count in stats["histogram"])
+    )
+    print("  worst:")
+    for item in stats["worst"]:
+        print(
+            f"    {item['distance']:.1f}  {item['sector']}  "
+            f"({item['x']:.1f}, {item['y']:.1f}, {item['z']:.1f})"
+        )
+    return stats
 
 
 def get_expanded_points(startpoints, offset):

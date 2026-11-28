@@ -279,6 +279,11 @@ def main():
     with tools.stage("Linking sectors"):
         sectors.link()
 
+    # Centerline distance to the nearest unlinked sector side. Printed so a
+    # cliff or a sector-size change can be compared on the next run.
+    with tools.stage("Measuring wall clearance"):
+        sectors.report_wall_clearance()
+
     # Takes points and puts them in buckets for sector processing.
     with tools.stage("Assigning points to sectors"):
         sectors.assign_points_to_sectors()
