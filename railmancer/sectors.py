@@ -399,9 +399,7 @@ def track_sample_curves():
     # One polyline per bezier. The joint between two pieces is not a step
     # along the rail, so crossings are counted inside a curve only.
     step = cfg.get("line_maximum_poll_point_distance")
-    return [
-        lines.convert_bezier_to_points(bezier, step) for bezier in lines.Beziers
-    ]
+    return [lines.convert_bezier_to_points(bezier, step) for bezier in lines.Beziers]
 
 
 def _wall_bin_labels():
@@ -441,6 +439,7 @@ def measure_wall_clearance(curves=None):
 
             sector_id = get_sector_id_at_position(point)
             if not sector_id:
+                vmfpy.frog(point)
                 missed.append(point)
                 previous_id = None
                 continue
@@ -468,9 +467,12 @@ def measure_wall_clearance(curves=None):
                 if other is not None and not sectors_share_a_wall(other, sector):
                     # Only a cardinal step can be a cut wall. A stack change
                     # or a diagonal jump is a different gap.
-                    if _CARDINAL_SLOT.get(
-                        (sector["x"] - other["x"], sector["y"] - other["y"])
-                    ) is not None:
+                    if (
+                        _CARDINAL_SLOT.get(
+                            (sector["x"] - other["x"], sector["y"] - other["y"])
+                        )
+                        is not None
+                    ):
                         crossings += 1
                         pairs.add(tuple(sorted((previous_id, sector_id))))
 
@@ -479,9 +481,7 @@ def measure_wall_clearance(curves=None):
     labels = _wall_bin_labels()
     if distances:
         values = np.array(distances, dtype=float)
-        histogram = np.histogram(
-            values, bins=list(WALL_BIN_EDGES) + [np.inf]
-        )[0]
+        histogram = np.histogram(values, bins=list(WALL_BIN_EDGES) + [np.inf])[0]
         summary = {
             "min": float(values.min()),
             "p1": float(np.percentile(values, 1)),
@@ -547,19 +547,14 @@ def report_wall_clearance(curves=None):
         print("Wall clearance: no sampled track points")
         return stats
 
-    print(
-        "Wall clearance, track centerline "
-        "(rails sit about half a gauge closer):"
-    )
+    print("Wall clearance, track centerline " "(rails sit about half a gauge closer):")
     print(
         f"  {stats['count']} points   "
         f"min {stats['min']:.0f}   p1 {stats['p1']:.0f}   "
         f"p5 {stats['p5']:.0f}   median {stats['median']:.0f}   "
         f"mean {stats['mean']:.1f}   max {stats['max']:.0f}"
     )
-    print(
-        f"  under {WALL_COLLISION}: {stats['under']}"
-    )
+    print(f"  under {WALL_COLLISION}: {stats['under']}")
     print(
         f"  unlinked cardinal crossings: {stats['crossings']} "
         f"({stats['pairs']} sector pairs)"
@@ -575,7 +570,7 @@ def report_wall_clearance(curves=None):
     if stats["missed"]:
         print(f"  outside every sector: {len(stats['missed'])}")
         for point in stats["missed"][:WALL_WORST]:
-            print(f"    ({point[0]:.1f}, {point[1]:.1f}, {point[2]:.1f})")
+            print(f"    ({point[0]:.1f} {point[1]:.1f} {point[2]:.1f})")
     print(
         "  histogram: "
         + " | ".join(f"{label} {count}" for label, count in stats["histogram"])
@@ -584,7 +579,7 @@ def report_wall_clearance(curves=None):
     for item in stats["worst"]:
         print(
             f"    {item['distance']:.1f}  {item['sector']}  "
-            f"({item['x']:.1f}, {item['y']:.1f}, {item['z']:.1f})"
+            f"({item['x']:.1f} {item['y']:.1f} {item['z']:.1f})"
         )
     return stats
 
@@ -1102,7 +1097,14 @@ def blur_min_max_grids(iterations=None):
     step = cfg.get("noise_floor_ceiling_spillover_slope") * spacing
 
     if iterations is None:
-        limit = int(cfg.get("noise_grid_per_sector") * max(cfg.get("sectors_per_map"), 1) * 2) + 8
+        limit = (
+            int(
+                cfg.get("noise_grid_per_sector")
+                * max(cfg.get("sectors_per_map"), 1)
+                * 2
+            )
+            + 8
+        )
     else:
         limit = max(int(iterations), 0)
 

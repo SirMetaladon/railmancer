@@ -179,7 +179,6 @@ def _fields_in_block(block_text):
 
 
 def track_entities_to_rebuild(text):
-
     """Trakpak entities this import will replace with rebuilt copies.
 
     The block parser supplies the entity, because a regex stops at the
@@ -205,10 +204,7 @@ def track_entities_to_rebuild(text):
         fields = _fields_in_block(block_text)
         model = fields["model"]
         if not (
-            model
-            and fields["origin"]
-            and fields["angles"]
-            and "trakpak3_rsg" in model
+            model and fields["origin"] and fields["angles"] and "trakpak3_rsg" in model
         ):
             continue
         data = track.process_file(model)
@@ -264,25 +260,6 @@ def import_track(path):
             verts3 = fill_convex_polygon_3d(
                 verts2, cfg.get("line_maximum_poll_point_distance") * 2
             )
-            """
-            pairs = list(itertools.combinations(verts2, 2))
-
-            maxlength = 400
-
-            for pair in pairs:
-                v1, v2 = pair
-                p1 = np.array(v1)
-                p2 = np.array(v2)
-
-                dist = np.linalg.norm(p1 - p2)
-
-                if dist < maxlength:
-                    continue
-                count = math.ceil(dist / maxlength)
-                spots = tools.split_into_parts(1, count)
-
-                for spot in spots:
-                    verts3 += [tools.linterp(p1, p2, spot)]"""
 
             lines.stage_points(verts2 + verts3)
 

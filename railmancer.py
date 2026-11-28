@@ -49,7 +49,8 @@ def main():
         trackhammer.exclude_existing()
 
     Vancouver_Start = [(7568, 3552, -14040), "0fw", -90, False]
-    Squamish_Start = [(5504, -3600, -2218), "0fw", 0, False]  #
+    Squamish_Start = [(-15248, 2512, -2780), "0fw", -90, False]  #
+    Lillooet_SB_Start = [(-9760, 14560, 12780), "0fw", 180, False]
     # Each run is (tracks left, tracks right), miles, parameters.
     # "join" says how this run attaches to the previous one. Leave it out
     # and both sides get switches. "stub" ends or starts that side with no
