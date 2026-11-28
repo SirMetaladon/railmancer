@@ -3,6 +3,10 @@
 Fits and links sectors for one VMF, then prints clearance, a histogram,
 the closest points, unlinked cardinal crossings, and corkscrew breaks.
 The sample is the centerline. The rails sit about half a gauge closer.
+Handmade points whose nearest wall is the sector-grid edge are left out
+of the totals, and the count is printed. Samples in no sector are counted
+on their own, not as a clearance of 0. This checker does not lay
+trackhammer track, so every curve it samples is handmade.
 
 Usage:
     python3 check_wall_clearance.py path/to/map.vmf

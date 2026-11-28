@@ -15,7 +15,7 @@ import os
 
 import numpy as np
 
-from railmancer import tools, track, vmfpy
+from railmancer import tools, track, vmfpy, lines
 
 _CATALOG = None
 _PARSED = None
@@ -626,7 +626,10 @@ def _mark_switches(origin, direction, heading, layout, reverse, total, mark, occ
         # Both legs. The record's "routes" list is what a parsed switch of
         # this model would have been walked as, one Bezier chain per leg.
         track.add_lines_from_track(
-            position, track.track_model_library[spec["mn"]], yaw
+            position,
+            track.track_model_library[spec["mn"]],
+            yaw,
+            lines.SOURCE_TRACKHAMMER,
         )
         add_switch_stand(position, yaw, spec["StartDirection"], lever_id)
         mark(switch["track"], origin_s)

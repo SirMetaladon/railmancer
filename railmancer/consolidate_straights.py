@@ -763,7 +763,13 @@ def rebuild_track_lines(entities=None):
         ang = ent.get("ang", (0, 0, 0))
         yaw = float(ang) if isinstance(ang, (int, float)) else float(ang[1])
         pos = np.asarray(ent["pos"], dtype=float)
-        track.add_lines_from_track(pos, data, yaw)
+        # New Track is what trackhammer wrote. Everything else rebuilt from
+        # the prop list, including Old Track, is the handmade map.
+        if str(ent.get("visgroup") or "") == vmfpy.VISGROUP_NEW_TRACK:
+            source = lines.SOURCE_TRACKHAMMER
+        else:
+            source = lines.SOURCE_HANDMADE
+        track.add_lines_from_track(pos, data, yaw, source)
 
 
 def consolidate_inplace(*, smooth_grade: bool = False) -> ConsolidateStats:

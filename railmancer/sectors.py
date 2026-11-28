@@ -20,6 +20,10 @@ WALL_WORST = 8
 
 # neighbor slot for a cardinal step (dx, dy): north, east, south, west.
 _CARDINAL_SLOT = {(0, 1): 0, (1, 0): 1, (0, -1): 2, (-1, 0): 3}
+_SLOT_NUDGE = ((0, 1), (1, 0), (0, -1), (-1, 0))
+_SLOT_NAME = ("N", "E", "S", "W")
+# Equal distances keep the wall that still belongs in the clearance stats.
+_WALL_PREFERENCE = {"internal": 0, "open": 1, "map-edge": 2}
 
 
 def _vertical_overlap(first_sector, second_sector):
@@ -360,9 +364,35 @@ def sectors_share_a_wall(first, second):
     )
 
 
+def _column_outside_grid(nx, ny):
+
+    # Same window as sort_points_to_sector_grid_buckets. sectors_per_map is
+    # int(32768/3264) = 10, so column x = -6 is outside and never gets a
+    # sector. That drop is left as it is. A wall facing the missing column
+    # is the outer edge of the map.
+    half = cfg.get("sectors_per_map") / 2
+    return abs(nx + 0.5) > half or abs(ny + 0.5) > half
+
+
+def _wall_class(sector, slot):
+
+    # map-edge: nothing can be built past this side. open: the next column
+    # is on the grid but empty. internal: a sector exists there, whether or
+    # not this side is linked to it. A height break is internal.
+    dx, dy = _SLOT_NUDGE[slot]
+    nx = sector["x"] + dx
+    ny = sector["y"] + dy
+    if _column_outside_grid(nx, ny):
+        return "map-edge"
+    if sector_lookup_grid.get(f"{nx}x{ny}", False) is False:
+        return "open"
+    return "internal"
+
+
 def _unlinked_wall_segments(sector):
 
     # An unlinked side is a wall. Slot order matches link(): N, E, S, W.
+    # Each entry is (slot, (start, end)).
     size = cfg.get("sector_real_size")
     x0 = sector["x"] * size
     y0 = sector["y"] * size
@@ -374,7 +404,22 @@ def _unlinked_wall_segments(sector):
         ((x0, y0), (x1, y0)),
         ((x0, y0), (x0, y1)),
     )
-    return [sides[slot] for slot in range(4) if sector["neighbors"][slot] is False]
+    return [
+        (slot, sides[slot])
+        for slot in range(4)
+        if sector["neighbors"][slot] is False
+    ]
+
+
+def _prefer_wall(dist, kind, best_dist, best_kind):
+
+    if best_kind is None:
+        return dist < best_dist
+    if dist < best_dist:
+        return True
+    if abs(dist - best_dist) > 1e-6:
+        return False
+    return _WALL_PREFERENCE[kind] < _WALL_PREFERENCE[best_kind]
 
 
 def _point_segment_distance(px, py, start, end):
@@ -396,12 +441,16 @@ def _point_segment_distance(px, py, start, end):
 
 def track_sample_curves():
 
-    # One polyline per bezier. The joint between two pieces is not a step
-    # along the rail, so crossings are counted inside a curve only.
+    # One polyline per bezier, and who laid that piece. The joint between
+    # two pieces is not a step along the rail, so crossings are counted
+    # inside a curve only. A bezier with no tag is handmade.
     step = cfg.get("line_maximum_poll_point_distance")
-    return [
-        lines.convert_bezier_to_points(bezier, step) for bezier in lines.Beziers
-    ]
+    curves = []
+    sources = []
+    for bezier in lines.Beziers:
+        curves.append(lines.convert_bezier_to_points(bezier, step))
+        sources.append(lines.bezier_source(bezier))
+    return curves, sources
 
 
 def _wall_bin_labels():
@@ -414,7 +463,7 @@ def _wall_bin_labels():
     return labels
 
 
-def measure_wall_clearance(curves=None):
+def measure_wall_clearance(curves=None, sources=None):
 
     # 2D distance from each sampled track point to the nearest wall, capped
     # at sector_real_size. A wall is an unlinked side of the point's own
@@ -422,20 +471,34 @@ def measure_wall_clearance(curves=None):
     # centerline. The rails sit about half a gauge closer to the wall than
     # the distance recorded here.
     # curves is a list of polylines. The default samples lines.Beziers.
+    # sources[i] is "handmade" or "trackhammer" for that curve. A curve
+    # with no source is handmade.
+    #
+    # A handmade point is left out of the stats when its nearest wall is
+    # the map edge (the next column is outside the sector grid). Being
+    # there is expected. Handmade track against an internal wall stays, and
+    # so does every trackhammer point. An empty column inside the grid is
+    # not the map edge. A point in no sector, including the dropped x = -6
+    # column, is counted in missed and is not a clearance of 0.
 
     if curves is None:
-        curves = track_sample_curves()
+        curves, sources = track_sample_curves()
+    elif sources is None:
+        sources = [lines.SOURCE_HANDMADE] * len(curves)
 
     size = float(cfg.get("sector_real_size"))
     distances = []
     located = []
     missed = []
+    excluded = 0
     crossings = 0
     pairs = set()
 
-    for curve in curves:
+    for curve, source in zip(curves, sources):
 
         previous_id = None
+        if source not in (lines.SOURCE_HANDMADE, lines.SOURCE_TRACKHAMMER):
+            source = lines.SOURCE_HANDMADE
 
         for point in curve:
 
@@ -452,16 +515,49 @@ def measure_wall_clearance(curves=None):
                     candidates.append(Sectors[neighbor_id])
 
             best = size
+            best_kind = None
+            best_side = None
+            best_wall_sector = None
             px = point[0]
             py = point[1]
             for candidate in candidates:
-                for start, end in _unlinked_wall_segments(candidate):
+                for slot, (start, end) in _unlinked_wall_segments(candidate):
                     dist = _point_segment_distance(px, py, start, end)
-                    if dist < best:
+                    kind = _wall_class(candidate, slot)
+                    if _prefer_wall(dist, kind, best, best_kind):
                         best = dist
+                        best_kind = kind
+                        best_side = _SLOT_NAME[slot]
+                        best_wall_sector = candidate["id"]
 
-            distances.append(best)
-            located.append((best, sector_id, px, py, point[2]))
+            # Nearest wall is the map edge, and the rail was laid by hand.
+            # The number would only say the author went to the border.
+            if (
+                source == lines.SOURCE_HANDMADE
+                and best_kind == "map-edge"
+            ):
+                excluded += 1
+            else:
+                if best_kind is None:
+                    wall = "cap"
+                    best_side = None
+                    best_wall_sector = None
+                else:
+                    wall = best_kind
+                distances.append(best)
+                located.append(
+                    (
+                        best,
+                        sector_id,
+                        px,
+                        py,
+                        point[2],
+                        source,
+                        wall,
+                        best_side,
+                        best_wall_sector,
+                    )
+                )
 
             if previous_id and previous_id != sector_id:
                 other = Sectors.get(previous_id)
@@ -508,7 +604,7 @@ def measure_wall_clearance(curves=None):
     # list is places to visit in Hammer, not repeated samples.
     worst = []
     seen = set()
-    for distance, sector_id, px, py, pz in located:
+    for distance, sector_id, px, py, pz, source, wall, side, wall_sector in located:
         key = (sector_id, round(px), round(py), round(pz))
         if key in seen:
             continue
@@ -520,6 +616,10 @@ def measure_wall_clearance(curves=None):
                 "x": px,
                 "y": py,
                 "z": pz,
+                "source": source,
+                "wall": wall,
+                "wall_side": side,
+                "wall_sector": wall_sector,
             }
         )
         if len(worst) == WALL_WORST:
@@ -527,6 +627,7 @@ def measure_wall_clearance(curves=None):
 
     return {
         "count": len(distances),
+        "excluded": excluded,
         "missed": missed,
         "histogram": list(zip(labels, (int(count) for count in histogram))),
         "worst": worst,
@@ -539,12 +640,34 @@ def measure_wall_clearance(curves=None):
     }
 
 
+def _print_clearance_omissions(stats):
+
+    # Always printed. A zero here is a result, not a blank line to skip.
+    print(
+        f"  excluded: {stats['excluded']} handmade points "
+        f"whose nearest wall is the map edge"
+    )
+    print(f"  outside every sector: {len(stats['missed'])}")
+    for point in stats["missed"][:WALL_WORST]:
+        print(f"    ({point[0]:.1f}, {point[1]:.1f}, {point[2]:.1f})")
+    if len(stats["missed"]) > WALL_WORST:
+        print(f"    ... {len(stats['missed']) - WALL_WORST} more")
+
+
+def _format_worst_wall(item):
+
+    if item["wall"] == "cap":
+        return "cap"
+    return f"{item['wall']} {item['wall_side']} {item['wall_sector']}"
+
+
 def report_wall_clearance(curves=None):
 
     # Printed after sectors are linked. Same numbers as check_wall_clearance.py.
     stats = measure_wall_clearance(curves)
     if stats["count"] == 0:
         print("Wall clearance: no sampled track points")
+        _print_clearance_omissions(stats)
         return stats
 
     print(
@@ -572,10 +695,7 @@ def report_wall_clearance(curves=None):
         f"  corkscrew breaks: {stats['corkscrew_breaks']}   "
         f"errors: {stats['corkscrew_errors']}"
     )
-    if stats["missed"]:
-        print(f"  outside every sector: {len(stats['missed'])}")
-        for point in stats["missed"][:WALL_WORST]:
-            print(f"    ({point[0]:.1f}, {point[1]:.1f}, {point[2]:.1f})")
+    _print_clearance_omissions(stats)
     print(
         "  histogram: "
         + " | ".join(f"{label} {count}" for label, count in stats["histogram"])
@@ -584,7 +704,8 @@ def report_wall_clearance(curves=None):
     for item in stats["worst"]:
         print(
             f"    {item['distance']:.1f}  {item['sector']}  "
-            f"({item['x']:.1f}, {item['y']:.1f}, {item['z']:.1f})"
+            f"({item['x']:.1f}, {item['y']:.1f}, {item['z']:.1f})  "
+            f"{item['source']}  {_format_worst_wall(item)}"
         )
     return stats
 

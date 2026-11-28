@@ -629,7 +629,12 @@ def _piece(model):
     return data
 
 
-def add_lines_from_track(pos, track_objects, heading):
+def add_lines_from_track(pos, track_objects, heading, source=None):
+
+    # Imported props are the handmade map. write_track and the generated
+    # switches pass trackhammer. A missing source is handmade.
+    if source is None:
+        source = lines.SOURCE_HANDMADE
 
     for route in _as_routes(track_objects):
 
@@ -640,12 +645,13 @@ def add_lines_from_track(pos, track_objects, heading):
             EndPos,
             tools.rot_orth(get_heading(route["StartDirection"]), heading),
             tools.rot_orth(get_heading(route["EndDirection"]), heading + 180),
+            source,
         )
 
 
 def write_track(model, pos, yaw):
 
-    add_lines_from_track(pos, track_model_library[model], yaw)
+    add_lines_from_track(pos, track_model_library[model], yaw, lines.SOURCE_TRACKHAMMER)
 
     vmfpy.add_entity(
         {

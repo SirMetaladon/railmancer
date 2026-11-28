@@ -27,6 +27,7 @@ from railmancer.consolidate_straights import (
     consolidate_inplace,
     consolidate_props,
     consolidate_vmf_text,
+    rebuild_track_lines,
 )
 from railmancer.straight_catalog import ALLOWED_LENGTHS, get_catalog, parse_straight_name
 from railmancer.trakpak_manifest import install_manifest_library
@@ -478,6 +479,45 @@ class ConsolidateLinesTests(unittest.TestCase):
         self.assertTrue(any(abs(z - arc_end_z) < 0.6 for z in z_values))
         # The stand is not track, so it contributes no sample.
         self.assertGreater(_distance(_nearest_sample(samples, stand["pos"]), stand["pos"]), 15)
+
+    def test_rebuild_tags_old_track_and_new_track(self):
+
+        saved = track.track_model_library
+        model = "models/trakpak3_rsg/straights/s0128_0fw_0pg_fake.mdl"
+        track.track_model_library = {
+            model: {
+                "Move": (128, 0, 0),
+                "StartDirection": "0fw",
+                "EndDirection": "0fw",
+            }
+        }
+        try:
+            entities = [
+                {
+                    "mdl": model,
+                    "pos": (0, 0, 0),
+                    "ang": (0, 0, 0),
+                    "visgroup": vmfpy.VISGROUP_OLD_TRACK,
+                },
+                {
+                    "mdl": model,
+                    "pos": (0, 256, 0),
+                    "ang": (0, 0, 0),
+                    "visgroup": vmfpy.VISGROUP_NEW_TRACK,
+                },
+                {"mdl": model, "pos": (0, 512, 0), "ang": (0, 0, 0)},
+            ]
+            rebuild_track_lines(entities)
+            self.assertEqual(
+                [bezier.source for bezier in lines.Beziers],
+                [
+                    lines.SOURCE_HANDMADE,
+                    lines.SOURCE_TRACKHAMMER,
+                    lines.SOURCE_HANDMADE,
+                ],
+            )
+        finally:
+            track.track_model_library = saved
 
 
 def _distance(a, b):
