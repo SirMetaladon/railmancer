@@ -12,14 +12,14 @@ class SettingsTests(unittest.TestCase):
 
     def setUp(self):
 
-        self._saved_env = {
-            name: os.environ.get(name) for name in settings.ENV.values()
-        }
+        self._saved_env = {name: os.environ.get(name) for name in settings.ENV.values()}
         self._saved_local = settings.LOCAL_PATH
         for name in settings.ENV.values():
             os.environ.pop(name, None)
         # Point the local file at a path that does not exist.
-        settings.LOCAL_PATH = os.path.join(tempfile.gettempdir(), "no-such-railmancer-settings.json")
+        settings.LOCAL_PATH = os.path.join(
+            tempfile.gettempdir(), "no-such-railmancer-settings.json"
+        )
 
     def tearDown(self):
 
@@ -46,7 +46,7 @@ class SettingsTests(unittest.TestCase):
             "C:/Users/Metaladon/Desktop/Model Data/VMFS/railmancer",
         )
         self.assertTrue(settings.get("track_library").endswith("trakpak3_rsg"))
-        self.assertEqual(settings.get("vmf_input"), "vmf inputs/vancouver_only.vmf")
+        self.assertEqual(settings.get("vmf_input"), "vmf inputs/gm_cascadia.vmf")
 
     def test_local_file_then_env(self):
 
@@ -57,8 +57,6 @@ class SettingsTests(unittest.TestCase):
             settings.LOCAL_PATH = path
             self.assertEqual(settings.get("vmf_output_dir"), "/from/file")
             # A key the file does not set still falls back.
-            self.assertEqual(
-                settings.get("vmf_input"), "vmf inputs/vancouver_only.vmf"
-            )
+            self.assertEqual(settings.get("vmf_input"), "vmf inputs/gm_cascadia.vmf")
             os.environ["RAILMANCER_VMF_OUTPUT_DIR"] = "/from/env"
             self.assertEqual(settings.get("vmf_output_dir"), "/from/env")

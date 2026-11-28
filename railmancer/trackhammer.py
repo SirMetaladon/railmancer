@@ -1009,7 +1009,7 @@ def create_rail_path(start_node, cumulative_track_profile):
 
     # system for testing multiple variations of rollbacks and candidates, currently semi-disabled
     rollbacks = [6000]
-    candidates = [8]
+    candidates = [12]
     random.shuffle(rollbacks)
     random.shuffle(candidates)
 

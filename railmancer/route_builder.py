@@ -23,7 +23,7 @@ import os
 import re
 import sys
 
-import tools
+from railmancer import tools
 
 # trackhammer._in_window treats a run as finished once plain length is
 # within run_length_tolerance of the target. The shipped value is 1000
