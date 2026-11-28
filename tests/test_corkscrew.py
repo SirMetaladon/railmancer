@@ -25,6 +25,10 @@ sys.modules.setdefault("turtle", types.ModuleType("turtle"))
 
 from railmancer import cfg, lines, sectors
 
+# Captured at import. test_cascadia_sidings replaces write_bezier_points
+# and does not put it back.
+_WRITE_BEZIER = lines.write_bezier_points
+
 SIZE = 1024
 LIMIT = 250
 
@@ -475,6 +479,95 @@ class WallClearanceTests(unittest.TestCase):
         linked = sectors.measure_wall_clearance(curve)
         self.assertEqual(linked["crossings"], 0)
         self.assertEqual(linked["pairs"], 0)
+
+    def test_handmade_map_edge_is_excluded_and_the_rest_is_kept(self):
+
+        # Sector -5 is the west edge: sectors_per_map is 10, so column -6
+        # is outside the grid. SIZE is the sector width in this test.
+        edge_x = -5 * SIZE
+        handmade = [lines.SOURCE_HANDMADE]
+        generated = [lines.SOURCE_TRACKHAMMER]
+        edge_point = [(edge_x + 32.0, 512.0, 800.0)]
+
+        self._open(-5, 0)
+        dropped = sectors.measure_wall_clearance([edge_point], handmade)
+        self.assertEqual(dropped["count"], 0)
+        self.assertEqual(dropped["excluded"], 1)
+        self.assertEqual(dropped["under"], 0)
+        self.assertEqual(dropped["worst"], [])
+        self.assertEqual(dropped["missed"], [])
+
+        kept = sectors.measure_wall_clearance([edge_point], generated)
+        self.assertEqual(kept["count"], 1)
+        self.assertEqual(kept["excluded"], 0)
+        self.assertAlmostEqual(kept["min"], 32.0)
+        self.assertEqual(kept["worst"][0]["source"], lines.SOURCE_TRACKHAMMER)
+        self.assertEqual(kept["worst"][0]["wall"], "map-edge")
+        self.assertEqual(kept["worst"][0]["wall_side"], "W")
+
+        # An empty column inside the grid is not the map edge.
+        sectors.Sectors.clear()
+        sectors.sector_lookup_grid.clear()
+        self._open(0, 0)
+        interior_open = sectors.measure_wall_clearance(
+            [[(32.0, 512.0, 800.0)]], handmade
+        )
+        self.assertEqual(interior_open["excluded"], 0)
+        self.assertAlmostEqual(interior_open["min"], 32.0)
+        self.assertEqual(interior_open["worst"][0]["wall"], "open")
+        self.assertEqual(interior_open["worst"][0]["source"], lines.SOURCE_HANDMADE)
+
+        # A sector exists past this side, so the wall is internal even
+        # though the two are not linked.
+        self._open(1, 0)
+        squeezed = sectors.measure_wall_clearance(
+            [[(SIZE - 40.0, 512.0, 800.0)]], handmade
+        )
+        self.assertEqual(squeezed["excluded"], 0)
+        self.assertAlmostEqual(squeezed["min"], 40.0)
+        self.assertEqual(squeezed["under"], 1)
+        self.assertEqual(squeezed["worst"][0]["wall"], "internal")
+        self.assertEqual(squeezed["worst"][0]["wall_side"], "E")
+
+        # Same edge sector, but the internal wall is the closer one.
+        sectors.Sectors.clear()
+        sectors.sector_lookup_grid.clear()
+        self._open(-5, 0)
+        self._open(-4, 0)
+        inner = (-4 * SIZE - 40.0, 512.0, 800.0)
+        beside_break = sectors.measure_wall_clearance([[inner]], handmade)
+        self.assertEqual(beside_break["excluded"], 0)
+        self.assertAlmostEqual(beside_break["min"], 40.0)
+        self.assertEqual(beside_break["worst"][0]["wall"], "internal")
+
+        # Past the grid. Column -6 is not a sector, and it is not a
+        # clearance of 0.
+        outside = sectors.measure_wall_clearance(
+            [[(edge_x - 80.0, 512.0, 800.0)]], handmade
+        )
+        self.assertEqual(outside["count"], 0)
+        self.assertEqual(outside["excluded"], 0)
+        self.assertEqual(len(outside["missed"]), 1)
+        self.assertIsNone(outside["min"])
+
+    def test_bezier_source_marks_handmade_and_trackhammer(self):
+
+        saved = list(lines.Beziers)
+        lines.Beziers.clear()
+        try:
+            _WRITE_BEZIER((0, 0, 0), (128, 0, 0), (1, 0, 0), (1, 0, 0))
+            self.assertEqual(lines.Beziers[-1].source, lines.SOURCE_HANDMADE)
+            _WRITE_BEZIER(
+                (0, 0, 0),
+                (128, 0, 0),
+                (1, 0, 0),
+                (1, 0, 0),
+                source=lines.SOURCE_TRACKHAMMER,
+            )
+            self.assertEqual(lines.Beziers[-1].source, lines.SOURCE_TRACKHAMMER)
+            self.assertEqual(len(lines.Beziers[-1]), 4)
+        finally:
+            lines.Beziers[:] = saved
 
 
 if __name__ == "__main__":

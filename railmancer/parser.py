@@ -23,7 +23,9 @@ def add_entity_to_new_map(Entity, Data):
     # Regardless of what type it is, add lines for it if it's got data
     for trackdata_chunk in Data:
 
-        track.add_lines_from_track(Pos, trackdata_chunk, Entity["ang"][1])
+        track.add_lines_from_track(
+            Pos, trackdata_chunk, Entity["ang"][1], lines.SOURCE_HANDMADE
+        )
 
     if not "switches" in Entity["mdl"]:
 

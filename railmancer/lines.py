@@ -3,9 +3,27 @@ from railmancer import tools, cfg
 
 # Handles extraction of line and point data from given lists of track-objects. Handles everything related to said lists of points.
 
+# Who laid the curve. Import writes handmade (Old Track). Trackhammer writes
+# trackhammer (New Track). consolidate rebuilds both from the prop visgroup.
+SOURCE_HANDMADE = "handmade"
+SOURCE_TRACKHAMMER = "trackhammer"
+
 Beziers: list = []
 sampled_points = []
 staged_points = []
+
+
+class TaggedBezier(tuple):
+
+    # A bezier is still four control points. source rides along so a later
+    # sample can tell handmade rail from generated rail without a side list
+    # that drifts when a test replaces Beziers.
+
+    def __new__(cls, points, source):
+
+        bezier = super().__new__(cls, points)
+        bezier.source = source
+        return bezier
 
 
 def bezier_3d(t, Bez) -> tuple[float, float, float]:
@@ -91,12 +109,24 @@ def convert_nodes_to_bezier(
         return [(start_position, p1, p2, end_position)]
 
 
-def write_bezier_points(start_position, end_position, start_direction, end_direction):
+def bezier_source(bezier):
+
+    return getattr(bezier, "source", SOURCE_HANDMADE)
+
+
+def write_bezier_points(
+    start_position,
+    end_position,
+    start_direction,
+    end_direction,
+    source=SOURCE_HANDMADE,
+):
 
     global Beziers
-    Beziers += convert_nodes_to_bezier(
+    for bezier in convert_nodes_to_bezier(
         start_position, end_position, start_direction, end_direction
-    )
+    ):
+        Beziers.append(TaggedBezier(bezier, source))
 
 
 
