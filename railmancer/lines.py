@@ -3,8 +3,10 @@ from railmancer import tools, cfg
 
 # Handles extraction of line and point data from given lists of track-objects. Handles everything related to said lists of points.
 
-# Who laid the curve. Import writes handmade (Old Track). Trackhammer writes
-# trackhammer (New Track). consolidate rebuilds both from the prop visgroup.
+# Who laid the curve. Import writes handmade. Trackhammer writes trackhammer
+# and stores logical visgroup 23 (New Track). consolidate rebuilds both from
+# the prop: visgroup 23 stays trackhammer, and any other visgroup, including
+# an imported prop's own id or none, is handmade.
 SOURCE_HANDMADE = "handmade"
 SOURCE_TRACKHAMMER = "trackhammer"
 

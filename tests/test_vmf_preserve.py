@@ -325,7 +325,8 @@ class PreserveVmfTests(unittest.TestCase):
         top_hidden = [
             block for block in blocks if block.name == "hidden" and block.parent is None
         ]
-        self.assertEqual(len(top_hidden), 2)
+        # Hidden track is not consumed, so its wrapper is not swallowed.
+        self.assertEqual(len(top_hidden), 3)
         world_hidden = [
             block
             for index, block in enumerate(blocks)
@@ -354,9 +355,20 @@ class PreserveVmfTests(unittest.TestCase):
         self.assertTrue(_ancestor_named(blocks, hidden_keep, "hidden"))
         self.assertIn('"visgroupshown" "0"', _entity_by_id(output, "330"))
 
-        # Parsed track is gone. The same models come back once, as new objects.
-        for gone in ("300", "302", "310"):
-            self.assertIsNone(_entity_by_id(output, gone), gone)
+        # The visible switch is replaced. Hidden straights stay in their wrappers.
+        self.assertIsNone(_entity_by_id(output, "310"))
+        for kept in ("300", "302"):
+            before = _entity_by_id(self.fixture, kept)
+            after = _entity_by_id(output, kept)
+            self.assertIsNotNone(after, kept)
+            self.assertEqual(_strip_original(after, original_id), before, kept)
+            self.assertIn(f'"visgroupid" "{original_id}"', after)
+            kept_index = next(
+                index
+                for index, block in enumerate(blocks)
+                if block.name == "entity" and _own_id(output, block) == kept
+            )
+            self.assertTrue(_ancestor_named(blocks, kept_index, "hidden"), kept)
         self.assertEqual(output.count(f'"model" "{STRAIGHT}"'), 2)
         self.assertEqual(output.count(f'"model" "{SWITCH}"'), 1)
         self.assertIn(BUMPER, output)
@@ -372,7 +384,9 @@ class PreserveVmfTests(unittest.TestCase):
             if block.name == "entity" and '"classname" "tp3_switch"' in _block_text(output, block)
         ]
         self.assertEqual(len(switches), 1)
-        self.assertIn(f'"visgroupid" "{old_track}"', switches[0])
+        # The fixture switch had no visgroup. Import does not stamp Old Track.
+        self.assertNotIn("visgroupid", switches[0])
+        self.assertNotIn(f'"visgroupid" "{old_track}"', switches[0])
         self.assertNotIn(f'"visgroupid" "{original_id}"', switches[0])
         stands = [
             _block_text(output, block)
@@ -390,8 +404,8 @@ class PreserveVmfTests(unittest.TestCase):
         ]
         self.assertEqual(len(straights), 2)
         for straight in straights:
-            self.assertIn(f'"visgroupid" "{old_track}"', straight)
-            self.assertNotIn(f'"visgroupid" "{original_id}"', straight)
+            self.assertNotIn(f'"visgroupid" "{old_track}"', straight)
+            self.assertIn(f'"visgroupid" "{original_id}"', straight)
 
         # Isaiah's visgroup 22 is not rewritten. Scatter is a new id.
         kept = _entity_by_id(output, "200")

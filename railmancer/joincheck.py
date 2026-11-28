@@ -9,7 +9,7 @@ from move_in_trackspace.
 
 import math
 
-from railmancer import tools, track
+from railmancer import tools, track, vmfparse
 
 
 def _unit_xy(vector):
@@ -241,15 +241,22 @@ def _entity_blocks(vmf_text):
             cursor += 1
         if end is None:
             break
-        yield vmf_text[brace : end + 1]
+        yield start, vmf_text[brace : end + 1]
         index = end + 1
 
 
 def parse_vmf_track_props(vmf_text):
-    """prop_static / prop_dynamic track pieces named in a VMF."""
+    """prop_static / prop_dynamic track pieces named in a VMF.
 
+    Hidden track is omitted. The brace walk stays; hidden membership comes
+    from the same ``entity_is_hidden`` predicate import uses.
+    """
+
+    hidden = vmfparse.hidden_entity_spans(vmf_text)
     props = []
-    for block in _entity_blocks(vmf_text):
+    for start, block in _entity_blocks(vmf_text):
+        if vmfparse.span_is_hidden(hidden, start):
+            continue
         prop = _prop_from_entity_block(block)
         if prop is not None:
             props.append(prop)
@@ -266,7 +273,7 @@ def parse_vmf_markers(vmf_text):
     """Origins of frog and traffic-cone props, as rounded positions."""
 
     markers = []
-    for block in _entity_blocks(vmf_text):
+    for _start, block in _entity_blocks(vmf_text):
         model = _quoted(block, "model")
         if not model:
             continue
@@ -320,20 +327,13 @@ def audit_marked_props(props, library, markers):
 
 
 def _quoted(block, field):
-    needle = f'"{field}"'
-    at = block.find(needle)
-    if at < 0:
-        return None
-    first = block.find('"', at + len(needle))
-    second = block.find('"', first + 1)
-    if first < 0 or second < 0:
-        return None
-    return block[first + 1 : second]
+    return vmfparse.read_keys(block).get(field)
 
 
 def _prop_from_entity_block(block):
-    model = _quoted(block, "model")
-    classname = (_quoted(block, "classname") or "").lower()
+    keys = vmfparse.read_keys(block)
+    model = keys.get("model")
+    classname = (keys.get("classname") or "").lower()
     if not model or "trakpak" not in model.replace("\\", "/").lower():
         return None
     lowered = model.replace("\\", "/").lower()
@@ -345,16 +345,20 @@ def _prop_from_entity_block(block):
         and "/banked/" not in lowered
     ):
         return None
-    origin = _quoted(block, "origin")
-    angles = _quoted(block, "angles")
+    origin = keys.get("origin")
+    angles = keys.get("angles")
     if origin is None or angles is None:
         return None
     origin_values = [float(part) for part in origin.split()]
     angle_values = [float(part) for part in angles.split()]
     prop = {"mdl": model.replace("\\", "/"), "pos": origin_values, "ang": angle_values}
+    visgroupids = list(keys.get("visgroupids") or [])
+    if visgroupids:
+        prop["visgroups"] = visgroupids
+        prop["visgroup"] = visgroupids[0]
     if is_switch:
         prop["classname"] = "tp3_switch"
-        model_div = _quoted(block, "model_div")
+        model_div = keys.get("model_div")
         if model_div:
             prop["model_div"] = model_div.replace("\\", "/")
     return prop

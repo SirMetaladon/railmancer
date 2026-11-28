@@ -40,7 +40,7 @@ import numpy as np
 
 sys.modules.setdefault("turtle", types.ModuleType("turtle"))
 
-from railmancer import joincheck, lines, tools, track, vmfpy
+from railmancer import joincheck, lines, tools, track, vmfparse, vmfpy
 from railmancer.joincheck import _prop_from_entity_block
 from railmancer.straight_catalog import (
     StraightCatalog,
@@ -763,8 +763,10 @@ def rebuild_track_lines(entities=None):
         ang = ent.get("ang", (0, 0, 0))
         yaw = float(ang) if isinstance(ang, (int, float)) else float(ang[1])
         pos = np.asarray(ent["pos"], dtype=float)
-        # New Track is what trackhammer wrote. Everything else rebuilt from
-        # the prop list, including Old Track, is the handmade map.
+        # New Track (logical visgroup 23) is what trackhammer wrote. Every
+        # other prop is the handmade map, including an import that kept its
+        # own visgroup id. Old Track is still created with the other
+        # Railmancer groups; import no longer stamps props into it.
         if str(ent.get("visgroup") or "") == vmfpy.VISGROUP_NEW_TRACK:
             source = lines.SOURCE_TRACKHAMMER
         else:
@@ -805,9 +807,10 @@ def _synthesize_prop_static(prop: dict, ent_id: int) -> str:
     else:
         pitch, yaw, roll = float(ang[0]), float(ang[1]), float(ang[2])
     pos = prop["pos"]
-    vis = ""
-    if prop.get("visgroup"):
-        vis = f'\n\t\t"visgroupid" "{prop["visgroup"]}"'
+    vis_ids = [str(item) for item in (prop.get("visgroups") or [])]
+    if not vis_ids and prop.get("visgroup"):
+        vis_ids = [str(prop["visgroup"])]
+    vis = "".join(f'\n\t\t"visgroupid" "{vis_id}"' for vis_id in vis_ids)
     return (
         "entity\n"
         "{\n"
@@ -878,9 +881,12 @@ def consolidate_vmf_text(
     markers = joincheck.parse_vmf_markers(vmf_text)
 
     blocks = list(_iter_full_entity_blocks(vmf_text))
+    hidden_spans = vmfparse.hidden_entity_spans(vmf_text)
     track_props = []
     track_block_indices = []
-    for index, (_start, _end, body) in enumerate(blocks):
+    for index, (start, _end, body) in enumerate(blocks):
+        if vmfparse.span_is_hidden(hidden_spans, start):
+            continue
         prop = _prop_from_entity_block(body)
         if prop is None:
             continue

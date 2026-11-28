@@ -55,10 +55,17 @@ def reprocess_raw_data(raw_ents):
         Entity = {
             "pos": Pos,
             "mdl": raw_ent["model"],
-            "skin": raw_ent["skin"],
+            "skin": raw_ent.get("skin"),
             "ang": Ang,
-            "visgroup": "25",
         }
+        # The file's own visgroup ids, written back unchanged. Logical 23
+        # stays the in-memory mark rebuild uses for trackhammer; these ids
+        # are not run through resolve_visgroup. No visgroup means the
+        # rebuilt prop joins none, which is still handmade.
+        visgroupids = list(raw_ent.get("visgroupids") or [])
+        if visgroupids:
+            Entity["visgroups"] = visgroupids
+            Entity["visgroup"] = visgroupids[0]
 
         # import_track already parsed the path. Calling process_file again
         # would write the straight cache a second time for the same model.
@@ -153,43 +160,16 @@ def fill_convex_polygon_3d(vertices, spacing):
     return filled_points
 
 
-_TRACK_FIELD = re.compile(
-    r'"model"\s*"([^"]+)"|'
-    r'"origin"\s*"([^"]+)"|'
-    r'"angles"\s*"([^"]+)"|'
-    r'"skin"\s*"([^"]+)"|'
-    r'"classname"\s*"([^"]+)"|'
-    r'"lever"\s*"([^"]+)"'
-)
-
-
-def _fields_in_block(block_text):
-
-    matches = _TRACK_FIELD.findall(block_text)
-
-    def first(index):
-        return next((row[index] for row in matches if row[index]), None)
-
-    return {
-        "model": first(0),
-        "origin": first(1),
-        "angles": first(2),
-        "skin": first(3),
-        "classname": first(4),
-        "lever": first(5),
-    }
-
-
 def track_entities_to_rebuild(text):
     """Trakpak entities this import will replace with rebuilt copies.
 
-    The block parser supplies the entity, because a regex stops at the
-    first closing brace and cannot name the span to delete later. The
-    decision is the old one: a model path containing trakpak3_rsg, plus
-    origin and angles, and process_file actually returns routes. A model
-    it refuses (bumpers, unknown families) stays in the file. So does a
-    prop in the Build Sheds visgroup: it is not mainline, and it is not
-    a line, so it does not grow a sector.
+    The block parser supplies the entity. Hidden track is left out, so its
+    span is not consumed and the wrapper and visgroup stay in the
+    passthrough. Hidden means a ``hidden { }`` ancestor, ``visgroupshown``
+    0, or ``visgroupautoshown`` 0. A model ``process_file`` refuses
+    (bumpers, unknown families) stays in the file. So does a prop in the
+    Build Sheds visgroup: it is not mainline, and it is not a line, so it
+    does not grow a sector.
     """
 
     blocks = vmfparse.parse_blocks(text)
@@ -197,26 +177,38 @@ def track_entities_to_rebuild(text):
     # Hammer or resolve_visgroup wrote, so the name is the test, not "31".
     shed_ids = vmfparse.visgroup_ids_named(text, vmfpy.BUILD_SHEDS_VISGROUP_NAME)
     found = []
-    for block in blocks:
+    for index, block in enumerate(blocks):
         if block.name != "entity" or block.close_brace < 0:
             continue
         block_text = text[block.start : block.close_brace + 1]
-        if shed_ids and vmfparse.block_visgroup_ids(block_text) & shed_ids:
+        keys = vmfparse.read_keys(block_text)
+        if vmfparse.entity_is_hidden(blocks, index, keys):
             continue
-        fields = _fields_in_block(block_text)
-        model = fields["model"]
+        if shed_ids and set(keys.get("visgroupids") or []) & shed_ids:
+            continue
+        model = keys.get("model")
         if not (
-            model and fields["origin"] and fields["angles"] and "trakpak3_rsg" in model
+            model and keys.get("origin") and keys.get("angles") and "trakpak3_rsg" in model
         ):
             continue
         data = track.process_file(model)
         if not data:
             continue
         start = vmfparse.line_start(text, block.start)
-        fields["data"] = data
-        fields["span"] = (start, block.close_brace + 1)
-        fields["raw"] = block_text
-        found.append(fields)
+        found.append(
+            {
+                "model": model,
+                "origin": keys.get("origin"),
+                "angles": keys.get("angles"),
+                "skin": keys.get("skin"),
+                "classname": keys.get("classname"),
+                "lever": keys.get("lever"),
+                "visgroupids": list(keys.get("visgroupids") or []),
+                "data": data,
+                "span": (start, block.close_brace + 1),
+                "raw": block_text,
+            }
+        )
     return found
 
 

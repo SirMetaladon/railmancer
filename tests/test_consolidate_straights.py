@@ -548,6 +548,41 @@ class ConsolidateVmfTests(unittest.TestCase):
             [],
         )
 
+    def test_hidden_straight_is_not_merged(self):
+        props = _make_flat_chain([48, 48])
+        visible = _vmf_from_props(props)
+        merged, merged_stats = consolidate_vmf_text(visible, smooth_grade=False)
+        self.assertEqual(merged_stats.straight_before, 2)
+        self.assertEqual(merged_stats.straight_after, 1)
+        self.assertEqual(len(joincheck.parse_vmf_track_props(merged)), 1)
+
+        hidden = visible.replace(
+            'entity\n{\n\t"id" "3"\n',
+            'hidden\n{\nentity\n{\n\t"id" "3"\n',
+            1,
+        )
+        origin_line = (
+            f'\t"origin" "{props[1]["pos"][0]} {props[1]["pos"][1]} {props[1]["pos"][2]}"\n'
+        )
+        hidden = hidden.replace(
+            origin_line + "}\n",
+            origin_line
+            + "\teditor\n\t{\n"
+            + '\t\t"visgroupshown" "1"\n'
+            + '\t\t"visgroupautoshown" "1"\n'
+            + "\t}\n}\n}\n",
+            1,
+        )
+        kept, stats = consolidate_vmf_text(hidden, smooth_grade=False)
+        self.assertEqual(stats.straight_before, 1)
+        self.assertEqual(stats.straight_after, 1)
+        parsed = joincheck.parse_vmf_track_props(kept)
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0]["pos"], [float(value) for value in props[0]["pos"]])
+        self.assertIn("hidden", kept)
+        self.assertIn(f'"id" "3"', kept)
+        self.assertIn(props[1]["mdl"], kept)
+
 
 if __name__ == "__main__":
     unittest.main()
